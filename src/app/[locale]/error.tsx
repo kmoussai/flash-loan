@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect } from 'react'
-import Button from './components/Button'
 
 export default function Error({
   error,
@@ -29,23 +28,19 @@ export default function Error({
         </div>
         
         <div className='space-y-4'>
-          <Button
+          <button
             onClick={reset}
-            variant='primary'
-            size='large'
-            className='w-full'
+            className='w-full px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors'
           >
             Try again
-          </Button>
+          </button>
           
-          <Button
+          <button
             onClick={() => window.location.href = '/'}
-            variant='secondary'
-            size='large'
-            className='w-full'
+            className='w-full px-6 py-3 bg-transparent text-primary rounded-lg font-medium border border-primary hover:bg-primary hover:text-white transition-colors'
           >
             Go to homepage
-          </Button>
+          </button>
         </div>
         
         {process.env.NODE_ENV === 'development' && (

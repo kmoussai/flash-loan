@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import Button from './components/Button'
 
 export default function NotFound() {
   return (
@@ -11,29 +10,21 @@ export default function NotFound() {
             Page Not Found
           </h2>
           <p className='text-lg text-text-secondary mb-8'>
-            Sorry, we couldn't find the page you're looking for.
+            Sorry, we couldn&apos;t find the page you&apos;re looking for.
           </p>
         </div>
         
         <div className='space-y-4'>
-          <Link href='/'>
-            <Button
-              variant='primary'
-              size='large'
-              className='w-full'
-            >
+          <Link href='/' className='block w-full'>
+            <button className='w-full px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors'>
               Go to homepage
-            </Button>
+            </button>
           </Link>
           
-          <Link href='/contact'>
-            <Button
-              variant='secondary'
-              size='large'
-              className='w-full'
-            >
+          <Link href='/contact' className='block w-full'>
+            <button className='w-full px-6 py-3 bg-transparent text-primary rounded-lg font-medium border border-primary hover:bg-primary hover:text-white transition-colors'>
               Contact us
-            </Button>
+            </button>
           </Link>
         </div>
       </div>
