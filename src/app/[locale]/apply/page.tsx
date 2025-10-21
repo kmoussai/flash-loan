@@ -22,10 +22,37 @@ export default function ApplyPage() {
       {/* Compact Hero Section with Logo */}
       <section className='bg-gradient-to-br from-primary/10 to-secondary/10 py-4 sm:py-6 md:py-8'>
         <div className='mx-auto max-w-7xl px-4 sm:px-6'>
-          <div className='flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:gap-4'>
+          {/* Mobile Layout: Logo and Lang Switcher in corners, title below */}
+          <div className='sm:hidden'>
+            {/* Top Row: Logo and Language Switcher */}
+            <div className='mb-3 flex items-center justify-between'>
+              <Link href='/'>
+                <div className='relative h-10 w-28'>
+                  <Image
+                    src='https://flash-loan.ca/wp-content/uploads/2025/01/FlashLoanLogo.png'
+                    alt='Flash-Loan Logo'
+                    width={128}
+                    height={48}
+                    className='h-full w-full object-contain'
+                    priority
+                  />
+                </div>
+              </Link>
+              <LangSwitcher />
+            </div>
+            {/* Bottom Row: Centered Title */}
+            <div className='text-center'>
+              <h1 className='text-xl font-bold text-primary'>
+                {t('Apply_Page_Title')}
+              </h1>
+            </div>
+          </div>
+
+          {/* Desktop Layout: All in one row */}
+          <div className='hidden sm:flex sm:items-center sm:justify-between sm:gap-4'>
             {/* Logo */}
             <Link href='/'>
-              <div className='relative h-10 w-28 sm:h-12 sm:w-32'>
+              <div className='relative h-12 w-32'>
                 <Image
                   src='https://flash-loan.ca/wp-content/uploads/2025/01/FlashLoanLogo.png'
                   alt='Flash-Loan Logo'
@@ -38,14 +65,14 @@ export default function ApplyPage() {
             </Link>
             
             {/* Page Title */}
-            <div className='text-center sm:flex-1 sm:text-center'>
-              <h1 className='text-xl font-bold text-primary sm:text-2xl md:text-3xl'>
+            <div className='flex-1 text-center'>
+              <h1 className='text-2xl font-bold text-primary md:text-3xl'>
                 {t('Apply_Page_Title')}
               </h1>
             </div>
 
             {/* Language Switcher */}
-            <div className='flex w-28 justify-end sm:w-32'>
+            <div className='flex w-32 justify-end'>
               <LangSwitcher />
             </div>
           </div>

@@ -1079,9 +1079,8 @@ export default function LoanApplicationForm() {
               onClick={handleSubmit}
               size='large'
               disabled={!formData.agreeTerms || !formData.agreePrivacy}
-              className='bg-gradient-to-r from-primary to-secondary'
             >
-              {t('Submit_Application')}
+              {t('Submit_Application')} →
             </Button>
           )}
         </div>
