@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl'
 import { Link } from '@/src/navigation'
 import Image from 'next/image'
 import LoanApplicationForm from '../components/LoanApplicationForm'
+import LangSwitcher from '../components/LangSwitcher'
 
 /**
  * Apply Page - Loan Application
@@ -43,8 +44,10 @@ export default function ApplyPage() {
               </h1>
             </div>
 
-            {/* Spacer for alignment on desktop */}
-            <div className='hidden w-32 sm:block'></div>
+            {/* Language Switcher */}
+            <div className='w-32 flex justify-end'>
+              <LangSwitcher />
+            </div>
           </div>
         </div>
       </section>

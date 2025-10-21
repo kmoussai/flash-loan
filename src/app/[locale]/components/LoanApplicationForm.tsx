@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import Button from './Button'
 import Select from './Select'
@@ -67,37 +67,100 @@ const CANADIAN_PROVINCES = [
 
 export default function LoanApplicationForm() {
   const t = useTranslations('')
-  const [showPreQualification, setShowPreQualification] = useState(true)
-  const [bankruptcyPlan, setBankruptcyPlan] = useState<boolean>(false)
-  const [previousBorrower, setPreviousBorrower] = useState<boolean>(false)
-  const [currentStep, setCurrentStep] = useState(1)
-  const [isSubmitted, setIsSubmitted] = useState(false)
-  const [formData, setFormData] = useState<FormData>({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    dateOfBirth: '',
-    sin: '',
-    streetAddress: '',
-    city: '',
-    province: '',
-    postalCode: '',
-    employmentStatus: '',
-    employerName: '',
-    jobTitle: '',
-    monthlyIncome: '',
-    additionalIncome: '',
-    housingStatus: '',
-    monthlyHousingCost: '',
-    loanAmount: '',
-    loanPurpose: '',
-    repaymentPeriod: '',
-    paymentFrequency: '',
-    agreeTerms: false,
-    agreePrivacy: false,
-    consentCredit: false
+  const [showPreQualification, setShowPreQualification] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('loanFormPreQualification')
+      return saved ? JSON.parse(saved) : true
+    }
+    return true
   })
+  const [bankruptcyPlan, setBankruptcyPlan] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('loanFormBankruptcyPlan')
+      return saved ? JSON.parse(saved) : false
+    }
+    return false
+  })
+  const [previousBorrower, setPreviousBorrower] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('loanFormPreviousBorrower')
+      return saved ? JSON.parse(saved) : false
+    }
+    return false
+  })
+  const [currentStep, setCurrentStep] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('loanFormCurrentStep')
+      return saved ? JSON.parse(saved) : 1
+    }
+    return 1
+  })
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [formData, setFormData] = useState<FormData>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('loanFormData')
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    }
+    return {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      dateOfBirth: '',
+      sin: '',
+      streetAddress: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      employmentStatus: '',
+      employerName: '',
+      jobTitle: '',
+      monthlyIncome: '',
+      additionalIncome: '',
+      housingStatus: '',
+      monthlyHousingCost: '',
+      loanAmount: '',
+      loanPurpose: '',
+      repaymentPeriod: '',
+      paymentFrequency: '',
+      agreeTerms: false,
+      agreePrivacy: false,
+      consentCredit: false
+    }
+  })
+
+  // Save form state to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('loanFormData', JSON.stringify(formData))
+    }
+  }, [formData])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('loanFormCurrentStep', JSON.stringify(currentStep))
+    }
+  }, [currentStep])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('loanFormPreQualification', JSON.stringify(showPreQualification))
+    }
+  }, [showPreQualification])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('loanFormBankruptcyPlan', JSON.stringify(bankruptcyPlan))
+    }
+  }, [bankruptcyPlan])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('loanFormPreviousBorrower', JSON.stringify(previousBorrower))
+    }
+  }, [previousBorrower])
 
   // Define steps with icons - you can easily reorder this array
   const steps = [
@@ -212,6 +275,58 @@ export default function LoanApplicationForm() {
     // Here you would typically send the form data to your API
     console.log('Form submitted:', formData)
     setIsSubmitted(true)
+    
+    // Clear localStorage after successful submission
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('loanFormData')
+      localStorage.removeItem('loanFormCurrentStep')
+      localStorage.removeItem('loanFormPreQualification')
+      localStorage.removeItem('loanFormBankruptcyPlan')
+      localStorage.removeItem('loanFormPreviousBorrower')
+    }
+  }
+
+  const handleStartOver = () => {
+    // Reset all form state
+    setShowPreQualification(true)
+    setCurrentStep(1)
+    // setBankruptcyPlan(false)
+    // setPreviousBorrower(false)
+    // setFormData({
+    //   firstName: '',
+    //   lastName: '',
+    //   email: '',
+    //   phone: '',
+    //   dateOfBirth: '',
+    //   sin: '',
+    //   streetAddress: '',
+    //   city: '',
+    //   province: '',
+    //   postalCode: '',
+    //   employmentStatus: '',
+    //   employerName: '',
+    //   jobTitle: '',
+    //   monthlyIncome: '',
+    //   additionalIncome: '',
+    //   housingStatus: '',
+    //   monthlyHousingCost: '',
+    //   loanAmount: '',
+    //   loanPurpose: '',
+    //   repaymentPeriod: '',
+    //   paymentFrequency: '',
+    //   agreeTerms: false,
+    //   agreePrivacy: false,
+    //   consentCredit: false
+    // })
+    
+    // // Clear localStorage
+    // if (typeof window !== 'undefined') {
+    //   localStorage.removeItem('loanFormData')
+    //   localStorage.removeItem('loanFormCurrentStep')
+    //   localStorage.removeItem('loanFormPreQualification')
+    //   localStorage.removeItem('loanFormBankruptcyPlan')
+    //   localStorage.removeItem('loanFormPreviousBorrower')
+    // }
   }
 
   // If form is submitted, show success message
@@ -357,6 +472,16 @@ export default function LoanApplicationForm() {
 
   return (
     <div className='mx-auto max-w-4xl'>
+      {/* Start Over Button */}
+      <div className='mb-4 flex justify-end'>
+        <button
+          onClick={handleStartOver}
+          className='text-sm text-text-secondary transition-colors hover:text-primary hover:underline'
+        >
+          ← {t('Back_To_PreQualification') || 'Back to Pre-qualification'}
+        </button>
+      </div>
+
       {/* Step Indicators */}
       <div className='mb-6'>
         <div className='mx-auto flex max-w-3xl items-start justify-between'>

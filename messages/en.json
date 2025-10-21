@@ -228,5 +228,6 @@
   "Invalid_Email": "Please enter a valid email address",
   "Invalid_Phone": "Please enter a valid phone number",
   "Invalid_Postal_Code": "Please enter a valid postal code",
-  "Amount_Between": "Amount must be between $100 and $1,500"
+  "Amount_Between": "Amount must be between $100 and $1,500",
+  "Back_To_PreQualification": "Back to Pre-qualification"
 }
