@@ -20,12 +20,12 @@ export default function ApplyPage() {
   return (
     <div className='min-h-screen bg-background'>
       {/* Compact Hero Section with Logo */}
-      <section className='bg-gradient-to-br from-primary/10 to-secondary/10 py-8'>
-        <div className='mx-auto max-w-7xl px-6'>
-          <div className='flex flex-col items-center gap-4 sm:flex-row sm:justify-between'>
+      <section className='bg-gradient-to-br from-primary/10 to-secondary/10 py-4 sm:py-6 md:py-8'>
+        <div className='mx-auto max-w-7xl px-4 sm:px-6'>
+          <div className='flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:gap-4'>
             {/* Logo */}
             <Link href='/'>
-              <div className='relative h-12 w-32'>
+              <div className='relative h-10 w-28 sm:h-12 sm:w-32'>
                 <Image
                   src='https://flash-loan.ca/wp-content/uploads/2025/01/FlashLoanLogo.png'
                   alt='Flash-Loan Logo'
@@ -39,13 +39,13 @@ export default function ApplyPage() {
             
             {/* Page Title */}
             <div className='text-center sm:flex-1 sm:text-center'>
-              <h1 className='text-2xl font-bold text-primary sm:text-3xl'>
+              <h1 className='text-xl font-bold text-primary sm:text-2xl md:text-3xl'>
                 {t('Apply_Page_Title')}
               </h1>
             </div>
 
             {/* Language Switcher */}
-            <div className='w-32 flex justify-end'>
+            <div className='flex w-28 justify-end sm:w-32'>
               <LangSwitcher />
             </div>
           </div>
@@ -53,8 +53,8 @@ export default function ApplyPage() {
       </section>
 
       {/* Application Form Section - Full Width */}
-      <section className='py-12'>
-        <div className='mx-auto max-w-7xl px-6'>
+      <section className='py-6 sm:py-8 md:py-12'>
+        <div className='mx-auto max-w-7xl px-4 sm:px-6'>
           <LoanApplicationForm />
         </div>
       </section>

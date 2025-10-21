@@ -22,7 +22,6 @@ interface FormData {
   email: string
   phone: string
   dateOfBirth: string
-  sin: string
   streetAddress: string
   city: string
   province: string
@@ -109,7 +108,6 @@ export default function LoanApplicationForm() {
       email: '',
       phone: '',
       dateOfBirth: '',
-      sin: '',
       streetAddress: '',
       city: '',
       province: '',
@@ -360,43 +358,43 @@ export default function LoanApplicationForm() {
   if (showPreQualification) {
     return (
       <div className='mx-auto max-w-4xl'>
-        <div className='rounded-lg bg-background-secondary p-8'>
+        <div className='rounded-lg bg-background-secondary p-4 sm:p-6 md:p-8'>
           {/* Header */}
-          <div className='mb-8 text-center'>
-            <h2 className='mb-4 text-3xl font-bold text-primary'>
+          <div className='mb-6 text-center sm:mb-8'>
+            <h2 className='mb-3 text-2xl font-bold text-primary sm:mb-4 sm:text-3xl'>
               {t('Get_Quick_Loan_Quote')}
             </h2>
-            <p className='text-lg text-secondary'>
+            <p className='text-base text-secondary sm:text-lg'>
               {t('Answer_Simple_Questions')}
             </p>
           </div>
 
           {/* Requirements */}
-          <div className='mb-8 grid gap-6 md:grid-cols-2'>
+          <div className='mb-6 grid gap-4 sm:mb-8 sm:gap-6 md:grid-cols-2'>
             {/* 18+ Requirement */}
-            <div className='flex flex-col items-center rounded-lg bg-background p-6 text-center'>
-              <div className='mb-4 text-6xl font-bold text-gray-400'>18+</div>
-              <p className='text-sm text-text-secondary'>{t('Must_Be_18')}</p>
+            <div className='flex flex-col items-center rounded-lg bg-background p-4 text-center sm:p-6'>
+              <div className='mb-3 text-5xl font-bold text-gray-400 sm:mb-4 sm:text-6xl'>18+</div>
+              <p className='text-xs text-text-secondary sm:text-sm'>{t('Must_Be_18')}</p>
             </div>
 
             {/* Canadian Resident Requirement */}
-            <div className='flex flex-col items-center rounded-lg bg-background p-6 text-center'>
-              <div className='mb-4 text-6xl'>🍁</div>
-              <p className='text-sm text-text-secondary'>
+            <div className='flex flex-col items-center rounded-lg bg-background p-4 text-center sm:p-6'>
+              <div className='mb-3 text-5xl sm:mb-4 sm:text-6xl'>🍁</div>
+              <p className='text-xs text-text-secondary sm:text-sm'>
                 {t('Must_Be_Canadian')}
               </p>
             </div>
           </div>
 
           {/* Bankruptcy Question */}
-          <div className='mb-6'>
-            <p className='mb-4 text-lg font-medium text-secondary'>
+          <div className='mb-5 sm:mb-6'>
+            <p className='mb-3 text-base font-medium text-secondary sm:mb-4 sm:text-lg'>
               {t('Bankruptcy_Question')}
             </p>
-            <div className='flex gap-4'>
+            <div className='flex gap-3 sm:gap-4'>
               <button
                 onClick={() => setBankruptcyPlan(true)}
-                className={`flex-1 rounded-lg border-2 px-6 py-3 font-medium transition-all ${
+                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
                   bankruptcyPlan
                     ? 'border-primary bg-primary text-white'
                     : 'border-gray-300 bg-background text-primary hover:border-primary'
@@ -406,7 +404,7 @@ export default function LoanApplicationForm() {
               </button>
               <button
                 onClick={() => setBankruptcyPlan(false)}
-                className={`flex-1 rounded-lg border-2 px-6 py-3 font-medium transition-all ${
+                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
                   !bankruptcyPlan
                     ? 'border-secondary bg-secondary text-white'
                     : 'border-gray-300 bg-background text-primary hover:border-secondary'
@@ -418,8 +416,8 @@ export default function LoanApplicationForm() {
 
             {/* Warning Message */}
             {bankruptcyPlan && (
-              <div className='mt-4 rounded-lg border-2 border-red-500 bg-red-50 p-4'>
-                <p className='font-semibold text-red-700'>
+              <div className='mt-3 rounded-lg border-2 border-red-500 bg-red-50 p-3 sm:mt-4 sm:p-4'>
+                <p className='text-xs font-semibold text-red-700 sm:text-sm'>
                   {t('Bankruptcy_Warning')}
                 </p>
               </div>
@@ -427,14 +425,14 @@ export default function LoanApplicationForm() {
           </div>
 
           {/* Previous Borrower Question */}
-          <div className='mb-8'>
-            <p className='mb-4 text-base text-primary'>
+          <div className='mb-6 sm:mb-8'>
+            <p className='mb-3 text-sm text-primary sm:mb-4 sm:text-base'>
               {t('Previous_Borrower_Question')}
             </p>
-            <div className='flex gap-4'>
+            <div className='flex gap-3 sm:gap-4'>
               <button
                 onClick={() => setPreviousBorrower(true)}
-                className={`flex-1 rounded-lg border-2 px-6 py-3 font-medium transition-all ${
+                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
                   previousBorrower
                     ? 'border-primary bg-primary text-white'
                     : 'border-gray-300 bg-background text-primary hover:border-primary'
@@ -444,7 +442,7 @@ export default function LoanApplicationForm() {
               </button>
               <button
                 onClick={() => setPreviousBorrower(false)}
-                className={`flex-1 rounded-lg border-2 px-6 py-3 font-medium transition-all ${
+                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
                   !previousBorrower
                     ? 'border-secondary bg-secondary text-white'
                     : 'border-gray-300 bg-background text-primary hover:border-secondary'
@@ -456,11 +454,11 @@ export default function LoanApplicationForm() {
           </div>
 
           {/* Get Started Button */}
-          <div className='flex justify-end'>
+          <div className='flex justify-center sm:justify-end'>
             <Button
               size='large'
               onClick={() => setShowPreQualification(false)}
-              className='hover:bg-secondary/90 bg-secondary text-white'
+              className='hover:bg-secondary/90 w-full bg-secondary text-white sm:w-auto'
             >
               {t('Get_Started')}
             </Button>
@@ -473,17 +471,17 @@ export default function LoanApplicationForm() {
   return (
     <div className='mx-auto max-w-4xl'>
       {/* Start Over Button */}
-      <div className='mb-4 flex justify-end'>
+      <div className='mb-3 flex justify-end px-2 sm:mb-4 sm:px-0'>
         <button
           onClick={handleStartOver}
-          className='text-sm text-text-secondary transition-colors hover:text-primary hover:underline'
+          className='text-xs text-text-secondary transition-colors hover:text-primary hover:underline sm:text-sm'
         >
           ← {t('Back_To_PreQualification') || 'Back to Pre-qualification'}
         </button>
       </div>
 
-      {/* Step Indicators */}
-      <div className='mb-6'>
+      {/* Step Indicators - Desktop Version (hidden on mobile) */}
+      <div className='mb-6 hidden sm:block'>
         <div className='mx-auto flex max-w-3xl items-start justify-between'>
           {steps.map((step, index) => (
             <React.Fragment key={step.number}>
@@ -498,8 +496,8 @@ export default function LoanApplicationForm() {
                 >
                   {step.icon}
                 </div>
-                {/* Step Label (Hidden on mobile) */}
-                <span className='mt-1.5 hidden w-20 text-center text-xs text-text-secondary sm:block'>
+                {/* Step Label */}
+                <span className='mt-1.5 w-20 text-center text-xs text-text-secondary'>
                   {step.title}
                 </span>
               </div>
@@ -520,10 +518,37 @@ export default function LoanApplicationForm() {
         </div>
       </div>
 
+      {/* Mobile Step Indicator - Compact dots version */}
+      <div className='mb-4 block px-2 sm:hidden'>
+        {/* Progress Text */}
+        <div className='mb-2 text-center text-xs font-medium text-text-secondary'>
+          {t('Step')} {currentStep} {t('Of')} {steps.length}
+        </div>
+        {/* Dots */}
+        <div className='flex items-center justify-center gap-2'>
+          {steps.map((step) => (
+            <div
+              key={step.number}
+              className={`h-2 w-2 rounded-full transition-all ${
+                currentStep === step.number
+                  ? 'w-8 bg-primary'
+                  : currentStep > step.number
+                  ? 'bg-primary'
+                  : 'bg-gray-300'
+              }`}
+            />
+          ))}
+        </div>
+        {/* Current Step Title */}
+        <div className='mt-2 text-center text-sm font-semibold text-primary'>
+          {steps[currentStep - 1].title}
+        </div>
+      </div>
+
       {/* Form Content */}
-      <div className='rounded-lg bg-background-secondary p-6'>
-        {/* Step Title */}
-        <div className='mb-6'>
+      <div className='rounded-lg bg-background-secondary p-4 sm:p-6'>
+        {/* Step Title - Hidden on mobile since it's shown in mobile indicator */}
+        <div className='mb-4 hidden sm:mb-6 sm:block'>
           <h2 className='mb-2 text-2xl font-bold text-primary'>
             {steps[currentStep - 1].title}
           </h2>
@@ -531,68 +556,59 @@ export default function LoanApplicationForm() {
             {steps[currentStep - 1].description}
           </p>
         </div>
+        
+        {/* Mobile Step Description */}
+        <div className='mb-4 block text-center text-xs text-text-secondary sm:hidden'>
+          {steps[currentStep - 1].description}
+        </div>
 
         {/* Step 1: Personal Information */}
         {currentStep === 1 && (
-          <div className='space-y-4'>
+          <div className='space-y-3 sm:space-y-4'>
             <div className='grid gap-4 md:grid-cols-2'>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('First_Name')} *
                 </label>
                 <input
                   type='text'
                   value={formData.firstName}
                   onChange={e => updateFormData('firstName', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='John'
                 />
               </div>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Last_Name')} *
                 </label>
                 <input
                   type='text'
                   value={formData.lastName}
                   onChange={e => updateFormData('lastName', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='Doe'
                 />
               </div>
             </div>
 
-            <div className='grid gap-4 md:grid-cols-2'>
-              <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
-                  {t('Date_of_Birth')} *
-                </label>
-                <input
-                  type='date'
-                  value={formData.dateOfBirth}
-                  onChange={e => updateFormData('dateOfBirth', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                />
-              </div>
-              <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
-                  {t('Social_Insurance_Number')}
-                </label>
-                <input
-                  type='text'
-                  value={formData.sin}
-                  onChange={e => updateFormData('sin', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                  placeholder='123-456-789'
-                />
-              </div>
+            <div>
+              <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                {t('Date_of_Birth')} *
+              </label>
+              <input
+                type='date'
+                value={formData.dateOfBirth}
+                onChange={e => updateFormData('dateOfBirth', e.target.value)}
+                className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+              />
             </div>
           </div>
         )}
 
         {/* Step 2: Contact Details */}
         {currentStep === 2 && (
-          <div className='space-y-4'>
+          <div className='space-y-3 sm:space-y-4'>
             <div>
               <label className='mb-2 block text-sm font-medium text-primary'>
                 {t('Street_Address')} *
@@ -608,19 +624,19 @@ export default function LoanApplicationForm() {
 
             <div className='grid gap-4 md:grid-cols-3'>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('City')} *
                 </label>
                 <input
                   type='text'
                   value={formData.city}
                   onChange={e => updateFormData('city', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='Montreal'
                 />
               </div>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Province')} *
                 </label>
                 <Select
@@ -634,14 +650,14 @@ export default function LoanApplicationForm() {
                 />
               </div>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Postal_Code')} *
                 </label>
                 <input
                   type='text'
                   value={formData.postalCode}
                   onChange={e => updateFormData('postalCode', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='H1A 1A1'
                 />
               </div>
@@ -649,26 +665,26 @@ export default function LoanApplicationForm() {
 
             <div className='grid gap-4 md:grid-cols-2'>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Email_Address')} *
                 </label>
                 <input
                   type='email'
                   value={formData.email}
                   onChange={e => updateFormData('email', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='john.doe@example.com'
                 />
               </div>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Phone_Number')} *
                 </label>
                 <input
                   type='tel'
                   value={formData.phone}
                   onChange={e => updateFormData('phone', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='(450) 123-4567'
                 />
               </div>
@@ -678,7 +694,7 @@ export default function LoanApplicationForm() {
 
         {/* Step 3: Financial Obligations */}
         {currentStep === 3 && (
-          <div className='space-y-4'>
+          <div className='space-y-3 sm:space-y-4'>
             <div>
               <label className='mb-2 block text-sm font-medium text-primary'>
                 {t('Employment_Status')} *
@@ -706,7 +722,7 @@ export default function LoanApplicationForm() {
               <>
                 <div className='grid gap-4 md:grid-cols-2'>
                   <div>
-                    <label className='mb-2 block text-sm font-medium text-primary'>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                       {t('Employer_Name')} *
                     </label>
                     <input
@@ -715,19 +731,19 @@ export default function LoanApplicationForm() {
                       onChange={e =>
                         updateFormData('employerName', e.target.value)
                       }
-                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                       placeholder='Company Name'
                     />
                   </div>
                   <div>
-                    <label className='mb-2 block text-sm font-medium text-primary'>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                       {t('Job_Title')} *
                     </label>
                     <input
                       type='text'
                       value={formData.jobTitle}
                       onChange={e => updateFormData('jobTitle', e.target.value)}
-                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                       placeholder='Position Title'
                     />
                   </div>
@@ -737,7 +753,7 @@ export default function LoanApplicationForm() {
 
             <div className='grid gap-4 md:grid-cols-2'>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Housing_Status')} *
                 </label>
                 <Select
@@ -755,7 +771,7 @@ export default function LoanApplicationForm() {
                 />
               </div>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Monthly_Housing_Cost')} *
                 </label>
                 <input
@@ -764,7 +780,7 @@ export default function LoanApplicationForm() {
                   onChange={e =>
                     updateFormData('monthlyHousingCost', e.target.value)
                   }
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='1200'
                 />
               </div>
@@ -774,10 +790,10 @@ export default function LoanApplicationForm() {
 
         {/* Step 4: Your Income */}
         {currentStep === 4 && (
-          <div className='space-y-4'>
+          <div className='space-y-3 sm:space-y-4'>
             <div className='grid gap-4 md:grid-cols-2'>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Monthly_Income')} *
                 </label>
                 <input
@@ -786,12 +802,12 @@ export default function LoanApplicationForm() {
                   onChange={e =>
                     updateFormData('monthlyIncome', e.target.value)
                   }
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='3000'
                 />
               </div>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Additional_Income')}
                 </label>
                 <input
@@ -800,7 +816,7 @@ export default function LoanApplicationForm() {
                   onChange={e =>
                     updateFormData('additionalIncome', e.target.value)
                   }
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='500'
                 />
               </div>
@@ -846,7 +862,7 @@ export default function LoanApplicationForm() {
 
             <div className='grid gap-4 md:grid-cols-2'>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Repayment_Period')} *
                 </label>
                 <Select
@@ -866,7 +882,7 @@ export default function LoanApplicationForm() {
                 />
               </div>
               <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Preferred_Payment_Frequency')} *
                 </label>
                 <Select
@@ -888,7 +904,7 @@ export default function LoanApplicationForm() {
 
         {/* Step 5: Review & Submit */}
         {currentStep === 5 && (
-          <div className='space-y-4'>
+          <div className='space-y-3 sm:space-y-4'>
             <div className='rounded-lg bg-background p-6'>
               <h3 className='mb-4 text-xl font-semibold text-primary'>
                 {t('Personal_Details')}
