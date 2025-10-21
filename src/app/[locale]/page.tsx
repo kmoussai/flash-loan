@@ -1,5 +1,7 @@
+'use client'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
+import { Link } from '@/src/navigation'
 import Button from './components/Button'
 
 export default function HomePage() {
@@ -21,9 +23,11 @@ export default function HomePage() {
               <p className='mb-8 text-xl text-text-secondary'>
                 {t('Get_Up_To_1500_Today')}
               </p>
-              <Button size='large' className='bg-primary text-white hover:bg-primary/90'>
-                {t('Apply_Now')}
-              </Button>
+              <Link href='/apply'>
+                <Button size='large' className='bg-primary text-white hover:bg-primary/90'>
+                  {t('Apply_Now')}
+                </Button>
+              </Link>
             </div>
             <div className='flex justify-center'>
               <div className='h-96 w-full max-w-md rounded-lg overflow-hidden'>
@@ -126,9 +130,11 @@ export default function HomePage() {
               <p className='mb-6 text-text-secondary leading-relaxed'>
                 {t('About_Us_Description')}
               </p>
-              <Button variant='secondary' size='medium'>
-                {t('Apply_Now')}
-              </Button>
+              <Link href='/apply'>
+                <Button variant='secondary' size='medium'>
+                  {t('Apply_Now')}
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -160,9 +166,11 @@ export default function HomePage() {
               <p className='mb-6 text-text-secondary leading-relaxed'>
                 {t('Fast_Loans_Description')}
               </p>
-              <Button variant='secondary' size='small'>
-                {t('Apply_Now')}
-              </Button>
+              <Link href='/apply'>
+                <Button variant='secondary' size='small'>
+                  {t('Apply_Now')}
+                </Button>
+              </Link>
             </div>
 
             {/* Step 2 */}
@@ -178,9 +186,11 @@ export default function HomePage() {
               <p className='mb-6 text-text-secondary leading-relaxed'>
                 {t('Accessible_Conditions_Description')}
               </p>
-              <Button variant='secondary' size='small'>
-                {t('Apply_Now')}
-              </Button>
+              <Link href='/apply'>
+                <Button variant='secondary' size='small'>
+                  {t('Apply_Now')}
+                </Button>
+              </Link>
             </div>
 
             {/* Step 3 */}
@@ -196,9 +206,11 @@ export default function HomePage() {
               <p className='mb-6 text-text-secondary leading-relaxed'>
                 {t('Flexible_Repayment_Step_Description')}
               </p>
-              <Button variant='secondary' size='small'>
-                {t('Apply_Now')}
-              </Button>
+              <Link href='/apply'>
+                <Button variant='secondary' size='small'>
+                  {t('Apply_Now')}
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -340,12 +352,14 @@ export default function HomePage() {
           <p className='mb-8 text-xl text-white/90'>
             {t('CTA_Description')}
           </p>
-          <Button 
-            size='large'
-            className='bg-white text-primary hover:bg-white/90'
-          >
-            {t('Apply_Now')}
-          </Button>
+          <Link href='/apply'>
+            <Button 
+              size='large'
+              className='bg-white text-primary hover:bg-white/90'
+            >
+              {t('Apply_Now')}
+            </Button>
+          </Link>
         </div>
       </section>
     </div>

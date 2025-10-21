@@ -73,14 +73,16 @@ export const Header: FC<Props> = ({ locale }) => {
 
         {/* Right side actions */}
         <div className='flex items-center space-x-3'>
-          {/* Apply Now Button */}
-          <Button
-            variant='primary'
-            size='medium'
-            className='hidden sm:inline-flex'
-          >
-            {t('Apply_Now')}
-          </Button>
+          {/* Apply Now Button - Links to apply page */}
+          <Link lang={locale} href='/apply'>
+            <Button
+              variant='primary'
+              size='medium'
+              className='hidden sm:inline-flex'
+            >
+              {t('Apply_Now')}
+            </Button>
+          </Link>
 
           {/* Language Switcher */}
           <LangSwitcher />

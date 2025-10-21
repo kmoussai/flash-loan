@@ -1,0 +1,364 @@
+# Flash-Loan Project Context
+
+## Project Overview
+Flash-Loan is a Next.js 14 web application for a Canadian micro-loan and personal loan provider. The application features internationalization (i18n) support, modern UI components, and multiple theme options.
+
+## Tech Stack
+- **Framework**: Next.js 14.1.0 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS with custom CSS variables
+- **UI Components**: Radix UI, custom components
+- **Internationalization**: next-intl
+- **State Management**: React hooks
+- **Themes**: next-themes with multiple custom themes
+
+## Project Structure
+
+```
+/Users/kmoussai/work/clients/flash-loan/
+├── src/
+│   ├── app/
+│   │   ├── [locale]/              # Locale-based routing
+│   │   │   ├── components/        # Shared components
+│   │   │   │   ├── Button.tsx
+│   │   │   │   ├── Header.tsx
+│   │   │   │   ├── Footer.tsx
+│   │   │   │   ├── ThemeProvider.tsx
+│   │   │   │   ├── ThemeSwitch.tsx
+│   │   │   │   └── LangSwitcher.tsx
+│   │   │   ├── about/             # About page
+│   │   │   ├── apply/             # Apply page (Coming Soon)
+│   │   │   ├── contact/           # Contact page
+│   │   │   ├── how-it-works/      # How it works page
+│   │   │   ├── repayment/         # Repayment page
+│   │   │   ├── layout.tsx         # Locale layout wrapper
+│   │   │   ├── page.tsx           # Homepage
+│   │   │   └── globals.css        # Global styles with theme variables
+│   │   ├── api/                   # API routes
+│   │   └── layout.tsx             # Root layout
+│   ├── hooks/                     # Custom React hooks
+│   ├── lib/                       # Utility functions
+│   ├── i18n.ts                    # i18n configuration
+│   ├── navigation.ts              # Internationalized navigation
+│   └── middleware.ts              # Next.js middleware
+├── messages/
+│   ├── en.json                    # English translations
+│   └── fr.json                    # French translations
+├── public/                        # Static assets
+├── lib/
+│   └── utils.ts                   # Shared utilities
+└── components.json                # shadcn/ui config
+
+```
+
+## Code Conventions
+
+### 1. Component Structure
+- **ALL pages that use `Link` from `@/src/navigation` MUST be Client Components**
+- Add `'use client'` directive at the top of files using:
+  - `Link` component
+  - `useTranslations` hook
+  - Any client-side interactivity
+  
+```typescript
+'use client'
+import { useTranslations } from 'next-intl'
+import { Link } from '@/src/navigation'
+import Button from './components/Button'
+
+export default function PageName() {
+  const t = useTranslations('')
+  // ...
+}
+```
+
+### 2. Import Patterns
+```typescript
+// Internationalization
+import { useTranslations } from 'next-intl'
+
+// Navigation (Client Component only!)
+import { Link } from '@/src/navigation'
+
+// Next.js components
+import Image from 'next/image'
+
+// Custom components (relative imports for components in same locale)
+import Button from '../components/Button'
+import { Header } from './components/Header'
+```
+
+### 3. Navigation Setup
+
+**IMPORTANT**: All routes MUST be registered in `/src/navigation.ts`:
+
+```typescript
+export const pathnames = {
+  '/': '/',
+  '/about': '/about',
+  '/how-it-works': '/how-it-works',
+  '/repayment': '/repayment',
+  '/contact': '/contact',
+  '/apply': '/apply'
+  // Add new routes here!
+} satisfies Pathnames<typeof locales>
+```
+
+**When adding a new route:**
+1. Create the page in `/src/app/[locale]/your-route/page.tsx`
+2. Add `'use client'` if using Link or translations
+3. Register the route in `navigation.ts`
+4. Add translations to both `en.json` and `fr.json`
+
+### 4. Using Links
+
+```typescript
+// With locale parameter (in components that receive it)
+<Link lang={locale} href='/apply'>
+  <Button>Apply Now</Button>
+</Link>
+
+// Without locale parameter (Link will infer from context)
+<Link href='/apply'>
+  <Button>Apply Now</Button>
+</Link>
+```
+
+### 5. Internationalization (i18n)
+
+**Supported Locales**: English (`en`), French (`fr`)
+
+**Translation Usage**:
+```typescript
+const t = useTranslations('')
+
+// In JSX
+{t('Translation_Key')}
+```
+
+**Adding New Translations**:
+1. Add key to `/messages/en.json`
+2. Add corresponding key to `/messages/fr.json`
+3. Use underscore_case for keys (e.g., `Apply_Now`, `Coming_Soon`)
+
+### 6. Styling Conventions
+
+**CSS Variables** (defined in `globals.css`):
+```css
+--primary          /* Main brand color */
+--secondary        /* Secondary brand color */
+--background       /* Page background */
+--background-secondary  /* Card/section backgrounds */
+--button           /* Button background */
+--button-text      /* Button text color */
+--text-secondary   /* Secondary text color */
+```
+
+**Common Tailwind Patterns**:
+```typescript
+// Sections
+className='py-20'  // Vertical padding for sections
+
+// Containers
+className='mx-auto max-w-6xl px-6'  // Centered container with max width
+
+// Gradient backgrounds
+className='bg-gradient-to-br from-primary/10 to-secondary/10'
+
+// Grid layouts
+className='grid gap-8 md:grid-cols-3'  // Responsive grid
+
+// Cards
+className='rounded-lg bg-background-secondary p-8'
+
+// Hover effects
+className='transition-transform duration-300 hover:scale-105'
+```
+
+### 7. Theme System
+
+**Available Themes**:
+- `light` (default)
+- `dark`
+- `instagram`
+- `facebook`
+- `discord`
+- `netflix`
+- `twilight`
+- `reddit`
+
+Each theme has its own CSS variable definitions in `globals.css`.
+
+### 8. Button Component
+
+```typescript
+<Button 
+  variant='primary' | 'secondary'  // Default: 'primary'
+  size='small' | 'medium' | 'large'  // Default: 'medium'
+  rounded={boolean}  // Default: false
+  className='additional-classes'
+>
+  Button Text
+</Button>
+```
+
+**Note**: Button is a native `<button>` element. Wrap with `<Link>` for navigation.
+
+### 9. Page Layout Pattern
+
+```typescript
+'use client'
+import { useTranslations } from 'next-intl'
+import { Link } from '@/src/navigation'
+import Button from '../components/Button'
+
+export default function PageName() {
+  const t = useTranslations('')
+
+  return (
+    <div className='min-h-screen bg-background'>
+      {/* Hero Section */}
+      <section className='bg-gradient-to-br from-primary/10 to-secondary/10 py-20'>
+        <div className='mx-auto max-w-6xl px-6'>
+          {/* Hero content */}
+        </div>
+      </section>
+
+      {/* Content Sections */}
+      <section className='py-20'>
+        <div className='mx-auto max-w-6xl px-6'>
+          {/* Section content */}
+        </div>
+      </section>
+    </div>
+  )
+}
+```
+
+### 10. Common Section Patterns
+
+**Hero Section**:
+```typescript
+<section className='bg-gradient-to-br from-primary/10 to-secondary/10 py-20'>
+  <div className='mx-auto max-w-4xl px-6 text-center'>
+    <h1 className='mb-6 text-5xl font-bold text-primary lg:text-6xl'>
+      {t('Page_Title')}
+    </h1>
+    <p className='text-xl text-text-secondary'>
+      {t('Page_Subtitle')}
+    </p>
+  </div>
+</section>
+```
+
+**Feature Grid**:
+```typescript
+<div className='grid gap-8 md:grid-cols-3'>
+  <div className='rounded-lg bg-background-secondary p-8 text-center'>
+    <div className='mb-6 flex justify-center'>
+      <div className='flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20'>
+        <span className='text-3xl'>🎯</span>
+      </div>
+    </div>
+    <h3 className='mb-4 text-xl font-semibold text-primary'>
+      {t('Feature_Title')}
+    </h3>
+    <p className='text-text-secondary leading-relaxed'>
+      {t('Feature_Description')}
+    </p>
+  </div>
+</div>
+```
+
+**CTA Section**:
+```typescript
+<section className='bg-gradient-to-r from-primary to-secondary py-20'>
+  <div className='mx-auto max-w-4xl px-6 text-center'>
+    <h2 className='mb-6 text-4xl font-bold text-white'>
+      {t('CTA_Title')}
+    </h2>
+    <p className='mb-8 text-xl text-white/90'>
+      {t('CTA_Description')}
+    </p>
+    <Link href='/apply'>
+      <Button size='large' className='bg-white text-primary hover:bg-white/90'>
+        {t('Apply_Now')}
+      </Button>
+    </Link>
+  </div>
+</section>
+```
+
+## Common Issues & Solutions
+
+### Issue: "Unsupported Server Component type: undefined"
+**Cause**: Using client-only components in Server Component  
+**Solution**: Add `'use client'` directive at the top of the file
+
+### Issue: Link not working or undefined
+**Cause**: Route not registered in `navigation.ts`  
+**Solution**: Add the route to the `pathnames` object
+
+### Issue: Translation key not found
+**Cause**: Missing translation in language files  
+**Solution**: Add key to both `en.json` and `fr.json`
+
+### Issue: Button not clickable/navigating
+**Cause**: Button component doesn't support href  
+**Solution**: Wrap Button with Link component
+
+## File Naming Conventions
+- Components: PascalCase (e.g., `Button.tsx`, `Header.tsx`)
+- Pages: lowercase (e.g., `page.tsx`, `layout.tsx`)
+- Routes: kebab-case (e.g., `how-it-works/`, `apply/`)
+- Translation keys: Underscore_Case (e.g., `Apply_Now`, `Coming_Soon`)
+
+## Development Workflow
+
+1. **Adding a new page**:
+   - Create folder in `/src/app/[locale]/your-page/`
+   - Create `page.tsx` with `'use client'` directive
+   - Register route in `navigation.ts`
+   - Add translations to `en.json` and `fr.json`
+   - Update navigation links in `Header.tsx` if needed
+
+2. **Adding translations**:
+   - Add to `/messages/en.json`
+   - Add matching key to `/messages/fr.json`
+   - Use `t('Your_Key')` in component
+
+3. **Creating components**:
+   - Place shared components in `/src/app/[locale]/components/`
+   - Use TypeScript interfaces for props
+   - Follow existing component patterns
+   - Add comments for complex logic
+
+## Key Dependencies
+- `next@14.1.0` - Framework
+- `next-intl@^3.11.3` - Internationalization
+- `next-themes@^0.2.1` - Theme management
+- `tailwindcss@^3.4.1` - Styling
+- `@radix-ui/*` - UI primitives
+- `typescript@^5.3.3` - Type safety
+
+## Important Notes
+- Always use the custom `Link` from `@/src/navigation`, NOT from `next/link`
+- All pages using `Link` or `useTranslations` must be Client Components
+- Maintain consistency with existing design patterns
+- Test both English and French versions
+- Ensure responsive design (mobile, tablet, desktop)
+- Follow accessibility best practices
+- Keep translations synchronized between `en.json` and `fr.json`
+
+## Brand Identity
+- **Primary Color**: #333366 (dark blue)
+- **Secondary Color**: #097fa5 (teal)
+- **Target Market**: Canadian borrowers seeking micro-loans and personal loans
+- **Key Values**: Transparency, accessibility, no credit checks, fast approval
+- **Tone**: Professional, trustworthy, supportive
+
+## Contact Information
+- Phone: +1 (450) 235-8461
+- Email: contact@flash-loan.ca
+- Address: 5400 Rue Jean-Talon O, Unit #806, Montréal, QC, H4P 2T5
+
