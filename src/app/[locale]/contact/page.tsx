@@ -39,10 +39,10 @@ export default function Contact() {
                 </div>
               </div>
               <h3 className='mb-4 text-xl font-semibold text-primary'>
-                {t('Phone')}
+                {t('Phone_Label')}
               </h3>
               <p className='text-text-secondary'>
-                {t('Phone_Number')}
+                {t('Contact_Phone_Number')}
               </p>
             </div>
 
@@ -54,10 +54,10 @@ export default function Contact() {
                 </div>
               </div>
               <h3 className='mb-4 text-xl font-semibold text-primary'>
-                {t('Email')}
+                {t('Email_Label')}
               </h3>
               <p className='text-text-secondary'>
-                {t('Email_Address')}
+                {t('Contact_Email_Address')}
               </p>
             </div>
 
