@@ -22,10 +22,16 @@ interface FormData {
   email: string
   phone: string
   dateOfBirth: string
-  streetAddress: string
+  preferredLanguage: string
+  
+  // Contact Details (Address)
+  streetNumber: string
+  streetName: string
+  apartmentNumber: string
   city: string
   province: string
   postalCode: string
+  movingDate: string
 
   // Financial Information
   employmentStatus: string
@@ -108,10 +114,14 @@ export default function LoanApplicationForm() {
       email: '',
       phone: '',
       dateOfBirth: '',
-      streetAddress: '',
+      preferredLanguage: '',
+      streetNumber: '',
+      streetName: '',
+      apartmentNumber: '',
       city: '',
       province: '',
       postalCode: '',
+      movingDate: '',
       employmentStatus: '',
       employerName: '',
       jobTitle: '',
@@ -575,7 +585,7 @@ export default function LoanApplicationForm() {
                   value={formData.firstName}
                   onChange={e => updateFormData('firstName', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='John'
+                  placeholder='Your first name'
                 />
               </div>
               <div>
@@ -587,20 +597,88 @@ export default function LoanApplicationForm() {
                   value={formData.lastName}
                   onChange={e => updateFormData('lastName', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='Doe'
+                  placeholder='Your last name'
+                />
+              </div>
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Date_of_Birth')} *
+                </label>
+                <input
+                  type='date'
+                  value={formData.dateOfBirth}
+                  onChange={e => updateFormData('dateOfBirth', e.target.value)}
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                  placeholder='dd/mm/yyyy'
+                />
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Your_Language')} *
+                </label>
+                <Select
+                  value={formData.preferredLanguage}
+                  onValueChange={value => updateFormData('preferredLanguage', value)}
+                  placeholder={t('Select_Language')}
+                  options={[
+                    { value: 'en', label: 'English' },
+                    { value: 'fr', label: 'Français' }
+                  ]}
+                />
+              </div>
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Phone_Number')} *
+                </label>
+                <input
+                  type='tel'
+                  value={formData.phone}
+                  onChange={e => updateFormData('phone', e.target.value)}
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                  placeholder='(999) 999-9999'
+                />
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Email_Address')} *
+                </label>
+                <input
+                  type='email'
+                  value={formData.email}
+                  onChange={e => updateFormData('email', e.target.value)}
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                  placeholder='khalidmossaid@gmail.com'
                 />
               </div>
             </div>
 
             <div>
-              <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                {t('Date_of_Birth')} *
+              <label className='mb-2 block text-sm font-medium text-primary'>
+                {t('How_Much_Do_You_Need')} *
               </label>
-              <input
-                type='date'
-                value={formData.dateOfBirth}
-                onChange={e => updateFormData('dateOfBirth', e.target.value)}
-                className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+              <Select
+                value={formData.loanAmount}
+                onValueChange={value => updateFormData('loanAmount', value)}
+                placeholder={t('Choose_Desired_Amount')}
+                options={[
+                  { value: '250', label: '$250' },
+                  { value: '300', label: '$300' },
+                  { value: '400', label: '$400' },
+                  { value: '500', label: '$500' },
+                  { value: '600', label: '$600' },
+                  { value: '750', label: '$750' },
+                  { value: '800', label: '$800' },
+                  { value: '900', label: '$900' },
+                  { value: '1000', label: '$1,000' },
+                  { value: '1250', label: '$1,250' },
+                  { value: '1500', label: '$1,500' }
+                ]}
               />
             </div>
           </div>
@@ -609,17 +687,43 @@ export default function LoanApplicationForm() {
         {/* Step 2: Contact Details */}
         {currentStep === 2 && (
           <div className='space-y-3 sm:space-y-4'>
-            <div>
-              <label className='mb-2 block text-sm font-medium text-primary'>
-                {t('Street_Address')} *
-              </label>
-              <input
-                type='text'
-                value={formData.streetAddress}
-                onChange={e => updateFormData('streetAddress', e.target.value)}
-                className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                placeholder='123 Main Street'
-              />
+            <div className='grid gap-4 grid-cols-[1fr_3fr_1fr]'>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Street_Number')} *
+                </label>
+                <input
+                  type='text'
+                  value={formData.streetNumber}
+                  onChange={e => updateFormData('streetNumber', e.target.value)}
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                  placeholder='Tesy'
+                />
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Street_Name')} *
+                </label>
+                <input
+                  type='text'
+                  value={formData.streetName}
+                  onChange={e => updateFormData('streetName', e.target.value)}
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                  placeholder='rue 1'
+                />
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Apartment_Number')}
+                </label>
+                <input
+                  type='text'
+                  value={formData.apartmentNumber}
+                  onChange={e => updateFormData('apartmentNumber', e.target.value)}
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                  placeholder='apprt 31'
+                />
+              </div>
             </div>
 
             <div className='grid gap-4 md:grid-cols-3'>
@@ -632,7 +736,7 @@ export default function LoanApplicationForm() {
                   value={formData.city}
                   onChange={e => updateFormData('city', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='Montreal'
+                  placeholder='test'
                 />
               </div>
               <div>
@@ -658,36 +762,21 @@ export default function LoanApplicationForm() {
                   value={formData.postalCode}
                   onChange={e => updateFormData('postalCode', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='H1A 1A1'
+                  placeholder='H5D 2D2'
                 />
               </div>
             </div>
 
-            <div className='grid gap-4 md:grid-cols-2'>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Email_Address')} *
-                </label>
-                <input
-                  type='email'
-                  value={formData.email}
-                  onChange={e => updateFormData('email', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='john.doe@example.com'
-                />
-              </div>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Phone_Number')} *
-                </label>
-                <input
-                  type='tel'
-                  value={formData.phone}
-                  onChange={e => updateFormData('phone', e.target.value)}
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='(450) 123-4567'
-                />
-              </div>
+            <div>
+              <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                {t('Moving_Date')} *
+              </label>
+              <input
+                type='date'
+                value={formData.movingDate}
+                onChange={e => updateFormData('movingDate', e.target.value)}
+                className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+              />
             </div>
           </div>
         )}
@@ -927,7 +1016,7 @@ export default function LoanApplicationForm() {
                 <div>
                   <span className='text-text-secondary'>Address:</span>
                   <p className='font-medium text-primary'>
-                    {formData.streetAddress}, {formData.city},{' '}
+                    {formData.streetNumber} {formData.streetName} {formData.apartmentNumber && `Apt ${formData.apartmentNumber}`}, {formData.city},{' '}
                     {formData.province} {formData.postalCode}
                   </p>
                 </div>
