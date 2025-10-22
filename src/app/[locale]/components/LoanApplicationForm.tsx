@@ -33,22 +33,54 @@ interface FormData {
   postalCode: string
   movingDate: string
 
-  // Financial Information
-  employmentStatus: string
-  employerName: string
-  jobTitle: string
-  monthlyIncome: string
-  additionalIncome: string
-  housingStatus: string
-  monthlyHousingCost: string
+  // Financial Obligations (Step 3) - Quebec only
+  residenceStatus: string
+  grossSalary: string
+  rentOrMortgageCost: string
+  heatingElectricityCost: string
+  carLoan: string
+  furnitureLoan: string
 
-  // Loan Details
+  // References (Step 4)
+  reference1FirstName: string
+  reference1LastName: string
+  reference1Phone: string
+  reference1Relationship: string
+  reference2FirstName: string
+  reference2LastName: string
+  reference2Phone: string
+  reference2Relationship: string
+
+  // Your Income (Step 5)
+  incomeSource: string
+  // For Employed
+  occupation: string
+  companyName: string
+  supervisorName: string
+  workPhone: string
+  post: string
+  payrollFrequency: string
+  dateHired: string
+  nextPayDate: string
+  // For Employment Insurance
+  employmentInsuranceStartDate: string
+  // For Self-Employed
+  paidByDirectDeposit: string
+  selfEmployedPhone: string
+  depositsFrequency: string
+  selfEmployedStartDate: string
+  // For all others (common field)
+  nextDepositDate: string
+
+  // Loan Details (will be moved/organized)
   loanAmount: string
   loanPurpose: string
   repaymentPeriod: string
   paymentFrequency: string
 
-  // Review & Submit
+  // Confirmation & Submission
+  loanType: string // 'without-documents' or 'with-documents'
+  confirmInformation: boolean
   agreeTerms: boolean
   agreePrivacy: boolean
   consentCredit: boolean
@@ -122,17 +154,41 @@ export default function LoanApplicationForm() {
       province: '',
       postalCode: '',
       movingDate: '',
-      employmentStatus: '',
-      employerName: '',
-      jobTitle: '',
-      monthlyIncome: '',
-      additionalIncome: '',
-      housingStatus: '',
-      monthlyHousingCost: '',
+      residenceStatus: '',
+      grossSalary: '',
+      rentOrMortgageCost: '',
+      heatingElectricityCost: '',
+      carLoan: '',
+      furnitureLoan: '',
+      reference1FirstName: '',
+      reference1LastName: '',
+      reference1Phone: '',
+      reference1Relationship: '',
+      reference2FirstName: '',
+      reference2LastName: '',
+      reference2Phone: '',
+      reference2Relationship: '',
+      incomeSource: '',
+      occupation: '',
+      companyName: '',
+      supervisorName: '',
+      workPhone: '',
+      post: '',
+      payrollFrequency: '',
+      dateHired: '',
+      nextPayDate: '',
+      employmentInsuranceStartDate: '',
+      paidByDirectDeposit: '',
+      selfEmployedPhone: '',
+      depositsFrequency: '',
+      selfEmployedStartDate: '',
+      nextDepositDate: '',
       loanAmount: '',
       loanPurpose: '',
       repaymentPeriod: '',
       paymentFrequency: '',
+      loanType: '',
+      confirmInformation: false,
       agreeTerms: false,
       agreePrivacy: false,
       consentCredit: false
@@ -170,8 +226,8 @@ export default function LoanApplicationForm() {
     }
   }, [previousBorrower])
 
-  // Define steps with icons - you can easily reorder this array
-  const steps = [
+  // Define steps with icons - dynamically filtered based on province
+  const allSteps = [
     {
       number: 1,
       title: t('Personal_Information'),
@@ -221,10 +277,30 @@ export default function LoanApplicationForm() {
           <path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20' />
           <path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z' />
         </svg>
-      )
+      ),
+      isQuebecOnly: true
     },
     {
       number: 4,
+      title: t('References'),
+      description: t('References_Description'),
+      icon: (
+        <svg
+          className='h-6 w-6'
+          viewBox='0 0 24 24'
+          fill='none'
+          stroke='currentColor'
+          strokeWidth='2'
+        >
+          <path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' />
+          <circle cx='9' cy='7' r='4' />
+          <path d='M23 21v-2a4 4 0 0 0-3-3.87' />
+          <path d='M16 3.13a4 4 0 0 1 0 7.75' />
+        </svg>
+      )
+    },
+    {
+      number: 5,
       title: t('Your_Income'),
       description: t('Income_Description'),
       icon: (
@@ -236,15 +312,15 @@ export default function LoanApplicationForm() {
           strokeWidth='2'
         >
           <circle cx='12' cy='12' r='10' />
-          <path d='M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8' />
+          <path d='M16 8h-6a2 4 0 1 0 0 4h4a2 2 0 1 1 0 4H8' />
           <path d='M12 18V6' />
         </svg>
       )
     },
     {
-      number: 5,
-      title: t('Review_Submit'),
-      description: t('Review_Description'),
+      number: 6,
+      title: t('Confirmation_And_Submission'),
+      description: t('Choose_Loan_Type'),
       icon: (
         <svg
           className='h-6 w-6'
@@ -253,17 +329,42 @@ export default function LoanApplicationForm() {
           stroke='currentColor'
           strokeWidth='2'
         >
-          <polyline points='20 6 9 17 4 12' />
+          <path d='M9 11l3 3L22 4' />
+          <path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' />
         </svg>
       )
     }
   ]
 
-  const totalSteps = steps.length
+  // Filter steps based on province (exclude Financial Obligations if not Quebec)
+  const steps = formData.province === 'Quebec' 
+    ? allSteps 
+    : allSteps.filter(step => !step.isQuebecOnly)
+
+  // Renumber steps after filtering
+  const stepsWithNumbers = steps.map((step, index) => ({
+    ...step,
+    number: index + 1
+  }))
+
+  const totalSteps = stepsWithNumbers.length
 
   // Update form data
   const updateFormData = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  // Get current step key based on province
+  const getCurrentStepKey = () => {
+    if (formData.province === 'Quebec') {
+      // For Quebec, all 6 steps
+      const stepKeys = ['personal', 'contact', 'financial', 'references', 'income', 'confirmation']
+      return stepKeys[currentStep - 1]
+    } else {
+      // For non-Quebec, skip financial (step 3)
+      const stepKeys = ['personal', 'contact', 'references', 'income', 'confirmation']
+      return stepKeys[currentStep - 1]
+    }
   }
 
   // Navigation handlers
@@ -493,7 +594,7 @@ export default function LoanApplicationForm() {
       {/* Step Indicators - Desktop Version (hidden on mobile) */}
       <div className='mb-6 hidden sm:block'>
         <div className='mx-auto flex max-w-3xl items-start justify-between'>
-          {steps.map((step, index) => (
+          {stepsWithNumbers.map((step, index) => (
             <React.Fragment key={step.number}>
               {/* Step Circle with Icon */}
               <div className='flex flex-col items-center'>
@@ -513,7 +614,7 @@ export default function LoanApplicationForm() {
               </div>
 
               {/* Connector Line */}
-              {index < steps.length - 1 && (
+              {index < stepsWithNumbers.length - 1 && (
                 <div className='relative mt-6 h-0.5 flex-1 bg-gray-300'>
                   <div
                     className='absolute left-0 top-0 h-full bg-primary transition-all duration-500'
@@ -532,11 +633,11 @@ export default function LoanApplicationForm() {
       <div className='mb-4 block px-2 sm:hidden'>
         {/* Progress Text */}
         <div className='mb-2 text-center text-xs font-medium text-text-secondary'>
-          {t('Step')} {currentStep} {t('Of')} {steps.length}
+          {t('Step')} {currentStep} {t('Of')} {stepsWithNumbers.length}
         </div>
         {/* Dots */}
         <div className='flex items-center justify-center gap-2'>
-          {steps.map((step) => (
+          {stepsWithNumbers.map((step) => (
             <div
               key={step.number}
               className={`h-2 w-2 rounded-full transition-all ${
@@ -551,7 +652,7 @@ export default function LoanApplicationForm() {
         </div>
         {/* Current Step Title */}
         <div className='mt-2 text-center text-sm font-semibold text-primary'>
-          {steps[currentStep - 1].title}
+          {stepsWithNumbers[currentStep - 1]?.title}
         </div>
       </div>
 
@@ -560,20 +661,20 @@ export default function LoanApplicationForm() {
         {/* Step Title - Hidden on mobile since it's shown in mobile indicator */}
         <div className='mb-4 hidden sm:mb-6 sm:block'>
           <h2 className='mb-2 text-2xl font-bold text-primary'>
-            {steps[currentStep - 1].title}
+            {stepsWithNumbers[currentStep - 1]?.title}
           </h2>
           <p className='text-sm text-text-secondary'>
-            {steps[currentStep - 1].description}
+            {stepsWithNumbers[currentStep - 1]?.description}
           </p>
         </div>
         
         {/* Mobile Step Description */}
         <div className='mb-4 block text-center text-xs text-text-secondary sm:hidden'>
-          {steps[currentStep - 1].description}
+          {stepsWithNumbers[currentStep - 1]?.description}
         </div>
 
         {/* Step 1: Personal Information */}
-        {currentStep === 1 && (
+        {getCurrentStepKey() === 'personal' && (
           <div className='space-y-3 sm:space-y-4'>
             <div className='grid gap-4 md:grid-cols-2'>
               <div>
@@ -685,7 +786,7 @@ export default function LoanApplicationForm() {
         )}
 
         {/* Step 2: Contact Details */}
-        {currentStep === 2 && (
+        {getCurrentStepKey() === 'contact' && (
           <div className='space-y-3 sm:space-y-4'>
             <div className='grid gap-4 grid-cols-[1fr_3fr_1fr]'>
               <div>
@@ -781,366 +882,609 @@ export default function LoanApplicationForm() {
           </div>
         )}
 
-        {/* Step 3: Financial Obligations */}
-        {currentStep === 3 && (
+        {/* Step 3: Financial Obligations - Quebec Only */}
+        {getCurrentStepKey() === 'financial' && (
           <div className='space-y-3 sm:space-y-4'>
-            <div>
-              <label className='mb-2 block text-sm font-medium text-primary'>
-                {t('Employment_Status')} *
-              </label>
-              <Select
-                value={formData.employmentStatus}
-                onValueChange={value =>
-                  updateFormData('employmentStatus', value)
-                }
-                placeholder={t('Select_Employment')}
-                options={[
-                  { value: 'full-time', label: t('Employed_Full_Time') },
-                  { value: 'part-time', label: t('Employed_Part_Time') },
-                  { value: 'self-employed', label: t('Self_Employed') },
-                  { value: 'unemployed', label: t('Unemployed') },
-                  { value: 'retired', label: t('Retired') },
-                  { value: 'student', label: t('Student') }
-                ]}
-              />
+            {/* Residence Status */}
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div>
+                <label className='mb-3 block text-sm font-medium text-primary'>
+                  {t('Your_Status_At')} *
+                </label>
+                <div className='flex gap-3'>
+                  <button
+                    onClick={() => updateFormData('residenceStatus', 'tenant')}
+                    className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all ${
+                      formData.residenceStatus === 'tenant'
+                        ? 'border-secondary bg-secondary text-white'
+                        : 'border-gray-300 bg-background text-primary hover:border-secondary'
+                    }`}
+                  >
+                    {t('Tenant')}
+                  </button>
+                  <button
+                    onClick={() => updateFormData('residenceStatus', 'owner')}
+                    className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all ${
+                      formData.residenceStatus === 'owner'
+                        ? 'border-secondary bg-secondary text-white'
+                        : 'border-gray-300 bg-background text-primary hover:border-secondary'
+                    }`}
+                  >
+                    {t('Owner')}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Gross_Salary')} *
+                </label>
+                <div className='relative'>
+                  <input
+                    type='number'
+                    value={formData.grossSalary}
+                    onChange={e => updateFormData('grossSalary', e.target.value)}
+                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 pr-8 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    placeholder='100,000'
+                  />
+                  <span className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400'>$</span>
+                </div>
+              </div>
             </div>
 
-            {(formData.employmentStatus === 'full-time' ||
-              formData.employmentStatus === 'part-time' ||
-              formData.employmentStatus === 'self-employed') && (
-              <>
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Cost_Rent_Mortgage')} *
+                </label>
+                <div className='relative'>
+                  <input
+                    type='number'
+                    value={formData.rentOrMortgageCost}
+                    onChange={e => updateFormData('rentOrMortgageCost', e.target.value)}
+                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 pr-8 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    placeholder='1,500'
+                  />
+                  <span className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400'>$</span>
+                </div>
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Heating_Electricity_Cost')} *
+                </label>
+                <div className='relative'>
+                  <input
+                    type='number'
+                    value={formData.heatingElectricityCost}
+                    onChange={e => updateFormData('heatingElectricityCost', e.target.value)}
+                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 pr-8 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    placeholder='400'
+                  />
+                  <span className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400'>$</span>
+                </div>
+              </div>
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Car_Loan')} *
+                </label>
+                <div className='relative'>
+                  <input
+                    type='number'
+                    value={formData.carLoan}
+                    onChange={e => updateFormData('carLoan', e.target.value)}
+                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 pr-8 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    placeholder='0'
+                  />
+                  <span className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400'>$</span>
+                </div>
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Loan_Furniture_Other')} *
+                </label>
+                <div className='relative'>
+                  <input
+                    type='number'
+                    value={formData.furnitureLoan}
+                    onChange={e => updateFormData('furnitureLoan', e.target.value)}
+                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 pr-8 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    placeholder='0'
+                  />
+                  <span className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400'>$</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: References */}
+        {getCurrentStepKey() === 'references' && (
+          <div className='space-y-3 sm:space-y-4'>
+            {/* Reference 1 */}
+            <div className='rounded-lg border-2 border-secondary/20 bg-background-secondary p-4 sm:p-6'>
+              <h3 className='mb-4 text-lg font-semibold text-secondary'>1.</h3>
+              <div className='space-y-3 sm:space-y-4'>
                 <div className='grid gap-4 md:grid-cols-2'>
                   <div>
                     <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                      {t('Employer_Name')} *
+                      {t('First_Name')} *
                     </label>
                     <input
                       type='text'
-                      value={formData.employerName}
-                      onChange={e =>
-                        updateFormData('employerName', e.target.value)
-                      }
+                      value={formData.reference1FirstName}
+                      onChange={e => updateFormData('reference1FirstName', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='Company Name'
+                      placeholder='dfsdf'
                     />
                   </div>
                   <div>
                     <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                      {t('Job_Title')} *
+                      {t('Last_Name')} *
                     </label>
                     <input
                       type='text'
-                      value={formData.jobTitle}
-                      onChange={e => updateFormData('jobTitle', e.target.value)}
+                      value={formData.reference1LastName}
+                      onChange={e => updateFormData('reference1LastName', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='Position Title'
+                      placeholder='sdfsdf'
+                    />
+                  </div>
+                </div>
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Phone_No')} *
+                    </label>
+                    <input
+                      type='tel'
+                      value={formData.reference1Phone}
+                      onChange={e => updateFormData('reference1Phone', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='(324) 242-3423'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Relationship')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.reference1Relationship}
+                      onChange={e => updateFormData('reference1Relationship', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='Feds'
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Reference 2 */}
+            <div className='rounded-lg border-2 border-secondary/20 bg-background-secondary p-4 sm:p-6'>
+              <h3 className='mb-4 text-lg font-semibold text-secondary'>2.</h3>
+              <div className='space-y-3 sm:space-y-4'>
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('First_Name')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.reference2FirstName}
+                      onChange={e => updateFormData('reference2FirstName', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='fsdafr'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Last_Name')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.reference2LastName}
+                      onChange={e => updateFormData('reference2LastName', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='fafs'
+                    />
+                  </div>
+                </div>
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Phone_No')} *
+                    </label>
+                    <input
+                      type='tel'
+                      value={formData.reference2Phone}
+                      onChange={e => updateFormData('reference2Phone', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='(234) 235-3245'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Relationship')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.reference2Relationship}
+                      onChange={e => updateFormData('reference2Relationship', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='dsfsdaf'
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Your Income */}
+        {getCurrentStepKey() === 'income' && (
+          <div className='space-y-3 sm:space-y-4'>
+            {/* Income Source Selection */}
+            <div>
+              <label className='mb-3 block text-sm font-medium text-primary'>
+                {t('What_Is_Main_Income_Source')} *
+              </label>
+              <div className='grid grid-cols-2 gap-3 md:grid-cols-3'>
+                {[
+                  { value: 'employed', label: t('Employed') },
+                  { value: 'employment-insurance', label: t('Employment_Insurance') },
+                  { value: 'retirement-plan', label: t('Retirement_Plan') },
+                  { value: 'self-employed', label: t('Self_Employed') },
+                  { value: 'csst-saaq', label: t('CSST_SAAQ_Benefits') },
+                  { value: 'parental-insurance', label: t('Parental_Insurance_Plan') }
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => updateFormData('incomeSource', option.value)}
+                    className={`rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all ${
+                      formData.incomeSource === option.value
+                        ? 'border-secondary bg-secondary text-white'
+                        : 'border-gray-300 bg-background text-primary hover:border-secondary'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Employment Details (show only if employed) */}
+            {formData.incomeSource === 'employed' && (
+              <>
+                <div className='grid gap-4 md:grid-cols-3'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Occupation')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.occupation}
+                      onChange={e => updateFormData('occupation', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder={t('What_Is_Your_Position')}
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Company_Name')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.companyName}
+                      onChange={e => updateFormData('companyName', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder={t('Name_Of_Your_Employer')}
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Supervisor_Name')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.supervisorName}
+                      onChange={e => updateFormData('supervisorName', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder={t('Name_Of_Your_Supervisor')}
+                    />
+                  </div>
+                </div>
+
+                <div className='grid gap-4 md:grid-cols-3'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Phone_No')} *
+                    </label>
+                    <input
+                      type='tel'
+                      value={formData.workPhone}
+                      onChange={e => updateFormData('workPhone', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='(999) 999-9999'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Post')} *
+                    </label>
+                    <input
+                      type='text'
+                      value={formData.post}
+                      onChange={e => updateFormData('post', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder={t('Post_Number')}
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Payroll_Frequency')} *
+                    </label>
+                    <Select
+                      value={formData.payrollFrequency}
+                      onValueChange={value => updateFormData('payrollFrequency', value)}
+                      placeholder={t('Choose_The_Frequency')}
+                      options={[
+                        { value: 'weekly', label: t('Weekly') },
+                        { value: 'bi-weekly', label: t('Bi_Weekly') },
+                        { value: 'monthly', label: t('Monthly') }
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Date_Hired_Approximate')} *
+                    </label>
+                    <input
+                      type='date'
+                      value={formData.dateHired}
+                      onChange={e => updateFormData('dateHired', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Next_Pay_Date')} *
+                    </label>
+                    <input
+                      type='date'
+                      value={formData.nextPayDate}
+                      onChange={e => updateFormData('nextPayDate', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                     />
                   </div>
                 </div>
               </>
             )}
 
-            <div className='grid gap-4 md:grid-cols-2'>
+            {/* Employment Insurance */}
+            {formData.incomeSource === 'employment-insurance' && (
+              <>
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('When_Employment_Insurance_Started')} *
+                    </label>
+                    <input
+                      type='date'
+                      value={formData.employmentInsuranceStartDate}
+                      onChange={e => updateFormData('employmentInsuranceStartDate', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Next_Deposit_Date')} *
+                    </label>
+                    <input
+                      type='date'
+                      value={formData.nextDepositDate}
+                      onChange={e => updateFormData('nextDepositDate', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Self Employed */}
+            {formData.incomeSource === 'self-employed' && (
+              <>
+                <div className='grid gap-4 md:grid-cols-3'>
+                  <div>
+                    <label className='mb-3 block text-sm font-medium text-primary'>
+                      {t('Paid_By_Direct_Deposit')} *
+                    </label>
+                    <div className='flex gap-3'>
+                      <button
+                        onClick={() => updateFormData('paidByDirectDeposit', 'yes')}
+                        className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all ${
+                          formData.paidByDirectDeposit === 'yes'
+                            ? 'border-secondary bg-secondary text-white'
+                            : 'border-gray-300 bg-background text-primary hover:border-secondary'
+                        }`}
+                      >
+                        {t('Yes')}
+                      </button>
+                      <button
+                        onClick={() => updateFormData('paidByDirectDeposit', 'no')}
+                        className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all ${
+                          formData.paidByDirectDeposit === 'no'
+                            ? 'border-secondary bg-secondary text-white'
+                            : 'border-gray-300 bg-background text-primary hover:border-secondary'
+                        }`}
+                      >
+                        {t('No')}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Phone_No')} *
+                    </label>
+                    <input
+                      type='tel'
+                      value={formData.selfEmployedPhone}
+                      onChange={e => updateFormData('selfEmployedPhone', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                      placeholder='(999) 999-9999'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Deposits_Frequency')} *
+                    </label>
+                    <Select
+                      value={formData.depositsFrequency}
+                      onValueChange={value => updateFormData('depositsFrequency', value)}
+                      placeholder={t('Choose_The_Frequency')}
+                      options={[
+                        { value: 'weekly', label: t('Weekly') },
+                        { value: 'bi-weekly', label: t('Bi_Weekly') },
+                        { value: 'monthly', label: t('Monthly') }
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Next_Deposit_Date')} *
+                    </label>
+                    <input
+                      type='date'
+                      value={formData.nextDepositDate}
+                      onChange={e => updateFormData('nextDepositDate', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                      {t('Start_Date_Self_Employed')} *
+                    </label>
+                    <input
+                      type='date'
+                      value={formData.selfEmployedStartDate}
+                      onChange={e => updateFormData('selfEmployedStartDate', e.target.value)}
+                      className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Retirement Plan, CSST/SAAQ, Parental Insurance - all just need Next Deposit Date */}
+            {(formData.incomeSource === 'retirement-plan' || 
+              formData.incomeSource === 'csst-saaq' || 
+              formData.incomeSource === 'parental-insurance') && (
               <div>
                 <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Housing_Status')} *
-                </label>
-                <Select
-                  value={formData.housingStatus}
-                  onValueChange={value =>
-                    updateFormData('housingStatus', value)
-                  }
-                  placeholder={t('Select_Housing')}
-                  options={[
-                    { value: 'own', label: t('Own') },
-                    { value: 'rent', label: t('Rent') },
-                    { value: 'family', label: t('Living_With_Family') },
-                    { value: 'other', label: t('Other_Housing') }
-                  ]}
-                />
-              </div>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Monthly_Housing_Cost')} *
+                  {t('Next_Deposit_Date')} *
                 </label>
                 <input
-                  type='number'
-                  value={formData.monthlyHousingCost}
-                  onChange={e =>
-                    updateFormData('monthlyHousingCost', e.target.value)
-                  }
+                  type='date'
+                  value={formData.nextDepositDate}
+                  onChange={e => updateFormData('nextDepositDate', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='1200'
                 />
               </div>
-            </div>
+            )}
           </div>
         )}
 
-        {/* Step 4: Your Income */}
-        {currentStep === 4 && (
+        {/* Step 6: Confirmation & Submission */}
+        {getCurrentStepKey() === 'confirmation' && (
           <div className='space-y-3 sm:space-y-4'>
-            <div className='grid gap-4 md:grid-cols-2'>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Monthly_Income')} *
-                </label>
-                <input
-                  type='number'
-                  value={formData.monthlyIncome}
-                  onChange={e =>
-                    updateFormData('monthlyIncome', e.target.value)
-                  }
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='3000'
-                />
-              </div>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Additional_Income')}
-                </label>
-                <input
-                  type='number'
-                  value={formData.additionalIncome}
-                  onChange={e =>
-                    updateFormData('additionalIncome', e.target.value)
-                  }
-                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='500'
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className='mb-2 block text-sm font-medium text-primary'>
-                {t('Loan_Amount')} *
-              </label>
-              <input
-                type='number'
-                value={formData.loanAmount}
-                onChange={e => updateFormData('loanAmount', e.target.value)}
-                className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-lg text-primary focus:border-primary focus:outline-none focus:ring-2'
-                placeholder='500'
-                min='100'
-                max='1500'
-              />
-              <p className='mt-2 text-sm text-text-secondary'>
-                {t('Amount_Between')}
+            <div className='mb-6 text-center'>
+              <h2 className='mb-2 text-3xl font-bold text-primary'>
+                {t('Were_Almost_There')}
+              </h2>
+              <p className='text-text-secondary'>
+                {t('Choose_Type_Loan_Send_Request')}
               </p>
             </div>
 
-            <div>
-              <label className='mb-2 block text-sm font-medium text-primary'>
-                {t('Loan_Purpose')} *
-              </label>
-              <Select
-                value={formData.loanPurpose}
-                onValueChange={value => updateFormData('loanPurpose', value)}
-                placeholder={t('Select_Purpose')}
-                options={[
-                  { value: 'emergency', label: t('Emergency_Expenses') },
-                  { value: 'debt', label: t('Debt_Consolidation') },
-                  { value: 'home', label: t('Home_Improvement') },
-                  { value: 'medical', label: t('Medical_Expenses') },
-                  { value: 'education', label: t('Education') },
-                  { value: 'vehicle', label: t('Vehicle_Purchase') },
-                  { value: 'other', label: t('Other_Purpose') }
-                ]}
-              />
-            </div>
-
             <div className='grid gap-4 md:grid-cols-2'>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Repayment_Period')} *
-                </label>
-                <Select
-                  value={formData.repaymentPeriod}
-                  onValueChange={value =>
-                    updateFormData('repaymentPeriod', value)
-                  }
-                  placeholder={t('Select_Period')}
-                  options={[
-                    { value: '1', label: t('1_Month') },
-                    { value: '2', label: t('2_Months') },
-                    { value: '3', label: t('3_Months') },
-                    { value: '4', label: t('4_Months') },
-                    { value: '5', label: t('5_Months') },
-                    { value: '6', label: t('6_Months') }
-                  ]}
-                />
-              </div>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Preferred_Payment_Frequency')} *
-                </label>
-                <Select
-                  value={formData.paymentFrequency}
-                  onValueChange={value =>
-                    updateFormData('paymentFrequency', value)
-                  }
-                  placeholder={t('Select_Frequency')}
-                  options={[
-                    { value: 'weekly', label: t('Weekly_Payment') },
-                    { value: 'bi-weekly', label: t('Bi_Weekly_Payment') },
-                    { value: 'monthly', label: t('Monthly_Payment') }
-                  ]}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+              {/* Loan without documents */}
+              <button
+                type='button'
+                onClick={() => updateFormData('loanType', 'without-documents')}
+                className={`rounded-lg border-2 p-6 text-left transition-all hover:shadow-lg ${
+                  formData.loanType === 'without-documents'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-gray-300 bg-background'
+                }`}
+              >
+                <h3 className='mb-4 text-xl font-semibold text-primary'>
+                  {t('Loan_Without_Documents')}
+                </h3>
+                <div className='space-y-2 text-sm text-text-secondary'>
+                  <p>
+                    <strong>{t('IBV_Technology')}</strong>
+                    {t('IBV_Description')}
+                  </p>
+                  <ul className='ml-4 list-disc space-y-1'>
+                    <li className='font-semibold text-primary'>{t('Fast_Approval')}</li>
+                    <li className='font-semibold text-primary'>{t('Much_Simpler')}</li>
+                    <li className='font-semibold text-primary'>{t('Hundred_Percent_Safe')}</li>
+                    <li className='text-green-600'>{t('No_Paper_Document_Required')}</li>
+                  </ul>
+                  <p className='mt-4 italic'>
+                    {t('IBV_Redirect_Notice')}
+                  </p>
+                </div>
+              </button>
 
-        {/* Step 5: Review & Submit */}
-        {currentStep === 5 && (
-          <div className='space-y-3 sm:space-y-4'>
-            <div className='rounded-lg bg-background p-6'>
-              <h3 className='mb-4 text-xl font-semibold text-primary'>
-                {t('Personal_Details')}
-              </h3>
-              <div className='grid gap-4 text-sm md:grid-cols-2'>
-                <div>
-                  <span className='text-text-secondary'>Name:</span>
-                  <p className='font-medium text-primary'>
-                    {formData.firstName} {formData.lastName}
+              {/* Loan with documents */}
+              <button
+                type='button'
+                onClick={() => updateFormData('loanType', 'with-documents')}
+                className={`rounded-lg border-2 p-6 text-left transition-all hover:shadow-lg ${
+                  formData.loanType === 'with-documents'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-gray-300 bg-background'
+                }`}
+              >
+                <h3 className='mb-4 text-xl font-semibold text-primary'>
+                  {t('Loan_With_Documents')}
+                </h3>
+                <div className='space-y-2 text-sm text-text-secondary'>
+                  <p>
+                    {t('Email_Documents_Description')}
+                  </p>
+                  <ul className='ml-4 list-disc space-y-1'>
+                    <li className='font-semibold text-primary'>{t('Bank_Statement')}</li>
+                    <li className='font-semibold text-primary'>{t('Last_Pay_Stub')}</li>
+                    <li className='font-semibold text-primary'>{t('Specimen_Check')}</li>
+                    <li className='font-semibold text-primary'>{t('Proof_Of_Identity')}</li>
+                  </ul>
+                  <p className='mt-4 text-xs font-semibold text-red-600'>
+                    {t('Fraud_Warning')}
                   </p>
                 </div>
-                <div>
-                  <span className='text-text-secondary'>Email:</span>
-                  <p className='font-medium text-primary'>{formData.email}</p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>Phone:</span>
-                  <p className='font-medium text-primary'>{formData.phone}</p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>Address:</span>
-                  <p className='font-medium text-primary'>
-                    {formData.streetNumber} {formData.streetName} {formData.apartmentNumber && `Apt ${formData.apartmentNumber}`}, {formData.city},{' '}
-                    {formData.province} {formData.postalCode}
-                  </p>
-                </div>
-              </div>
+              </button>
             </div>
 
-            <div className='rounded-lg bg-background p-6'>
-              <h3 className='mb-4 text-xl font-semibold text-primary'>
-                {t('Financial_Details')}
-              </h3>
-              <div className='grid gap-4 text-sm md:grid-cols-2'>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Employment_Status')}:
-                  </span>
-                  <p className='font-medium capitalize text-primary'>
-                    {formData.employmentStatus}
-                  </p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Monthly_Income')}:
-                  </span>
-                  <p className='font-medium text-primary'>
-                    ${formData.monthlyIncome}
-                  </p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Housing_Status')}:
-                  </span>
-                  <p className='font-medium capitalize text-primary'>
-                    {formData.housingStatus}
-                  </p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Monthly_Housing_Cost')}:
-                  </span>
-                  <p className='font-medium text-primary'>
-                    ${formData.monthlyHousingCost}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className='rounded-lg bg-background p-6'>
-              <h3 className='mb-4 text-xl font-semibold text-primary'>
-                {t('Loan_Information')}
-              </h3>
-              <div className='grid gap-4 text-sm md:grid-cols-2'>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Loan_Amount')}:
-                  </span>
-                  <p className='text-2xl font-bold text-primary'>
-                    ${formData.loanAmount}
-                  </p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Repayment_Period')}:
-                  </span>
-                  <p className='font-medium text-primary'>
-                    {formData.repaymentPeriod} {t('Of')} 6 {t('Of')}
-                  </p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Loan_Purpose')}:
-                  </span>
-                  <p className='font-medium capitalize text-primary'>
-                    {formData.loanPurpose}
-                  </p>
-                </div>
-                <div>
-                  <span className='text-text-secondary'>
-                    {t('Preferred_Payment_Frequency')}:
-                  </span>
-                  <p className='font-medium capitalize text-primary'>
-                    {formData.paymentFrequency}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className='border-primary/20 space-y-4 rounded-lg border-2 bg-background p-6'>
+            {/* Confirmation Checkbox */}
+            <div className='mt-6'>
               <label className='flex items-start'>
                 <input
                   type='checkbox'
-                  checked={formData.agreeTerms}
-                  onChange={e => updateFormData('agreeTerms', e.target.checked)}
+                  checked={formData.confirmInformation}
+                  onChange={e => updateFormData('confirmInformation', e.target.checked)}
                   className='mt-1 h-5 w-5 rounded border-gray-300 text-primary focus:ring-2 focus:ring-primary'
                 />
                 <span className='ml-3 text-sm text-text-secondary'>
-                  {t('Terms_And_Conditions')} *
-                </span>
-              </label>
-
-              <label className='flex items-start'>
-                <input
-                  type='checkbox'
-                  checked={formData.agreePrivacy}
-                  onChange={e =>
-                    updateFormData('agreePrivacy', e.target.checked)
-                  }
-                  className='mt-1 h-5 w-5 rounded border-gray-300 text-primary focus:ring-2 focus:ring-primary'
-                />
-                <span className='ml-3 text-sm text-text-secondary'>
-                  {t('Privacy_Policy')} *
-                </span>
-              </label>
-
-              <label className='flex items-start'>
-                <input
-                  type='checkbox'
-                  checked={formData.consentCredit}
-                  onChange={e =>
-                    updateFormData('consentCredit', e.target.checked)
-                  }
-                  className='mt-1 h-5 w-5 rounded border-gray-300 text-primary focus:ring-2 focus:ring-primary'
-                />
-                <span className='ml-3 text-sm text-text-secondary'>
-                  {t('Consent_Credit_Check')}
+                  {t('Confirm_Information_Accurate')} *
                 </span>
               </label>
             </div>
@@ -1167,9 +1511,9 @@ export default function LoanApplicationForm() {
             <Button
               onClick={handleSubmit}
               size='large'
-              disabled={!formData.agreeTerms || !formData.agreePrivacy}
+              disabled={!formData.loanType || !formData.confirmInformation}
             >
-              {t('Submit_Application')} →
+              {t('Confirm')} →
             </Button>
           )}
         </div>
