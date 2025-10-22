@@ -171,3 +171,8 @@
     @apply bg-background text-primary;
   }
 }
+
+/* Fix z-index for Radix Select portal to appear above modals */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
