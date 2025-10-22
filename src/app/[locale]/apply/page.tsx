@@ -80,7 +80,7 @@ export default function ApplyPage() {
       </section>
 
       {/* Application Form Section - Full Width */}
-      <section className='py-6 sm:py-8 md:py-12'>
+      <section className='py-3 sm:py-4 md:py-6'>
         <div className='mx-auto max-w-7xl px-4 sm:px-6'>
           <LoanApplicationForm />
         </div>
