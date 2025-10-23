@@ -20,7 +20,7 @@ CREATE TYPE public.income_source_type AS ENUM (
   'self-employed', 
   'csst-saaq', 
   'parental-insurance', 
-  'retirement'
+  'retirement-plan'
 );
 
 -- 2️⃣ Create public.users table (clients)

@@ -24,15 +24,17 @@ export default function ClientsPage() {
       const response = await fetch('/api/clients')
       
       if (!response.ok) {
-        throw new Error('Failed to fetch clients')
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch clients')
       }
       
-      const clientData = await response.json()
-      setClients(clientData)
+      const data = await response.json()
+      // API now returns { users: [...], pagination: {...} }
+      setClients(data.users || [])
       setError(null)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching clients:', err)
-      setError('Failed to load clients')
+      setError(err.message || 'Failed to load clients')
     } finally {
       setLoading(false)
     }

@@ -1,26 +1,39 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { createServerSupabaseClient } from '@/src/lib/supabase/server'
+import { 
+  getAllUsersWithPagination,
+  createClientUser,
+  isAdmin
+} from '@/src/lib/supabase'
 
-export async function GET() {
+/**
+ * GET /api/clients
+ * Get all client users
+ * Permissions: All staff can view (Admin, Support, Intern)
+ */
+export async function GET(request: Request) {
   try {
-    const supabase = await createServerSupabaseClient()
+    // Parse query parameters for pagination
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const limit = parseInt(searchParams.get('limit') || '50', 10)
     
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false })
+    // Use RLS-aware client (respects permissions)
+    const result = await getAllUsersWithPagination(page, limit, true)
     
-    if (error) {
-      console.error('Error fetching clients:', error)
+    if (!result.success) {
       return NextResponse.json(
-        { error: 'Failed to fetch clients' },
-        { status: 500 }
+        { error: result.error },
+        { status: 400 }
       )
     }
     
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error('Unexpected error:', error)
+    return NextResponse.json({
+      users: result.users,
+      pagination: result.pagination
+    })
+  } catch (error: any) {
+    console.error('Error fetching clients:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -28,16 +41,35 @@ export async function GET() {
   }
 }
 
+/**
+ * POST /api/clients
+ * Create a new client user
+ * Permissions: Admin only
+ * Uses proper permission checks before accessing service role
+ */
 export async function POST(request: Request) {
   try {
-    // Use admin client for creating users (requires service role key)
-    const adminClient = createServerSupabaseAdminClient()
-    const body = await request.json()
+    // Verify the current user is authenticated and is an admin
+    const supabase = await createServerSupabaseClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
     
-    console.log('📝 Received request body:', { 
-      email: body.email,
-      nationalId: body.nationalId
-    })
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Please sign in' },
+        { status: 401 }
+      )
+    }
+    
+    // Check if user is admin using RLS-aware check
+    const userIsAdmin = await isAdmin(true)
+    if (!userIsAdmin) {
+      return NextResponse.json(
+        { error: 'Forbidden: Admin access required to create users' },
+        { status: 403 }
+      )
+    }
+    
+    const body = await request.json()
     
     // Validate required fields
     if (!body.email || !body.password) {
@@ -50,93 +82,35 @@ export async function POST(request: Request) {
       )
     }
     
-    // Create auth user with metadata
-    // The trigger will automatically create the users record
-    console.log('🔐 Creating auth user for client...')
-    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+    // Use the permission-aware helper function
+    const result = await createClientUser({
       email: body.email,
       password: body.password,
-      email_confirm: true, // Auto-confirm email
-      user_metadata: {
-        signup_type: 'client', // This tells trigger to create in users table
-        national_id: body.nationalId || null
-      }
-    })
+      firstName: body.firstName,
+      lastName: body.lastName,
+      phone: body.phone,
+      nationalId: body.nationalId,
+      preferredLanguage: body.preferredLanguage || 'en',
+      autoConfirmEmail: true
+    }, true)
     
-    if (authError) {
-      console.error('❌ Error creating auth user:', {
-        message: authError.message,
-        status: authError.status,
-        name: authError.name,
-        code: (authError as any).code,
-        details: (authError as any).details
-      })
-      
+    if (!result.success) {
       return NextResponse.json(
-        { 
-          error: authError.message || 'Failed to create client',
-          errorCode: (authError as any).code,
-          errorStatus: authError.status,
-          errorDetails: (authError as any).details,
-          fullError: JSON.stringify(authError, null, 2)
-        },
-        { status: authError.status || 500 }
+        { error: result.error },
+        { status: 400 }
       )
     }
     
-    console.log('✅ Auth user created:', authData.user.id)
-    
-    // Wait a moment for trigger to complete
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    // Fetch the complete client record created by the trigger
-    console.log('📊 Fetching client record...')
-    const { data: clientData, error: fetchError } = await adminClient
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single()
-    
-    if (fetchError) {
-      console.error('⚠️ Error fetching created client:', {
-        message: fetchError.message,
-        code: fetchError.code,
-        details: fetchError.details,
-        hint: fetchError.hint
-      })
-      
-      // Still return success with basic data
-      return NextResponse.json({
-        id: authData.user.id,
-        email: authData.user.email,
-        kyc_status: 'pending',
-        national_id: body.nationalId || null,
-        warning: 'Client record not found in database - check trigger',
-        fetchError: {
-          message: fetchError.message,
-          code: fetchError.code,
-          details: fetchError.details
-        }
-      }, { status: 201 })
-    }
-    
-    console.log('✅ Client created successfully:', clientData)
-    return NextResponse.json(clientData, { status: 201 })
+    return NextResponse.json({
+      success: true,
+      user: result.user,
+      message: 'Client user created successfully'
+    }, { status: 201 })
     
   } catch (error: any) {
-    console.error('💥 Unexpected error:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    })
-    
+    console.error('[POST /api/clients] Error:', error.message)
     return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        message: error.message,
-        details: error.toString(),
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

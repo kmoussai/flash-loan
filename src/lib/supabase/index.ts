@@ -68,3 +68,22 @@ export {
   deleteReference
 } from './loan-helpers'
 
+// Export admin helpers (server-side only)
+export {
+  isAdmin,
+  isStaff,
+  getStaffRole,
+  createClientUser,
+  createStaffMember,
+  updateStaffMemberRole,
+  deleteStaffMember,
+  promoteUserToStaff,
+  getAllUsersWithPagination,
+  getAllStaffMembers
+} from './admin-helpers'
+
+export type {
+  CreateUserParams,
+  CreateStaffParams
+} from './admin-helpers'
+

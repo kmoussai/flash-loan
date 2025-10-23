@@ -15,7 +15,45 @@ export type IncomeSourceType =
   | 'self-employed' 
   | 'csst-saaq' 
   | 'parental-insurance' 
-  | 'retirement'
+  | 'retirement-plan'
+
+// ===========================
+// INCOME FIELDS TYPES (JSONB)
+// ===========================
+
+export interface EmployedIncomeFields {
+  occupation: string
+  company_name: string
+  supervisor_name: string
+  work_phone: string
+  post: string
+  payroll_frequency: 'weekly' | 'bi-weekly' | 'monthly'
+  date_hired: string
+  next_pay_date: string
+}
+
+export interface EmploymentInsuranceIncomeFields {
+  employment_insurance_start_date: string
+  next_deposit_date: string
+}
+
+export interface SelfEmployedIncomeFields {
+  paid_by_direct_deposit: 'yes' | 'no'
+  self_employed_phone: string
+  deposits_frequency: 'weekly' | 'bi-weekly' | 'monthly'
+  self_employed_start_date: string
+  next_deposit_date: string
+}
+
+export interface OtherIncomeFields {
+  next_deposit_date: string
+}
+
+export type IncomeFields = 
+  | EmployedIncomeFields 
+  | EmploymentInsuranceIncomeFields 
+  | SelfEmployedIncomeFields 
+  | OtherIncomeFields
 
 // ===========================
 // TABLE TYPES
@@ -77,8 +115,14 @@ export interface LoanApplication {
   income_fields: Record<string, any>
   application_status: ApplicationStatus
   assigned_to: string | null
+  bankruptcy_plan: boolean | null
+  staff_notes: string | null
+  rejection_reason: string | null
   created_at: string
   updated_at: string
+  submitted_at: string | null
+  approved_at: string | null
+  rejected_at: string | null
 }
 
 export interface Reference {
@@ -140,6 +184,7 @@ export interface LoanApplicationInsert {
   income_source: IncomeSourceType
   income_fields?: Record<string, any>
   application_status?: ApplicationStatus
+  bankruptcy_plan?: boolean
 }
 
 export interface ReferenceInsert {
@@ -198,6 +243,12 @@ export interface LoanApplicationUpdate {
   income_fields?: Record<string, any>
   application_status?: ApplicationStatus
   assigned_to?: string
+  bankruptcy_plan?: boolean
+  staff_notes?: string
+  rejection_reason?: string
+  submitted_at?: string
+  approved_at?: string
+  rejected_at?: string
 }
 
 export interface ReferenceUpdate {
