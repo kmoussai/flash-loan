@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 
+// Force dynamic rendering - this API route needs database access
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/admin/applications
  * Fetch all loan applications with client details
@@ -64,19 +67,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const apps = applications || []
+
     // Get counts by status
     const statusCounts = {
-      pending: applications?.filter(app => app.application_status === 'pending').length || 0,
-      processing: applications?.filter(app => app.application_status === 'processing').length || 0,
-      approved: applications?.filter(app => app.application_status === 'approved').length || 0,
-      rejected: applications?.filter(app => app.application_status === 'rejected').length || 0,
-      cancelled: applications?.filter(app => app.application_status === 'cancelled').length || 0
+      pending: apps.filter((app: any) => app.application_status === 'pending').length,
+      processing: apps.filter((app: any) => app.application_status === 'processing').length,
+      approved: apps.filter((app: any) => app.application_status === 'approved').length,
+      rejected: apps.filter((app: any) => app.application_status === 'rejected').length,
+      cancelled: apps.filter((app: any) => app.application_status === 'cancelled').length
     }
 
     return NextResponse.json({
-      applications: applications || [],
+      applications: apps,
       statusCounts,
-      total: applications?.length || 0
+      total: apps.length
     })
   } catch (error: any) {
     console.error('Error in applications API:', error)

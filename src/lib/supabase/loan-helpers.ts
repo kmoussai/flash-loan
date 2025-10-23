@@ -10,11 +10,9 @@ import type {
   Reference,
   ReferenceInsert,
   ReferenceUpdate,
-  Database,
   ApplicationStatus 
 } from './types'
 import { createClient } from './client'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 // ===========================
 // ADDRESS OPERATIONS
@@ -24,13 +22,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * Create a new address for a client
  */
 export async function createAddress(addressData: AddressInsert, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('addresses')
@@ -50,13 +44,9 @@ export async function createAddress(addressData: AddressInsert, isServer = false
  * Get all addresses for a client
  */
 export async function getClientAddresses(clientId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('addresses')
@@ -76,13 +66,9 @@ export async function getClientAddresses(clientId: string, isServer = false) {
  * Get current address for a client
  */
 export async function getCurrentAddress(clientId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('addresses')
@@ -103,13 +89,9 @@ export async function getCurrentAddress(clientId: string, isServer = false) {
  * Update an address
  */
 export async function updateAddress(addressId: string, updates: AddressUpdate, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('addresses')
@@ -130,13 +112,9 @@ export async function updateAddress(addressId: string, updates: AddressUpdate, i
  * Set an address as current (and mark others as not current)
  */
 export async function setCurrentAddress(clientId: string, addressId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   // First, mark all addresses as not current
   await supabase
@@ -174,13 +152,9 @@ export async function setCurrentAddress(clientId: string, addressId: string, isS
  * Create a new loan application
  */
 export async function createLoanApplication(applicationData: LoanApplicationInsert, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('loan_applications')
@@ -200,13 +174,9 @@ export async function createLoanApplication(applicationData: LoanApplicationInse
  * Get all loan applications for a client
  */
 export async function getClientLoanApplications(clientId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('loan_applications')
@@ -226,13 +196,9 @@ export async function getClientLoanApplications(clientId: string, isServer = fal
  * Get a single loan application by ID
  */
 export async function getLoanApplication(applicationId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('loan_applications')
@@ -252,13 +218,9 @@ export async function getLoanApplication(applicationId: string, isServer = false
  * Get loan application with references and address
  */
 export async function getLoanApplicationWithDetails(applicationId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('loan_applications')
@@ -286,13 +248,9 @@ export async function updateLoanApplication(
   updates: LoanApplicationUpdate, 
   isServer = false
 ) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('loan_applications')
@@ -324,13 +282,9 @@ export async function updateApplicationStatus(
  * Get all loan applications (admin/staff only)
  */
 export async function getAllLoanApplications(isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('loan_applications')
@@ -364,13 +318,9 @@ export async function assignApplicationToStaff(
  * Create a new reference for a loan application
  */
 export async function createReference(referenceData: ReferenceInsert, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('references')
@@ -390,13 +340,9 @@ export async function createReference(referenceData: ReferenceInsert, isServer =
  * Create multiple references at once
  */
 export async function createReferences(referencesData: ReferenceInsert[], isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('references')
@@ -415,13 +361,9 @@ export async function createReferences(referencesData: ReferenceInsert[], isServ
  * Get all references for a loan application
  */
 export async function getApplicationReferences(applicationId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('references')
@@ -445,13 +387,9 @@ export async function updateReference(
   updates: ReferenceUpdate, 
   isServer = false
 ) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { data, error } = await supabase
     .from('references')
@@ -472,13 +410,9 @@ export async function updateReference(
  * Delete a reference
  */
 export async function deleteReference(referenceId: string, isServer = false) {
-  let supabase: SupabaseClient<Database>
-  if (isServer) {
-    const { createServerSupabaseClient } = await import('./server')
-    supabase = await createServerSupabaseClient()
-  } else {
-    supabase = createClient()
-  }
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
   
   const { error } = await supabase
     .from('references')
