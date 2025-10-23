@@ -5,8 +5,33 @@
 
 export { createClient } from './client'
 
-export type { Database, User, Staff, UserInsert, StaffInsert, UserUpdate, StaffUpdate, StaffRole, KycStatus } from './types'
+// Export all types
+export type { 
+  Database, 
+  User, 
+  Staff, 
+  Address,
+  LoanApplication,
+  Reference,
+  UserInsert, 
+  StaffInsert, 
+  AddressInsert,
+  LoanApplicationInsert,
+  ReferenceInsert,
+  UserUpdate, 
+  StaffUpdate,
+  AddressUpdate,
+  LoanApplicationUpdate,
+  ReferenceUpdate,
+  StaffRole, 
+  KycStatus,
+  AddressType,
+  LoanType,
+  ApplicationStatus,
+  IncomeSourceType
+} from './types'
 
+// Export user and staff helpers
 export {
   getUserProfile,
   updateUserProfile,
@@ -20,4 +45,45 @@ export {
   isStaffMember,
   getUserType
 } from './db-helpers'
+
+// Export loan application helpers
+export {
+  createAddress,
+  getClientAddresses,
+  getCurrentAddress,
+  updateAddress,
+  setCurrentAddress,
+  createLoanApplication,
+  getClientLoanApplications,
+  getLoanApplication,
+  getLoanApplicationWithDetails,
+  updateLoanApplication,
+  updateApplicationStatus,
+  getAllLoanApplications,
+  assignApplicationToStaff,
+  createReference,
+  createReferences,
+  getApplicationReferences,
+  updateReference,
+  deleteReference
+} from './loan-helpers'
+
+// Export admin helpers (server-side only)
+export {
+  isAdmin,
+  isStaff,
+  getStaffRole,
+  createClientUser,
+  createStaffMember,
+  updateStaffMemberRole,
+  deleteStaffMember,
+  promoteUserToStaff,
+  getAllUsersWithPagination,
+  getAllStaffMembers
+} from './admin-helpers'
+
+export type {
+  CreateUserParams,
+  CreateStaffParams
+} from './admin-helpers'
 
