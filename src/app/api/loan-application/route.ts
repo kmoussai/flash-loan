@@ -93,23 +93,23 @@ function validateRequiredFields(body: LoanApplicationRequestBody): string | null
     'phone',
     'dateOfBirth',
     'preferredLanguage',
-    'streetNumber',
-    'streetName',
-    'city',
-    'province',
-    'postalCode',
-    'movingDate',
-    'loanAmount',
-    'loanType',
-    'incomeSource',
-    'reference1FirstName',
-    'reference1LastName',
-    'reference1Phone',
-    'reference1Relationship',
-    'reference2FirstName',
-    'reference2LastName',
-    'reference2Phone',
-    'reference2Relationship'
+    // 'streetNumber',
+    // 'streetName',
+    // 'city',
+    // 'province',
+    // 'postalCode',
+    // 'movingDate',
+    // 'loanAmount',
+    // 'loanType',
+    // 'incomeSource',
+    // 'reference1FirstName',
+    // 'reference1LastName',
+    // 'reference1Phone',
+    // 'reference1Relationship',
+    // 'reference2FirstName',
+    // 'reference2LastName',
+    // 'reference2Phone',
+    // 'reference2Relationship'
   ]
   
   for (const field of required) {
@@ -120,13 +120,13 @@ function validateRequiredFields(body: LoanApplicationRequestBody): string | null
   
   // Validate Quebec-specific fields
   if (body.province === 'Quebec') {
-    const quebecRequired = [
-      'residenceStatus',
-      'grossSalary',
-      'rentOrMortgageCost',
-      'heatingElectricityCost',
-      'carLoan',
-      'furnitureLoan'
+    const quebecRequired:string[] = [
+      // 'residenceStatus',
+      // 'grossSalary',
+      // 'rentOrMortgageCost',
+      // 'heatingElectricityCost',
+      // 'carLoan',
+      // 'furnitureLoan'
     ]
     
     for (const field of quebecRequired) {
@@ -138,7 +138,8 @@ function validateRequiredFields(body: LoanApplicationRequestBody): string | null
   
   // Validate income source specific fields
   if (body.incomeSource === 'employed') {
-    const employedRequired = ['occupation', 'companyName', 'supervisorName', 'workPhone', 'post', 'payrollFrequency', 'dateHired', 'nextPayDate']
+    const employedRequired:string[] = []
+    // ['occupation', 'companyName', 'supervisorName', 'workPhone', 'post', 'payrollFrequency', 'dateHired', 'nextPayDate']
     for (const field of employedRequired) {
       if (!body[field as keyof LoanApplicationRequestBody]) {
         return `Missing required field for employed income: ${field}`
@@ -149,7 +150,8 @@ function validateRequiredFields(body: LoanApplicationRequestBody): string | null
       return 'Missing required fields for employment insurance'
     }
   } else if (body.incomeSource === 'self-employed') {
-    const selfEmployedRequired = ['paidByDirectDeposit', 'selfEmployedPhone', 'depositsFrequency', 'selfEmployedStartDate', 'nextDepositDate']
+    const selfEmployedRequired:string[] = []
+    //  ['paidByDirectDeposit', 'selfEmployedPhone', 'depositsFrequency', 'selfEmployedStartDate', 'nextDepositDate']
     for (const field of selfEmployedRequired) {
       if (!body[field as keyof LoanApplicationRequestBody]) {
         return `Missing required field for self-employed income: ${field}`

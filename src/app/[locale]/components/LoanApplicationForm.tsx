@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
+import { Link } from '@/src/navigation'
 import Button from './Button'
 import Select from './Select'
 
@@ -851,15 +852,63 @@ export default function LoanApplicationForm() {
             </div>
           </div>
 
-          {/* Get Started Button */}
-          <div className='flex justify-center'>
-            <Button
-              size='large'
-              onClick={() => setShowPreQualification(false)}
-              className='px-8 py-4 text-lg font-semibold bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] text-white shadow-xl shadow-[#097fa5]/30 hover:shadow-2xl hover:scale-105 transition-all duration-300 w-full sm:w-auto'
-            >
-              {t('Get_Started')}
-            </Button>
+          {/* Application Options */}
+          <div className='space-y-4'>
+            <div className='text-center mb-6'>
+              <h3 className='text-xl font-semibold text-[#333366] mb-2'>
+                {t('Choose_Application_Type')}
+              </h3>
+              <p className='text-gray-600'>
+                {t('Select_Best_Option')}
+              </p>
+            </div>
+            
+            <div className='grid gap-4 md:grid-cols-2'>
+              {/* Quick Apply Option */}
+              <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
+                <div className='mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg'>
+                  <svg className='h-6 w-6 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 10V3L4 14h7v7l9-11h-7z' />
+                  </svg>
+                </div>
+                <h4 className='mb-2 text-lg font-semibold text-green-800'>
+                  {t('Quick_Apply')}
+                </h4>
+                <p className='mb-4 text-sm text-green-700'>
+                  {t('Quick_Apply_Description')}
+                </p>
+                <Link href='/apply1'>
+                  <Button
+                    size='medium'
+                    className='w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30 hover:shadow-xl hover:scale-105 transition-all duration-300'
+                  >
+                    {t('Start_Quick_Apply')}
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Full Application Option */}
+              <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
+                <div className='mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 shadow-lg'>
+                  <svg className='h-6 w-6 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                  </svg>
+                </div>
+                <h4 className='mb-2 text-lg font-semibold text-blue-800'>
+                  {t('Full_Application')}
+                </h4>
+                <p className='mb-4 text-sm text-blue-700'>
+                  {t('Full_Application_Description')}
+                </p>
+                <Button
+                  size='medium'
+                  onClick={() => setShowPreQualification(false)}
+                  className='w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-300'
+                >
+                  {t('Start_Full_Application')}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -132,6 +132,21 @@ export default function ClientsPage() {
           </div>
           <div className='flex items-center gap-3'>
             <button
+              onClick={fetchClients}
+              disabled={loading}
+              className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
+            >
+              <svg 
+                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} 
+                fill='none' 
+                viewBox='0 0 24 24' 
+                stroke='currentColor'
+              >
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+              </svg>
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button
               onClick={() => setShowAddForm(true)}
               className='rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:shadow-md'
             >
