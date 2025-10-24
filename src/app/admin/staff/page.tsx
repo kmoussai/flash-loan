@@ -5,12 +5,23 @@ import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
 import type { Staff } from '@/src/lib/supabase/types'
 
+// Extended type for staff with user details
+interface StaffWithDetails extends Staff {
+  users: {
+    first_name: string | null
+    last_name: string | null
+    email: string | null
+  } | null
+}
+
 export default function StaffPage() {
-  const [staff, setStaff] = useState<Staff[]>([])
+  const [staff, setStaff] = useState<StaffWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     role: 'intern' as 'admin' | 'support' | 'intern'
@@ -81,6 +92,8 @@ export default function StaffPage() {
 
       // Reset form and close modal
       setFormData({
+        firstName: '',
+        lastName: '',
         email: '',
         password: '',
         role: 'intern'
@@ -122,26 +135,26 @@ export default function StaffPage() {
     <AdminDashboardLayout>
       <div className='space-y-4'>
         {/* Header */}
-        <div className='rounded-lg bg-white p-4 shadow-sm'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h1 className='mb-1 text-2xl font-bold text-gray-900'>
-                Staff Members
-              </h1>
-              <p className='text-sm text-gray-600'>
-                Manage internal team members and their roles
-              </p>
-            </div>
-            <div className='flex items-center space-x-4'>
-              <button
-                onClick={() => setShowAddForm(true)}
-                className='rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700'
-              >
-                + Add Staff
-              </button>
-              <div className='flex items-center space-x-2'>
-                <span className='text-2xl'>👨‍💼</span>
-                <span className='text-3xl font-bold text-gray-900'>
+        <div className='flex items-center justify-between'>
+          <div>
+            <h1 className='text-2xl font-bold text-gray-900'>
+              Staff Members
+            </h1>
+            <p className='text-xs text-gray-600'>
+              Manage internal team members and their roles
+            </p>
+          </div>
+          <div className='flex items-center gap-3'>
+            <button
+              onClick={() => setShowAddForm(true)}
+              className='rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:shadow-md'
+            >
+              + Add Staff
+            </button>
+            <div className='rounded-lg bg-white px-4 py-2 shadow-sm'>
+              <div className='flex items-center gap-2'>
+                <span className='text-xl'>👨‍💼</span>
+                <span className='text-2xl font-bold text-gray-900'>
                   {staff.length}
                 </span>
               </div>
@@ -175,6 +188,40 @@ export default function StaffPage() {
               )}
 
               <form onSubmit={handleAddStaff} className='space-y-4'>
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1 block text-sm font-medium text-gray-700'>
+                      First Name *
+                    </label>
+                    <input
+                      type='text'
+                      required
+                      value={formData.firstName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, firstName: e.target.value })
+                      }
+                      className='w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                      placeholder='John'
+                    />
+                  </div>
+
+                  <div>
+                    <label className='mb-1 block text-sm font-medium text-gray-700'>
+                      Last Name *
+                    </label>
+                    <input
+                      type='text'
+                      required
+                      value={formData.lastName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, lastName: e.target.value })
+                      }
+                      className='w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                      placeholder='Doe'
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className='mb-1 block text-sm font-medium text-gray-700'>
                     Email *
@@ -256,8 +303,13 @@ export default function StaffPage() {
 
         {/* Staff Table */}
         <div className='rounded-lg bg-white shadow-sm'>
-          <div className='border-b border-gray-200 px-6 py-4'>
-            <h2 className='text-xl font-semibold text-gray-900'>All Staff</h2>
+          <div className='border-b border-gray-200 px-4 py-2'>
+            <div className='flex items-center justify-between'>
+              <h2 className='text-sm font-semibold text-gray-900'>All Staff</h2>
+              <span className='text-xs text-gray-500'>
+                {staff.length} {staff.length === 1 ? 'member' : 'members'}
+              </span>
+            </div>
           </div>
 
           <div className='overflow-x-auto'>
@@ -284,19 +336,19 @@ export default function StaffPage() {
               <table className='min-w-full divide-y divide-gray-200'>
                 <thead className='bg-gray-50'>
                   <tr>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                      Staff ID
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                      Staff Member
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Role
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Department
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Joined
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Actions
                     </th>
                   </tr>
@@ -307,39 +359,55 @@ export default function StaffPage() {
                       key={member.id}
                       className='transition-colors hover:bg-gray-50'
                     >
-                      <td className='whitespace-nowrap px-6 py-4'>
+                      <td className='px-4 py-2'>
                         <div className='flex items-center'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-600'>
+                          <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600'>
                             {member.role === 'admin'
                               ? '👑'
                               : member.role === 'support'
                                 ? '🎧'
                                 : '📚'}
                           </div>
-                          <div className='ml-4'>
-                            <div className='font-mono text-sm text-gray-900'>
-                              {member.id.substring(0, 8)}...
-                            </div>
+                          <div className='ml-3'>
+                            {member.users?.first_name || member.users?.last_name ? (
+                              <>
+                                <div className='text-sm font-medium text-gray-900'>
+                                  {member.users.first_name} {member.users.last_name}
+                                </div>
+                                <div className='text-xs text-gray-500'>
+                                  {member.users.email}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className='text-sm font-medium text-gray-900'>
+                                  {member.users?.email || 'No email'}
+                                </div>
+                                <div className='font-mono text-xs text-gray-400'>
+                                  {member.id.substring(0, 8)}...
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4'>
+                      <td className='whitespace-nowrap px-4 py-2'>
                         <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getRoleBadgeColor(member.role)}`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${getRoleBadgeColor(member.role)}`}
                         >
                           {member.role.toUpperCase()}
                         </span>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm text-gray-900'>
+                      <td className='whitespace-nowrap px-4 py-2 text-sm text-gray-900'>
                         {member.department || (
                           <span className='text-gray-400'>Not assigned</span>
                         )}
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm text-gray-500'>
+                      <td className='whitespace-nowrap px-4 py-2 text-xs text-gray-500'>
                         {formatDate(member.created_at)}
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm'>
-                        <button className='mr-3 text-blue-600 hover:text-blue-800'>
+                      <td className='whitespace-nowrap px-4 py-2 text-sm'>
+                        <button className='mr-2 text-blue-600 hover:text-blue-800'>
                           Edit
                         </button>
                         <button className='text-red-600 hover:text-red-800'>
@@ -355,33 +423,33 @@ export default function StaffPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className='grid gap-4 md:grid-cols-3'>
-          <div className='rounded-lg bg-white p-4 shadow-sm'>
+        <div className='grid gap-3 md:grid-cols-3'>
+          <div className='rounded-lg bg-red-50 p-3 shadow-sm'>
             <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-gray-600'>Admins</h3>
-              <span className='text-xl'>👑</span>
+              <h3 className='text-xs font-medium text-red-800'>Admins</h3>
+              <span className='text-lg'>👑</span>
             </div>
-            <p className='text-2xl font-bold text-gray-900'>
+            <p className='text-2xl font-bold text-red-900'>
               {staff.filter(s => s.role === 'admin').length}
             </p>
           </div>
 
-          <div className='rounded-lg bg-white p-4 shadow-sm'>
+          <div className='rounded-lg bg-blue-50 p-3 shadow-sm'>
             <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-gray-600'>
+              <h3 className='text-xs font-medium text-blue-800'>
                 Support Staff
               </h3>
-              <span className='text-xl'>🎧</span>
+              <span className='text-lg'>🎧</span>
             </div>
-            <p className='text-2xl font-bold text-gray-900'>
+            <p className='text-2xl font-bold text-blue-900'>
               {staff.filter(s => s.role === 'support').length}
             </p>
           </div>
 
-          <div className='rounded-lg bg-white p-4 shadow-sm'>
+          <div className='rounded-lg bg-gray-50 p-3 shadow-sm'>
             <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-gray-600'>Interns</h3>
-              <span className='text-xl'>📚</span>
+              <h3 className='text-xs font-medium text-gray-800'>Interns</h3>
+              <span className='text-lg'>📚</span>
             </div>
             <p className='text-2xl font-bold text-gray-900'>
               {staff.filter(s => s.role === 'intern').length}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
+import Select from '@/src/app/[locale]/components/Select'
 import type { LoanApplication, ApplicationStatus } from '@/src/lib/supabase/types'
 
 // Extended type for application with client details
@@ -165,104 +166,110 @@ export default function ApplicationsPage() {
 
   return (
     <AdminDashboardLayout>
-      <div className='space-y-6'>
+      <div className='space-y-4'>
         {/* Header */}
-        <div className='rounded-lg bg-white p-6 shadow-sm'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h1 className='mb-2 text-3xl font-bold text-gray-900'>
-                Loan Applications
-              </h1>
-              <p className='text-sm text-gray-600'>
-                Review and manage all loan applications
-              </p>
-            </div>
-            <div className='flex items-center space-x-4'>
-              <span className='text-3xl'>📝</span>
-              <span className='text-4xl font-bold text-gray-900'>
-                {applications.length}
-              </span>
+        <div className='flex items-center justify-between'>
+          <div>
+            <h1 className='text-2xl font-bold text-gray-900'>
+              Loan Applications
+            </h1>
+            <p className='text-xs text-gray-600'>
+              Review and manage all loan applications
+            </p>
+          </div>
+          <div className='flex items-center gap-3'>
+            <div className='rounded-lg bg-white px-4 py-2 shadow-sm'>
+              <div className='flex items-center gap-2'>
+                <span className='text-xl'>📝</span>
+                <span className='text-2xl font-bold text-gray-900'>
+                  {applications.length}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className='grid gap-4 md:grid-cols-5'>
-          <div className='cursor-pointer rounded-lg bg-yellow-50 p-4 shadow-sm transition-all hover:shadow-md'
+        <div className='grid gap-3 md:grid-cols-5'>
+          <div className='cursor-pointer rounded-lg bg-yellow-50 p-3 shadow-sm transition-all hover:shadow-md'
                onClick={() => setStatusFilter('pending')}>
-            <div className='mb-2 flex items-center justify-between'>
+            <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-yellow-800'>Pending</h3>
-              <span className='text-2xl'>⏳</span>
+              <span className='text-lg'>⏳</span>
             </div>
-            <p className='text-3xl font-bold text-yellow-900'>
+            <p className='text-2xl font-bold text-yellow-900'>
               {statusCounts.pending}
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-blue-50 p-4 shadow-sm transition-all hover:shadow-md'
+          <div className='cursor-pointer rounded-lg bg-blue-50 p-3 shadow-sm transition-all hover:shadow-md'
                onClick={() => setStatusFilter('processing')}>
-            <div className='mb-2 flex items-center justify-between'>
+            <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-blue-800'>Processing</h3>
-              <span className='text-2xl'>🔄</span>
+              <span className='text-lg'>🔄</span>
             </div>
-            <p className='text-3xl font-bold text-blue-900'>
+            <p className='text-2xl font-bold text-blue-900'>
               {statusCounts.processing}
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-green-50 p-4 shadow-sm transition-all hover:shadow-md'
+          <div className='cursor-pointer rounded-lg bg-green-50 p-3 shadow-sm transition-all hover:shadow-md'
                onClick={() => setStatusFilter('approved')}>
-            <div className='mb-2 flex items-center justify-between'>
+            <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-green-800'>Approved</h3>
-              <span className='text-2xl'>✅</span>
+              <span className='text-lg'>✅</span>
             </div>
-            <p className='text-3xl font-bold text-green-900'>
+            <p className='text-2xl font-bold text-green-900'>
               {statusCounts.approved}
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-red-50 p-4 shadow-sm transition-all hover:shadow-md'
+          <div className='cursor-pointer rounded-lg bg-red-50 p-3 shadow-sm transition-all hover:shadow-md'
                onClick={() => setStatusFilter('rejected')}>
-            <div className='mb-2 flex items-center justify-between'>
+            <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-red-800'>Rejected</h3>
-              <span className='text-2xl'>❌</span>
+              <span className='text-lg'>❌</span>
             </div>
-            <p className='text-3xl font-bold text-red-900'>
+            <p className='text-2xl font-bold text-red-900'>
               {statusCounts.rejected}
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-gray-50 p-4 shadow-sm transition-all hover:shadow-md'
+          <div className='cursor-pointer rounded-lg bg-gray-50 p-3 shadow-sm transition-all hover:shadow-md'
                onClick={() => setStatusFilter('cancelled')}>
-            <div className='mb-2 flex items-center justify-between'>
+            <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-gray-800'>Cancelled</h3>
-              <span className='text-2xl'>🚫</span>
+              <span className='text-lg'>🚫</span>
             </div>
-            <p className='text-3xl font-bold text-gray-900'>
+            <p className='text-2xl font-bold text-gray-900'>
               {statusCounts.cancelled}
             </p>
           </div>
         </div>
 
         {/* Filters */}
-        <div className='rounded-lg bg-white p-4 shadow-sm'>
-          <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
-            <div className='flex items-center gap-4'>
-              <label className='text-sm font-medium text-gray-700'>
-                Filter by Status:
+        <div className='rounded-lg bg-white p-3 shadow-sm'>
+          <div className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
+            <div className='flex items-center gap-3'>
+              <label className='text-xs font-medium text-gray-700'>
+                Status:
               </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as ApplicationStatus | 'all')}
-                className='rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-              >
-                <option value='all'>All Applications</option>
-                <option value='pending'>Pending</option>
-                <option value='processing'>Processing</option>
-                <option value='approved'>Approved</option>
-                <option value='rejected'>Rejected</option>
-                <option value='cancelled'>Cancelled</option>
-              </select>
+              <div className='w-48'>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value as ApplicationStatus | 'all')}
+                  options={[
+                    { value: 'all', label: 'All Applications' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'processing', label: 'Processing' },
+                    { value: 'approved', label: 'Approved' },
+                    { value: 'rejected', label: 'Rejected' },
+                    { value: 'cancelled', label: 'Cancelled' }
+                  ]}
+                  placeholder='Select status'
+                  className='!py-2 !px-3 !text-sm'
+                />
+              </div>
             </div>
             
             <div className='flex items-center gap-2'>
@@ -271,7 +278,7 @@ export default function ApplicationsPage() {
                 placeholder='Search by name, email, or phone...'
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className='w-full rounded-lg border border-gray-300 px-4 py-2 md:w-80 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm md:w-64 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
               />
               {searchTerm && (
                 <button
@@ -287,13 +294,15 @@ export default function ApplicationsPage() {
 
         {/* Applications Table */}
         <div className='rounded-lg bg-white shadow-sm'>
-          <div className='border-b border-gray-200 px-6 py-4'>
-            <h2 className='text-xl font-semibold text-gray-900'>
-              {statusFilter === 'all' ? 'All Applications' : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Applications`}
-              <span className='ml-2 text-sm font-normal text-gray-500'>
-                ({filteredApplications.length} {filteredApplications.length === 1 ? 'application' : 'applications'})
+          <div className='border-b border-gray-200 px-4 py-2'>
+            <div className='flex items-center justify-between'>
+              <h2 className='text-sm font-semibold text-gray-900'>
+                {statusFilter === 'all' ? 'All Applications' : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Applications`}
+              </h2>
+              <span className='text-xs text-gray-500'>
+                {filteredApplications.length} {filteredApplications.length === 1 ? 'result' : 'results'}
               </span>
-            </h2>
+            </div>
           </div>
 
           <div className='overflow-x-auto'>
@@ -321,25 +330,25 @@ export default function ApplicationsPage() {
               <table className='min-w-full divide-y divide-gray-200'>
                 <thead className='bg-gray-50'>
                   <tr>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Applicant
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Amount
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Type
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Status
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Province
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Submitted
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Actions
                     </th>
                   </tr>
@@ -350,16 +359,16 @@ export default function ApplicationsPage() {
                       key={app.id}
                       className='transition-colors hover:bg-gray-50'
                     >
-                      <td className='px-6 py-4'>
+                      <td className='px-4 py-2'>
                         <div className='flex items-center'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-600'>
+                          <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-600'>
                             {app.users?.first_name?.[0] || '?'}
                           </div>
-                          <div className='ml-4'>
+                          <div className='ml-3'>
                             <div className='text-sm font-medium text-gray-900'>
                               {getClientName(app)}
                             </div>
-                            <div className='text-sm text-gray-500'>
+                            <div className='text-xs text-gray-500'>
                               {app.users?.email || 'No email'}
                             </div>
                             <div className='text-xs text-gray-400'>
@@ -368,33 +377,33 @@ export default function ApplicationsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4'>
+                      <td className='whitespace-nowrap px-4 py-2'>
                         <div className='text-sm font-semibold text-gray-900'>
                           {formatCurrency(app.loan_amount)}
                         </div>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4'>
+                      <td className='whitespace-nowrap px-4 py-2'>
                         <span className='text-xs text-gray-600'>
                           {app.loan_type === 'with-documents' ? 'With Docs' : 'No Docs'}
                         </span>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4'>
+                      <td className='whitespace-nowrap px-4 py-2'>
                         <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeColor(app.application_status)}`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeColor(app.application_status)}`}
                         >
                           {app.application_status.toUpperCase()}
                         </span>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm text-gray-900'>
+                      <td className='whitespace-nowrap px-4 py-2 text-sm text-gray-900'>
                         {app.addresses && app.addresses.length > 0 
                           ? app.addresses[0].province 
                           : 'N/A'}
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm text-gray-500'>
+                      <td className='whitespace-nowrap px-4 py-2 text-xs text-gray-500'>
                         {formatDate(app.created_at)}
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm'>
-                        <button className='mr-3 text-blue-600 hover:text-blue-800'>
+                      <td className='whitespace-nowrap px-4 py-2 text-sm'>
+                        <button className='mr-2 text-blue-600 hover:text-blue-800'>
                           View
                         </button>
                         <button className='text-green-600 hover:text-green-800'>

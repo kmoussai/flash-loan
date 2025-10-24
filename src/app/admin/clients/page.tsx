@@ -121,26 +121,26 @@ export default function ClientsPage() {
     <AdminDashboardLayout>
       <div className='space-y-4'>
         {/* Header */}
-        <div className='rounded-lg bg-white p-4 shadow-sm'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h1 className='mb-1 text-2xl font-bold text-gray-900'>
-                Clients
-              </h1>
-              <p className='text-sm text-gray-600'>
-                Manage loan applicants and their applications
-              </p>
-            </div>
-            <div className='flex items-center space-x-4'>
-              <button
-                onClick={() => setShowAddForm(true)}
-                className='rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700'
-              >
-                + Add Client
-              </button>
-              <div className='flex items-center space-x-2'>
-                <span className='text-2xl'>👥</span>
-                <span className='text-3xl font-bold text-gray-900'>
+        <div className='flex items-center justify-between'>
+          <div>
+            <h1 className='text-2xl font-bold text-gray-900'>
+              Clients
+            </h1>
+            <p className='text-xs text-gray-600'>
+              Manage loan applicants and their applications
+            </p>
+          </div>
+          <div className='flex items-center gap-3'>
+            <button
+              onClick={() => setShowAddForm(true)}
+              className='rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:shadow-md'
+            >
+              + Add Client
+            </button>
+            <div className='rounded-lg bg-white px-4 py-2 shadow-sm'>
+              <div className='flex items-center gap-2'>
+                <span className='text-xl'>👥</span>
+                <span className='text-2xl font-bold text-gray-900'>
                   {clients.length}
                 </span>
               </div>
@@ -249,8 +249,13 @@ export default function ClientsPage() {
 
         {/* Clients Table */}
         <div className='rounded-lg bg-white shadow-sm'>
-          <div className='border-b border-gray-200 px-6 py-4'>
-            <h2 className='text-xl font-semibold text-gray-900'>All Clients</h2>
+          <div className='border-b border-gray-200 px-4 py-2'>
+            <div className='flex items-center justify-between'>
+              <h2 className='text-sm font-semibold text-gray-900'>All Clients</h2>
+              <span className='text-xs text-gray-500'>
+                {clients.length} {clients.length === 1 ? 'client' : 'clients'}
+              </span>
+            </div>
           </div>
 
           <div className='overflow-x-auto'>
@@ -276,19 +281,19 @@ export default function ClientsPage() {
               <table className='min-w-full divide-y divide-gray-200'>
                 <thead className='bg-gray-50'>
                   <tr>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Client ID
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       KYC Status
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       National ID
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Joined
                     </th>
-                    <th className='px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Actions
                     </th>
                   </tr>
@@ -299,35 +304,35 @@ export default function ClientsPage() {
                       key={client.id}
                       className='transition-colors hover:bg-gray-50'
                     >
-                      <td className='whitespace-nowrap px-6 py-4'>
+                      <td className='whitespace-nowrap px-4 py-2'>
                         <div className='flex items-center'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-600'>
+                          <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-600'>
                             {client.kyc_status === 'verified' ? '✓' : '👤'}
                           </div>
-                          <div className='ml-4'>
+                          <div className='ml-3'>
                             <div className='font-mono text-sm text-gray-900'>
                               {client.id.substring(0, 8)}...
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4'>
+                      <td className='whitespace-nowrap px-4 py-2'>
                         <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getKycBadgeColor(client.kyc_status)}`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${getKycBadgeColor(client.kyc_status)}`}
                         >
                           {client.kyc_status.toUpperCase()}
                         </span>
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm text-gray-900'>
+                      <td className='whitespace-nowrap px-4 py-2 text-sm text-gray-900'>
                         {client.national_id || (
                           <span className='text-gray-400'>Not provided</span>
                         )}
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm text-gray-500'>
+                      <td className='whitespace-nowrap px-4 py-2 text-xs text-gray-500'>
                         {formatDate(client.created_at)}
                       </td>
-                      <td className='whitespace-nowrap px-6 py-4 text-sm'>
-                        <button className='mr-3 text-blue-600 hover:text-blue-800'>
+                      <td className='whitespace-nowrap px-4 py-2 text-sm'>
+                        <button className='mr-2 text-blue-600 hover:text-blue-800'>
                           View
                         </button>
                         <button className='text-green-600 hover:text-green-800'>
@@ -343,35 +348,35 @@ export default function ClientsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className='grid gap-4 md:grid-cols-3'>
-          <div className='rounded-lg bg-white p-4 shadow-sm'>
+        <div className='grid gap-3 md:grid-cols-3'>
+          <div className='rounded-lg bg-green-50 p-3 shadow-sm'>
             <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-gray-600'>Verified</h3>
-              <span className='text-xl'>✓</span>
+              <h3 className='text-xs font-medium text-green-800'>Verified</h3>
+              <span className='text-lg'>✓</span>
             </div>
-            <p className='text-2xl font-bold text-gray-900'>
+            <p className='text-2xl font-bold text-green-900'>
               {clients.filter(c => c.kyc_status === 'verified').length}
             </p>
           </div>
 
-          <div className='rounded-lg bg-white p-4 shadow-sm'>
+          <div className='rounded-lg bg-yellow-50 p-3 shadow-sm'>
             <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-gray-600'>
+              <h3 className='text-xs font-medium text-yellow-800'>
                 Pending KYC
               </h3>
-              <span className='text-xl'>⏳</span>
+              <span className='text-lg'>⏳</span>
             </div>
-            <p className='text-2xl font-bold text-gray-900'>
+            <p className='text-2xl font-bold text-yellow-900'>
               {clients.filter(c => c.kyc_status === 'pending').length}
             </p>
           </div>
 
-          <div className='rounded-lg bg-white p-4 shadow-sm'>
+          <div className='rounded-lg bg-red-50 p-3 shadow-sm'>
             <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-gray-600'>Rejected</h3>
-              <span className='text-xl'>✗</span>
+              <h3 className='text-xs font-medium text-red-800'>Rejected</h3>
+              <span className='text-lg'>✗</span>
             </div>
-            <p className='text-2xl font-bold text-gray-900'>
+            <p className='text-2xl font-bold text-red-900'>
               {clients.filter(c => c.kyc_status === 'rejected').length}
             </p>
           </div>
