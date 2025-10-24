@@ -135,6 +135,7 @@ export default function LoanApplicationForm() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [ibvVerified, setIbvVerified] = useState(false)
   const [formData, setFormData] = useState<FormData>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('loanFormData')
@@ -321,8 +322,8 @@ export default function LoanApplicationForm() {
     },
     {
       number: 6,
-      title: t('Confirmation_And_Submission'),
-      description: t('Choose_Loan_Type'),
+      title: t('Bank_Verification'),
+      description: t('Verify_Bank_Account'),
       icon: (
         <svg
           className='h-6 w-6'
@@ -331,8 +332,8 @@ export default function LoanApplicationForm() {
           stroke='currentColor'
           strokeWidth='2'
         >
-          <path d='M9 11l3 3L22 4' />
-          <path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' />
+          <rect x='3' y='11' width='18' height='11' rx='2' ry='2' />
+          <path d='M7 11V7a5 5 0 0 1 10 0v4' />
         </svg>
       )
     }
@@ -359,12 +360,12 @@ export default function LoanApplicationForm() {
   // Get current step key based on province
   const getCurrentStepKey = () => {
     if (formData.province === 'Quebec') {
-      // For Quebec, all 6 steps
-      const stepKeys = ['personal', 'contact', 'financial', 'references', 'income', 'confirmation']
+      // For Quebec, 6 steps ending with IBV
+      const stepKeys = ['personal', 'contact', 'financial', 'references', 'income', 'ibv']
       return stepKeys[currentStep - 1]
     } else {
-      // For non-Quebec, skip financial (step 3)
-      const stepKeys = ['personal', 'contact', 'references', 'income', 'confirmation']
+      // For non-Quebec, skip financial (step 3), 5 steps ending with IBV
+      const stepKeys = ['personal', 'contact', 'references', 'income', 'ibv']
       return stepKeys[currentStep - 1]
     }
   }
@@ -456,13 +457,19 @@ export default function LoanApplicationForm() {
         
         // Loan Details
         loanAmount: formData.loanAmount,
-        loanType: formData.loanType,
+        loanType: 'without-documents', // All loans use IBV verification
         
         // Pre-qualification
         bankruptcyPlan: bankruptcyPlan,
         
-        // Confirmation
+        // IBV Verification completed
+        ibvVerified: ibvVerified,
+        
+        // Confirmation & Consent
         confirmInformation: formData.confirmInformation,
+        agreeTerms: formData.agreeTerms,
+        agreePrivacy: formData.agreePrivacy,
+        consentCredit: formData.consentCredit,
       }
 
       console.log('Submitting loan application:', submissionData)
@@ -485,16 +492,16 @@ export default function LoanApplicationForm() {
       console.log('Application submitted successfully:', result)
       
       // Mark as submitted
-      setIsSubmitted(true)
-      
-      // Clear localStorage after successful submission
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('loanFormData')
-        localStorage.removeItem('loanFormCurrentStep')
-        localStorage.removeItem('loanFormPreQualification')
-        localStorage.removeItem('loanFormBankruptcyPlan')
-        localStorage.removeItem('loanFormPreviousBorrower')
-      }
+    setIsSubmitted(true)
+    
+    // Clear localStorage after successful submission
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('loanFormData')
+      localStorage.removeItem('loanFormCurrentStep')
+      localStorage.removeItem('loanFormPreQualification')
+      localStorage.removeItem('loanFormBankruptcyPlan')
+      localStorage.removeItem('loanFormPreviousBorrower')
+    }
     } catch (error: any) {
       console.error('Error submitting application:', error)
       setSubmitError(error.message || 'Failed to submit application. Please try again.')
@@ -503,53 +510,137 @@ export default function LoanApplicationForm() {
     }
   }
 
+  // Reset form to initial state (DEV only)
+  const resetForm = () => {
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      dateOfBirth: '',
+      preferredLanguage: 'en',
+      streetNumber: '',
+      streetName: '',
+      apartmentNumber: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      movingDate: '',
+      residenceStatus: '',
+      grossSalary: '',
+      rentOrMortgageCost: '',
+      heatingElectricityCost: '',
+      carLoan: '',
+      furnitureLoan: '',
+      reference1FirstName: '',
+      reference1LastName: '',
+      reference1Phone: '',
+      reference1Relationship: '',
+      reference2FirstName: '',
+      reference2LastName: '',
+      reference2Phone: '',
+      reference2Relationship: '',
+      incomeSource: '',
+      occupation: '',
+      companyName: '',
+      supervisorName: '',
+      workPhone: '',
+      post: '',
+      payrollFrequency: '',
+      dateHired: '',
+      nextPayDate: '',
+      employmentInsuranceStartDate: '',
+      paidByDirectDeposit: '',
+      selfEmployedPhone: '',
+      depositsFrequency: '',
+      selfEmployedStartDate: '',
+      nextDepositDate: '',
+      loanAmount: '',
+      loanPurpose: '',
+      repaymentPeriod: '',
+      paymentFrequency: '',
+      loanType: '',
+      confirmInformation: false,
+      agreeTerms: false,
+      agreePrivacy: false,
+      consentCredit: false
+    })
+    setCurrentStep(1)
+    setBankruptcyPlan(false)
+    setPreviousBorrower(false)
+    setIbvVerified(false)
+    setIsSubmitted(false)
+    setSubmitError(null)
+    
+    // Clear localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('loanFormData')
+      localStorage.removeItem('loanFormCurrentStep')
+      localStorage.removeItem('loanFormPreQualification')
+      localStorage.removeItem('loanFormBankruptcyPlan')
+      localStorage.removeItem('loanFormPreviousBorrower')
+    }
+  }
+
   const fillRandomData = () => {
+    const firstNames = ['Jean', 'Marie', 'Pierre', 'Sophie', 'Marc', 'Julie', 'Luc', 'Isabelle', 'André', 'Catherine']
+    const lastNames = ['Tremblay', 'Gagnon', 'Roy', 'Côté', 'Bouchard', 'Gauthier', 'Morin', 'Lavoie', 'Fortin', 'Gagné']
+    const streets = ['Rue Sainte-Catherine', 'Rue Saint-Denis', 'Boulevard René-Lévesque', 'Rue Sherbrooke', 'Avenue du Parc']
+    const cities = ['Montreal', 'Laval', 'Quebec City', 'Gatineau', 'Longueuil']
+    const provinces = ['Quebec', 'Ontario', 'British Columbia', 'Alberta', 'Manitoba']
+    
+    const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)]
+    const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)]
+    const randomStreet = streets[Math.floor(Math.random() * streets.length)]
+    const randomCity = cities[Math.floor(Math.random() * cities.length)]
+    const randomProvince = provinces[Math.floor(Math.random() * provinces.length)]
+    
     const randomData: FormData = {
       // Personal Information
-      firstName: 'John',
-      lastName: 'Doe',
-      email: `test${Math.floor(Math.random() * 10000)}@example.com`,
-      phone: `514-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
-      dateOfBirth: '1990-05-15',
-      preferredLanguage: 'en',
+      firstName: randomFirstName,
+      lastName: randomLastName,
+      email: `${randomFirstName.toLowerCase()}.${randomLastName.toLowerCase()}${Math.floor(Math.random() * 999)}@email.com`,
+      phone: `${Math.floor(Math.random() * 2) === 0 ? '514' : '438'}-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
+      dateOfBirth: `19${Math.floor(Math.random() * 30 + 70)}-${String(Math.floor(Math.random() * 12 + 1)).padStart(2, '0')}-${String(Math.floor(Math.random() * 28 + 1)).padStart(2, '0')}`,
+      preferredLanguage: Math.random() > 0.5 ? 'en' : 'fr',
       
       // Contact Details (Address)
-      streetNumber: String(Math.floor(Math.random() * 9000 + 1000)),
-      streetName: 'Main Street',
-      apartmentNumber: String(Math.floor(Math.random() * 100)),
-      city: 'Montreal',
-      province: 'Quebec',
-      postalCode: 'H2X 1Y7',
-      movingDate: '2024-01-15',
+      streetNumber: String(Math.floor(Math.random() * 9000 + 100)),
+      streetName: randomStreet,
+      apartmentNumber: Math.random() > 0.3 ? String(Math.floor(Math.random() * 500 + 1)) : '',
+      city: randomCity,
+      province: randomProvince,
+      postalCode: `H${Math.floor(Math.random() * 9)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))} ${Math.floor(Math.random() * 9)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${Math.floor(Math.random() * 9)}`,
+      movingDate: `20${Math.floor(Math.random() * 5 + 19)}-${String(Math.floor(Math.random() * 12 + 1)).padStart(2, '0')}-15`,
 
       // Financial Obligations (Quebec only)
-      residenceStatus: 'tenant',
-      grossSalary: '50000',
-      rentOrMortgageCost: '1200',
-      heatingElectricityCost: '150',
-      carLoan: '0',
-      furnitureLoan: '0',
+      residenceStatus: Math.random() > 0.5 ? 'tenant' : 'owner',
+      grossSalary: String(Math.floor(Math.random() * 50000 + 30000)),
+      rentOrMortgageCost: String(Math.floor(Math.random() * 1000 + 800)),
+      heatingElectricityCost: String(Math.floor(Math.random() * 150 + 100)),
+      carLoan: String(Math.floor(Math.random() * 500)),
+      furnitureLoan: String(Math.floor(Math.random() * 200)),
 
       // References
-      reference1FirstName: 'Jane',
-      reference1LastName: 'Smith',
-      reference1Phone: '514-555-1234',
-      reference1Relationship: 'friend',
-      reference2FirstName: 'Bob',
-      reference2LastName: 'Johnson',
-      reference2Phone: '514-555-5678',
-      reference2Relationship: 'colleague',
+      reference1FirstName: firstNames[Math.floor(Math.random() * firstNames.length)],
+      reference1LastName: lastNames[Math.floor(Math.random() * lastNames.length)],
+      reference1Phone: `514-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
+      reference1Relationship: ['friend', 'family', 'colleague', 'neighbor'][Math.floor(Math.random() * 4)],
+      reference2FirstName: firstNames[Math.floor(Math.random() * firstNames.length)],
+      reference2LastName: lastNames[Math.floor(Math.random() * lastNames.length)],
+      reference2Phone: `514-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
+      reference2Relationship: ['friend', 'family', 'colleague', 'neighbor'][Math.floor(Math.random() * 4)],
 
       // Your Income (Employed example)
       incomeSource: 'employed',
-      occupation: 'Software Developer',
-      companyName: 'Tech Corp',
-      supervisorName: 'Alice Manager',
-      workPhone: '514-555-9999',
-      post: 'Developer',
-      payrollFrequency: 'bi-weekly',
-      dateHired: '2020-01-15',
-      nextPayDate: '2024-12-31',
+      occupation: ['Software Developer', 'Sales Representative', 'Accountant', 'Teacher', 'Nurse', 'Manager'][Math.floor(Math.random() * 6)],
+      companyName: ['Tech Corp', 'ABC Industries', 'XYZ Solutions', 'Global Services', 'Best Company'][Math.floor(Math.random() * 5)],
+      supervisorName: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+      workPhone: `514-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
+      post: ['Full-time', 'Part-time', 'Contract'][Math.floor(Math.random() * 3)],
+      payrollFrequency: ['weekly', 'bi-weekly', 'monthly'][Math.floor(Math.random() * 3)],
+      dateHired: `20${Math.floor(Math.random() * 10 + 10)}-${String(Math.floor(Math.random() * 12 + 1)).padStart(2, '0')}-15`,
+      nextPayDate: `2025-${String(Math.floor(Math.random() * 2 + 1)).padStart(2, '0')}-${String(Math.floor(Math.random() * 28 + 1)).padStart(2, '0')}`,
       employmentInsuranceStartDate: '',
       paidByDirectDeposit: '',
       selfEmployedPhone: '',
@@ -558,7 +649,7 @@ export default function LoanApplicationForm() {
       nextDepositDate: '',
 
       // Loan Details
-      loanAmount: '1000',
+      loanAmount: String(Math.floor(Math.random() * 10) * 100 + 500), // Random: 500, 600, 700...1500
       loanPurpose: '',
       repaymentPeriod: '',
       paymentFrequency: '',
@@ -572,7 +663,8 @@ export default function LoanApplicationForm() {
     }
     
     setFormData(randomData)
-    setBankruptcyPlan(false)
+    setBankruptcyPlan(Math.random() > 0.8) // 20% chance of bankruptcy
+    setIbvVerified(false) // Reset IBV verification when filling new data
   }
 
   const handleStartOver = () => {
@@ -838,15 +930,22 @@ export default function LoanApplicationForm() {
 
       {/* Form Content */}
       <div className='rounded-lg bg-background-secondary p-4 sm:p-6'>
-        {/* DEV ONLY: Fill Random Data Button */}
+        {/* DEV ONLY: Developer Tools */}
         {process.env.NODE_ENV === 'development' && (
-          <div className='mb-4 flex justify-end'>
+          <div className='mb-4 flex gap-3 justify-end'>
+            <button
+              onClick={resetForm}
+              type='button'
+              className='rounded-lg bg-gradient-to-r from-gray-600 to-gray-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:shadow-md hover:from-gray-700 hover:to-gray-800'
+            >
+              🔄 Reset Form
+            </button>
             <button
               onClick={fillRandomData}
               type='button'
-              className='rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:shadow-md'
+              className='rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:shadow-md hover:from-purple-700 hover:to-pink-700'
             >
-              🎲 Fill Random Data (DEV)
+              🎲 Fill Random Data
             </button>
           </div>
         )}
@@ -1594,93 +1693,198 @@ export default function LoanApplicationForm() {
           </div>
         )}
 
-        {/* Step 6: Confirmation & Submission */}
-        {getCurrentStepKey() === 'confirmation' && (
-          <div className='space-y-3 sm:space-y-4'>
+        {/* Step 6: Bank Verification (IBV) */}
+        {getCurrentStepKey() === 'ibv' && (
+          <div className='space-y-4'>
             <div className='mb-6 text-center'>
-              <h2 className='mb-2 text-3xl font-bold text-primary'>
-                {t('Were_Almost_There')}
+              <h2 className='mb-2 text-2xl font-bold text-primary'>
+                {t('Bank_Verification')}
               </h2>
               <p className='text-text-secondary'>
-                {t('Choose_Type_Loan_Send_Request')}
+                {t('IBV_Step_Description')}
               </p>
             </div>
 
-            <div className='grid gap-4 md:grid-cols-2'>
-              {/* Loan without documents */}
-              <button
-                type='button'
-                onClick={() => updateFormData('loanType', 'without-documents')}
-                className={`rounded-lg border-2 p-6 text-left transition-all hover:shadow-lg ${
-                  formData.loanType === 'without-documents'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-gray-300 bg-background'
-                }`}
-              >
-                <h3 className='mb-4 text-xl font-semibold text-primary'>
-                  {t('Loan_Without_Documents')}
-                </h3>
-                <div className='space-y-2 text-sm text-text-secondary'>
-                  <p>
-                    <strong>{t('IBV_Technology')}</strong>
-                    {t('IBV_Description')}
-                  </p>
-                  <ul className='ml-4 list-disc space-y-1'>
-                    <li className='font-semibold text-primary'>{t('Fast_Approval')}</li>
-                    <li className='font-semibold text-primary'>{t('Much_Simpler')}</li>
-                    <li className='font-semibold text-primary'>{t('Hundred_Percent_Safe')}</li>
-                    <li className='text-green-600'>{t('No_Paper_Document_Required')}</li>
-                  </ul>
-                  <p className='mt-4 italic'>
-                    {t('IBV_Redirect_Notice')}
-                  </p>
+            {!ibvVerified ? (
+              <>
+                <div className='rounded-lg bg-blue-50 p-4 border border-blue-200'>
+                  <div className='flex items-start'>
+                    <div className='flex-shrink-0'>
+                      <svg className='h-6 w-6 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
+                      </svg>
+                    </div>
+                    <div className='ml-3'>
+                      <h3 className='text-sm font-medium text-blue-800'>
+                        {t('Why_Verify_Bank')}
+                      </h3>
+                      <div className='mt-2 text-sm text-blue-700'>
+                        <ul className='list-disc ml-4 space-y-1'>
+                          <li>{t('Instant_Approval')}</li>
+                          <li>{t('Secure_Connection')}</li>
+                          <li>{t('No_Documents_Needed')}</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </button>
 
-              {/* Loan with documents */}
-              <button
-                type='button'
-                onClick={() => updateFormData('loanType', 'with-documents')}
-                className={`rounded-lg border-2 p-6 text-left transition-all hover:shadow-lg ${
-                  formData.loanType === 'with-documents'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-gray-300 bg-background'
-                }`}
-              >
-                <h3 className='mb-4 text-xl font-semibold text-primary'>
-                  {t('Loan_With_Documents')}
-                </h3>
-                <div className='space-y-2 text-sm text-text-secondary'>
-                  <p>
-                    {t('Email_Documents_Description')}
-                  </p>
-                  <ul className='ml-4 list-disc space-y-1'>
-                    <li className='font-semibold text-primary'>{t('Bank_Statement')}</li>
-                    <li className='font-semibold text-primary'>{t('Last_Pay_Stub')}</li>
-                    <li className='font-semibold text-primary'>{t('Specimen_Check')}</li>
-                    <li className='font-semibold text-primary'>{t('Proof_Of_Identity')}</li>
-                  </ul>
-                  <p className='mt-4 text-xs font-semibold text-red-600'>
-                    {t('Fraud_Warning')}
-                  </p>
+                {/* Simulated IBV iframe */}
+                <div className='rounded-lg border-2 border-gray-300 bg-white shadow-lg overflow-hidden'>
+                  <div className='bg-gradient-to-r from-blue-600 to-blue-700 p-3 text-white'>
+                    <div className='flex items-center justify-between'>
+                      <div className='flex items-center gap-2'>
+                        <svg className='h-5 w-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' />
+                        </svg>
+                        <span className='text-sm font-semibold'>Secure Bank Verification</span>
+                      </div>
+                      <div className='flex items-center gap-1'>
+                        <div className='h-2 w-2 bg-green-400 rounded-full animate-pulse'></div>
+                        <span className='text-xs'>Encrypted</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className='p-6 space-y-4'>
+                    <div className='text-center'>
+                      <h3 className='text-lg font-semibold text-gray-900 mb-2'>
+                        Connect Your Bank Account
+                      </h3>
+                      <p className='text-sm text-gray-600'>
+                        Select your financial institution to continue
+                      </p>
+                    </div>
+
+                    {/* Simulated bank selection */}
+                    <div className='space-y-3'>
+                      <div className='grid grid-cols-2 gap-3'>
+                        <button
+                          type='button'
+                          className='flex items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all'
+                          onClick={() => {
+                            setTimeout(() => setIbvVerified(true), 1500)
+                          }}
+                        >
+                          <div className='h-8 w-8 bg-red-600 rounded-full flex items-center justify-center text-white font-bold'>
+                            TD
+                          </div>
+                          <span className='text-sm font-medium'>TD Bank</span>
+                        </button>
+                        
+                        <button
+                          type='button'
+                          className='flex items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all'
+                          onClick={() => {
+                            setTimeout(() => setIbvVerified(true), 1500)
+                          }}
+                        >
+                          <div className='h-8 w-8 bg-red-700 rounded-full flex items-center justify-center text-white font-bold'>
+                            RBC
+                          </div>
+                          <span className='text-sm font-medium'>RBC</span>
+                        </button>
+
+                        <button
+                          type='button'
+                          className='flex items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all'
+                          onClick={() => {
+                            setTimeout(() => setIbvVerified(true), 1500)
+                          }}
+                        >
+                          <div className='h-8 w-8 bg-black rounded-full flex items-center justify-center text-white font-bold'>
+                            BM
+                          </div>
+                          <span className='text-sm font-medium'>BMO</span>
+                        </button>
+
+                        <button
+                          type='button'
+                          className='flex items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all'
+                          onClick={() => {
+                            setTimeout(() => setIbvVerified(true), 1500)
+                          }}
+                        >
+                          <div className='h-8 w-8 bg-blue-900 rounded-full flex items-center justify-center text-white font-bold'>
+                            BN
+                          </div>
+                          <span className='text-sm font-medium'>Desjardins</span>
+                        </button>
+                      </div>
+
+                      <button
+                        type='button'
+                        className='w-full rounded-lg border-2 border-gray-200 p-3 text-sm text-gray-600 hover:border-blue-500 hover:bg-blue-50 transition-all'
+                        onClick={() => {
+                          setTimeout(() => setIbvVerified(true), 1500)
+                        }}
+                      >
+                        + More Banks
+                      </button>
+                    </div>
+
+                    <div className='text-center pt-4 border-t border-gray-200'>
+                      <p className='text-xs text-gray-500'>
+                        🔒 Your banking credentials are never shared with us
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </button>
-            </div>
 
-            {/* Confirmation Checkbox */}
-            <div className='mt-6'>
-              <label className='flex items-start'>
-                <input
-                  type='checkbox'
-                  checked={formData.confirmInformation}
-                  onChange={e => updateFormData('confirmInformation', e.target.checked)}
-                  className='mt-1 h-5 w-5 rounded border-gray-300 text-primary focus:ring-2 focus:ring-primary'
-                />
-                <span className='ml-3 text-sm text-text-secondary'>
-                  {t('Confirm_Information_Accurate')} *
-                </span>
-              </label>
-            </div>
+                {/* Skip option (DEV only) */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className='text-center'>
+                    <button
+                      type='button'
+                      onClick={() => setIbvVerified(true)}
+                      className='text-sm text-gray-500 hover:text-gray-700 underline'
+                    >
+                      Skip verification (DEV)
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className='rounded-lg bg-green-50 p-6 border-2 border-green-200'>
+                <div className='flex items-center justify-center mb-4'>
+                  <div className='h-16 w-16 bg-green-500 rounded-full flex items-center justify-center'>
+                    <svg className='h-10 w-10 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
+                    </svg>
+                  </div>
+                </div>
+                <h3 className='text-xl font-bold text-green-800 text-center mb-2'>
+                  {t('Bank_Verified_Successfully')}
+                </h3>
+                <p className='text-center text-green-700'>
+                  {t('Your_Bank_Account_Verified')}
+                </p>
+              </div>
+            )}
+
+            {/* Confirmation - Only show when verified */}
+            {ibvVerified && (
+              <div className='mt-6 rounded-lg border-2 border-primary/20 bg-primary/5 p-6'>
+                <label className='flex items-start cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={formData.confirmInformation}
+                    onChange={e => {
+                      const isChecked = e.target.checked
+                      // When user accepts, set all consent fields to true
+                      updateFormData('confirmInformation', isChecked)
+                      updateFormData('agreeTerms', isChecked)
+                      updateFormData('agreePrivacy', isChecked)
+                      updateFormData('consentCredit', isChecked)
+                    }}
+                    className='mt-1 h-5 w-5 rounded border-gray-300 text-primary focus:ring-2 focus:ring-primary cursor-pointer'
+                  />
+                  <span className='ml-3 text-sm text-gray-700'>
+                    {t('Confirm_Information_Accurate')} <span className='text-red-600'>*</span>
+                  </span>
+                </label>
+              </div>
+            )}
           </div>
         )}
 
@@ -1715,17 +1919,24 @@ export default function LoanApplicationForm() {
             {t('Previous')}
           </Button>
 
-          {currentStep < totalSteps ? (
-            <Button onClick={nextStep} size='large'>
-              {t('Continue')} →
+          {getCurrentStepKey() === 'ibv' ? (
+            <Button 
+              onClick={handleSubmit} 
+              size='large'
+              disabled={!ibvVerified || !formData.confirmInformation || isSubmitting}
+            >
+              {isSubmitting 
+                ? t('Submitting') + '...' 
+                : !ibvVerified 
+                  ? t('Complete_Verification_First')
+                  : !formData.confirmInformation
+                    ? t('Accept_Terms_To_Continue')
+                    : t('Submit_Application')
+              }
             </Button>
           ) : (
-            <Button
-              onClick={handleSubmit}
-              size='large'
-              disabled={!formData.loanType || !formData.confirmInformation || isSubmitting}
-            >
-              {isSubmitting ? t('Submitting') + '...' : t('Confirm') + ' →'}
+            <Button onClick={nextStep} size='large'>
+              {t('Continue')} →
             </Button>
           )}
         </div>

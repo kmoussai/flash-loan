@@ -297,5 +297,21 @@
   "Confirm_Information_Accurate": "I'm confirming that all the informations I have provided is current and accurate and that I understand and accept the terms and conditions.",
   "Confirm": "Confirm",
   "Submitting": "Submitting",
-  "Submission_Error": "Error submitting application"
+  "Submission_Error": "Error submitting application",
+  "Bank_Verification": "Bank Verification",
+  "Verify_Bank_Account": "Verify your bank account",
+  "IBV_Step_Description": "Connect your bank account securely to verify your income and identity instantly",
+  "Why_Verify_Bank": "Why verify your bank account?",
+  "Instant_Approval": "Get instant approval",
+  "Secure_Connection": "Secure and encrypted connection",
+  "No_Documents_Needed": "No documents needed",
+  "Bank_Verified_Successfully": "Bank Verified Successfully!",
+  "Your_Bank_Account_Verified": "Your bank account has been verified and connected securely.",
+  "Complete_Verification_First": "Complete verification to continue",
+  "Final_Confirmation": "Final Confirmation",
+  "Agree_Terms_Conditions": "I agree to the Terms and Conditions",
+  "Agree_Privacy_Policy": "I agree to the Privacy Policy",
+  "Consent_Credit_Check": "I consent to a credit check if necessary",
+  "All_Fields_Required": "All fields marked with * are required",
+  "Accept_Terms_To_Continue": "Accept all terms to continue"
 }
