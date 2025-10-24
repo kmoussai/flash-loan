@@ -133,6 +133,8 @@ export default function LoanApplicationForm() {
     return 1
   })
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [formData, setFormData] = useState<FormData>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('loanFormData')
@@ -380,19 +382,197 @@ export default function LoanApplicationForm() {
     }
   }
 
-  const handleSubmit = () => {
-    // Here you would typically send the form data to your API
-    console.log('Form submitted:', formData)
-    setIsSubmitted(true)
-    
-    // Clear localStorage after successful submission
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('loanFormData')
-      localStorage.removeItem('loanFormCurrentStep')
-      localStorage.removeItem('loanFormPreQualification')
-      localStorage.removeItem('loanFormBankruptcyPlan')
-      localStorage.removeItem('loanFormPreviousBorrower')
+  const handleSubmit = async () => {
+    setIsSubmitting(true)
+    setSubmitError(null)
+
+    try {
+      // Prepare the data for API submission
+      const submissionData = {
+        // Personal Information
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        dateOfBirth: formData.dateOfBirth,
+        preferredLanguage: formData.preferredLanguage,
+        
+        // Address Information
+        streetNumber: formData.streetNumber,
+        streetName: formData.streetName,
+        apartmentNumber: formData.apartmentNumber,
+        city: formData.city,
+        province: formData.province,
+        postalCode: formData.postalCode,
+        movingDate: formData.movingDate,
+        
+        // Financial Obligations (Quebec only)
+        ...(formData.province === 'Quebec' && {
+          residenceStatus: formData.residenceStatus,
+          grossSalary: formData.grossSalary,
+          rentOrMortgageCost: formData.rentOrMortgageCost,
+          heatingElectricityCost: formData.heatingElectricityCost,
+          carLoan: formData.carLoan,
+          furnitureLoan: formData.furnitureLoan,
+        }),
+        
+        // References
+        reference1FirstName: formData.reference1FirstName,
+        reference1LastName: formData.reference1LastName,
+        reference1Phone: formData.reference1Phone,
+        reference1Relationship: formData.reference1Relationship,
+        reference2FirstName: formData.reference2FirstName,
+        reference2LastName: formData.reference2LastName,
+        reference2Phone: formData.reference2Phone,
+        reference2Relationship: formData.reference2Relationship,
+        
+        // Income Information
+        incomeSource: formData.incomeSource,
+        // Include income fields based on income source
+        ...(formData.incomeSource === 'employed' && {
+          occupation: formData.occupation,
+          companyName: formData.companyName,
+          supervisorName: formData.supervisorName,
+          workPhone: formData.workPhone,
+          post: formData.post,
+          payrollFrequency: formData.payrollFrequency,
+          dateHired: formData.dateHired,
+          nextPayDate: formData.nextPayDate,
+        }),
+        ...(formData.incomeSource === 'employment-insurance' && {
+          employmentInsuranceStartDate: formData.employmentInsuranceStartDate,
+          nextDepositDate: formData.nextDepositDate,
+        }),
+        ...(formData.incomeSource === 'self-employed' && {
+          paidByDirectDeposit: formData.paidByDirectDeposit,
+          selfEmployedPhone: formData.selfEmployedPhone,
+          depositsFrequency: formData.depositsFrequency,
+          selfEmployedStartDate: formData.selfEmployedStartDate,
+          nextDepositDate: formData.nextDepositDate,
+        }),
+        ...((['csst-saaq', 'parental-insurance', 'retirement-plan'].includes(formData.incomeSource)) && {
+          nextDepositDate: formData.nextDepositDate,
+        }),
+        
+        // Loan Details
+        loanAmount: formData.loanAmount,
+        loanType: formData.loanType,
+        
+        // Pre-qualification
+        bankruptcyPlan: bankruptcyPlan,
+        
+        // Confirmation
+        confirmInformation: formData.confirmInformation,
+      }
+
+      console.log('Submitting loan application:', submissionData)
+
+      // Submit to API
+      const response = await fetch('/api/loan-application', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(submissionData),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit application')
+      }
+
+      console.log('Application submitted successfully:', result)
+      
+      // Mark as submitted
+      setIsSubmitted(true)
+      
+      // Clear localStorage after successful submission
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('loanFormData')
+        localStorage.removeItem('loanFormCurrentStep')
+        localStorage.removeItem('loanFormPreQualification')
+        localStorage.removeItem('loanFormBankruptcyPlan')
+        localStorage.removeItem('loanFormPreviousBorrower')
+      }
+    } catch (error: any) {
+      console.error('Error submitting application:', error)
+      setSubmitError(error.message || 'Failed to submit application. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
+  }
+
+  const fillRandomData = () => {
+    const randomData: FormData = {
+      // Personal Information
+      firstName: 'John',
+      lastName: 'Doe',
+      email: `test${Math.floor(Math.random() * 10000)}@example.com`,
+      phone: `514-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
+      dateOfBirth: '1990-05-15',
+      preferredLanguage: 'en',
+      
+      // Contact Details (Address)
+      streetNumber: String(Math.floor(Math.random() * 9000 + 1000)),
+      streetName: 'Main Street',
+      apartmentNumber: String(Math.floor(Math.random() * 100)),
+      city: 'Montreal',
+      province: 'Quebec',
+      postalCode: 'H2X 1Y7',
+      movingDate: '2024-01-15',
+
+      // Financial Obligations (Quebec only)
+      residenceStatus: 'tenant',
+      grossSalary: '50000',
+      rentOrMortgageCost: '1200',
+      heatingElectricityCost: '150',
+      carLoan: '0',
+      furnitureLoan: '0',
+
+      // References
+      reference1FirstName: 'Jane',
+      reference1LastName: 'Smith',
+      reference1Phone: '514-555-1234',
+      reference1Relationship: 'friend',
+      reference2FirstName: 'Bob',
+      reference2LastName: 'Johnson',
+      reference2Phone: '514-555-5678',
+      reference2Relationship: 'colleague',
+
+      // Your Income (Employed example)
+      incomeSource: 'employed',
+      occupation: 'Software Developer',
+      companyName: 'Tech Corp',
+      supervisorName: 'Alice Manager',
+      workPhone: '514-555-9999',
+      post: 'Developer',
+      payrollFrequency: 'bi-weekly',
+      dateHired: '2020-01-15',
+      nextPayDate: '2024-12-31',
+      employmentInsuranceStartDate: '',
+      paidByDirectDeposit: '',
+      selfEmployedPhone: '',
+      depositsFrequency: '',
+      selfEmployedStartDate: '',
+      nextDepositDate: '',
+
+      // Loan Details
+      loanAmount: '1000',
+      loanPurpose: '',
+      repaymentPeriod: '',
+      paymentFrequency: '',
+
+      // Confirmation & Submission
+      loanType: 'without-documents',
+      confirmInformation: true,
+      agreeTerms: true,
+      agreePrivacy: true,
+      consentCredit: true,
+    }
+    
+    setFormData(randomData)
+    setBankruptcyPlan(false)
   }
 
   const handleStartOver = () => {
@@ -658,6 +838,19 @@ export default function LoanApplicationForm() {
 
       {/* Form Content */}
       <div className='rounded-lg bg-background-secondary p-4 sm:p-6'>
+        {/* DEV ONLY: Fill Random Data Button */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className='mb-4 flex justify-end'>
+            <button
+              onClick={fillRandomData}
+              type='button'
+              className='rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:shadow-md'
+            >
+              🎲 Fill Random Data (DEV)
+            </button>
+          </div>
+        )}
+        
         {/* Step Title - Hidden on mobile since it's shown in mobile indicator */}
         <div className='mb-4 hidden sm:mb-6 sm:block'>
           <h2 className='mb-2 text-2xl font-bold text-primary'>
@@ -686,7 +879,7 @@ export default function LoanApplicationForm() {
                   value={formData.firstName}
                   onChange={e => updateFormData('firstName', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='Your first name'
+                  placeholder='e.g., Jean'
                 />
               </div>
               <div>
@@ -698,7 +891,7 @@ export default function LoanApplicationForm() {
                   value={formData.lastName}
                   onChange={e => updateFormData('lastName', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='Your last name'
+                  placeholder='e.g., Tremblay'
                 />
               </div>
             </div>
@@ -742,7 +935,7 @@ export default function LoanApplicationForm() {
                   value={formData.phone}
                   onChange={e => updateFormData('phone', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='(999) 999-9999'
+                  placeholder='514-555-1234'
                 />
               </div>
               <div>
@@ -754,7 +947,7 @@ export default function LoanApplicationForm() {
                   value={formData.email}
                   onChange={e => updateFormData('email', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='khalidmossaid@gmail.com'
+                  placeholder='jean.tremblay@email.com'
                 />
               </div>
             </div>
@@ -798,7 +991,7 @@ export default function LoanApplicationForm() {
                   value={formData.streetNumber}
                   onChange={e => updateFormData('streetNumber', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='Tesy'
+                  placeholder='123'
                 />
               </div>
               <div>
@@ -810,7 +1003,7 @@ export default function LoanApplicationForm() {
                   value={formData.streetName}
                   onChange={e => updateFormData('streetName', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='rue 1'
+                  placeholder='Rue Sainte-Catherine'
                 />
               </div>
               <div>
@@ -822,7 +1015,7 @@ export default function LoanApplicationForm() {
                   value={formData.apartmentNumber}
                   onChange={e => updateFormData('apartmentNumber', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                  placeholder='apprt 31'
+                  placeholder='Apt 5'
                 />
               </div>
             </div>
@@ -1206,7 +1399,7 @@ export default function LoanApplicationForm() {
                       value={formData.workPhone}
                       onChange={e => updateFormData('workPhone', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='(999) 999-9999'
+                      placeholder='514-555-1234'
                     />
                   </div>
                   <div>
@@ -1335,7 +1528,7 @@ export default function LoanApplicationForm() {
                       value={formData.selfEmployedPhone}
                       onChange={e => updateFormData('selfEmployedPhone', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='(999) 999-9999'
+                      placeholder='514-555-1234'
                     />
                   </div>
                   <div>
@@ -1491,6 +1684,25 @@ export default function LoanApplicationForm() {
           </div>
         )}
 
+        {/* Error Display */}
+        {submitError && (
+          <div className='mt-6 rounded-lg bg-red-50 p-4 border border-red-200'>
+            <div className='flex items-start'>
+              <div className='flex-shrink-0'>
+                <svg className='h-5 w-5 text-red-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
+                </svg>
+              </div>
+              <div className='ml-3'>
+                <h3 className='text-sm font-medium text-red-800'>
+                  {t('Submission_Error') || 'Error submitting application'}
+                </h3>
+                <p className='mt-1 text-sm text-red-700'>{submitError}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Navigation Buttons */}
         <div className='mt-6 flex justify-between'>
           <Button
@@ -1511,9 +1723,9 @@ export default function LoanApplicationForm() {
             <Button
               onClick={handleSubmit}
               size='large'
-              disabled={!formData.loanType || !formData.confirmInformation}
+              disabled={!formData.loanType || !formData.confirmInformation || isSubmitting}
             >
-              {t('Confirm')} →
+              {isSubmitting ? t('Submitting') + '...' : t('Confirm') + ' →'}
             </Button>
           )}
         </div>

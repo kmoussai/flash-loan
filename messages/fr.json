@@ -294,5 +294,7 @@
   "Proof_Of_Identity": "Preuve d'identité",
   "Fraud_Warning": "AVIS IMPORTANT : Tous les documents jugés frauduleux seront envoyés aux autorités policières",
   "Confirm_Information_Accurate": "Je confirme que toutes les informations que j'ai fournies sont actuelles et exactes et que je comprends et accepte les termes et conditions.",
-  "Confirm": "Confirmer"
+  "Confirm": "Confirmer",
+  "Submitting": "Envoi en cours",
+  "Submission_Error": "Erreur lors de l'envoi de la demande"
 }
