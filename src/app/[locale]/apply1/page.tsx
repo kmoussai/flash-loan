@@ -75,7 +75,7 @@ export default function MicroLoanApplicationPage() {
     if (locale && formData.preferredLanguage !== locale) {
       updateFormData('preferredLanguage', locale)
     }
-  }, [locale])
+  }, [locale, formData.preferredLanguage])
 
   // Save form data to localStorage
   useEffect(() => {
@@ -408,14 +408,14 @@ export default function MicroLoanApplicationPage() {
                     </div>
                     <h3 className='text-2xl font-bold text-gray-800 mb-4'>Connect Your Bank Account</h3>
                     <p className='text-gray-600 mb-6'>Securely verify your bank account to complete your loan application</p>
-                    <div className='grid grid-cols-2 gap-4 mb-6'>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6'>
                       <div className='p-4 bg-white rounded-lg shadow-sm border border-gray-200'>
                         <div className='text-sm font-medium text-gray-500'>Bank Name</div>
-                        <div className='text-lg font-semibold text-gray-800'>RBC Royal Bank</div>
+                        <div className='text-lg font-semibold text-gray-800 truncate'>RBC Royal Bank</div>
                       </div>
                       <div className='p-4 bg-white rounded-lg shadow-sm border border-gray-200'>
                         <div className='text-sm font-medium text-gray-500'>Account Type</div>
-                        <div className='text-lg font-semibold text-gray-800'>Chequing Account</div>
+                        <div className='text-lg font-semibold text-gray-800 truncate'>Chequing Account</div>
                       </div>
                     </div>
                     <div className='text-sm text-gray-500 mb-6'>
@@ -441,7 +441,7 @@ export default function MicroLoanApplicationPage() {
                       Submitting Application...
                     </h3>
                     <p className='text-gray-600 mb-6'>
-                      Your bank verification is complete. We're now submitting your loan application.
+                      Your bank verification is complete. We&apos;re now submitting your loan application.
                     </p>
                     <div className='rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-4'>
                       <p className='text-sm text-blue-700'>

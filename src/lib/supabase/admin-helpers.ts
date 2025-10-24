@@ -1,7 +1,7 @@
 // Admin helper functions for managing users and staff
 // Only accessible by admin role staff members
 
-import type { StaffRole, Database, UserInsert, StaffInsert } from './types'
+import type { StaffRole, Database, UserInsert, StaffInsert, Staff } from './types'
 import { createClient } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -444,11 +444,16 @@ export async function getAllStaffMembers(isServer = false) {
   const { data: staffData, error } = await supabase
     .from('staff')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false }) as { data: Staff[] | null, error: any }
 
   if (error) {
     console.error('[getAllStaffMembers] Error:', error.message)
     return { success: false, error: error.message }
+  }
+
+  if (!staffData) {
+    console.error('[getAllStaffMembers] No staff data returned')
+    return { success: false, error: 'No staff data returned' }
   }
 
   // Manually fetch user details for each staff member
@@ -457,11 +462,17 @@ export async function getAllStaffMembers(isServer = false) {
   const { data: usersData, error: usersError } = await supabase
     .from('users')
     .select('id, first_name, last_name, email')
-    .in('id', staffIds)
+    .in('id', staffIds) as { data: { id: string, first_name: string | null, last_name: string | null, email: string | null }[] | null, error: any }
 
   if (usersError) {
     console.error('[getAllStaffMembers] Error fetching users:', usersError.message)
     // Return staff data without user details if users fetch fails
+    return { success: true, staff: staffData.map(s => ({ ...s, users: null })) }
+  }
+
+  if (!usersData) {
+    console.error('[getAllStaffMembers] No users data returned')
+    // Return staff data without user details if no users data
     return { success: true, staff: staffData.map(s => ({ ...s, users: null })) }
   }
 

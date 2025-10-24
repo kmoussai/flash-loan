@@ -109,12 +109,6 @@ export default function LoanApplicationForm() {
   const params = useParams()
   const locale = params.locale as string
 
-  // Update preferred language when locale changes
-  useEffect(() => {
-    if (locale && formData.preferredLanguage !== locale) {
-      updateFormData('preferredLanguage', locale)
-    }
-  }, [locale])
   const [showPreQualification, setShowPreQualification] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('loanFormPreQualification')
@@ -367,6 +361,13 @@ export default function LoanApplicationForm() {
   const updateFormData = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
+
+  // Update preferred language when locale changes
+  useEffect(() => {
+    if (locale && formData.preferredLanguage !== locale) {
+      updateFormData('preferredLanguage', locale)
+    }
+  }, [locale, formData.preferredLanguage])
 
   // Get current step key based on province
   const getCurrentStepKey = () => {
