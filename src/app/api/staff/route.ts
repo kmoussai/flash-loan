@@ -87,6 +87,8 @@ export async function POST(request: Request) {
     const result = await createStaffMember({
       email: body.email,
       password: body.password,
+      firstName: body.firstName,
+      lastName: body.lastName,
       role: (body.role || 'intern') as StaffRole,
       department: body.department,
       autoConfirmEmail: true

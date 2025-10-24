@@ -5,12 +5,23 @@ import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
 import type { Staff } from '@/src/lib/supabase/types'
 
+// Extended type for staff with user details
+interface StaffWithDetails extends Staff {
+  users: {
+    first_name: string | null
+    last_name: string | null
+    email: string | null
+  } | null
+}
+
 export default function StaffPage() {
-  const [staff, setStaff] = useState<Staff[]>([])
+  const [staff, setStaff] = useState<StaffWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     role: 'intern' as 'admin' | 'support' | 'intern'
@@ -81,6 +92,8 @@ export default function StaffPage() {
 
       // Reset form and close modal
       setFormData({
+        firstName: '',
+        lastName: '',
         email: '',
         password: '',
         role: 'intern'
@@ -175,6 +188,40 @@ export default function StaffPage() {
               )}
 
               <form onSubmit={handleAddStaff} className='space-y-4'>
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <div>
+                    <label className='mb-1 block text-sm font-medium text-gray-700'>
+                      First Name *
+                    </label>
+                    <input
+                      type='text'
+                      required
+                      value={formData.firstName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, firstName: e.target.value })
+                      }
+                      className='w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                      placeholder='John'
+                    />
+                  </div>
+
+                  <div>
+                    <label className='mb-1 block text-sm font-medium text-gray-700'>
+                      Last Name *
+                    </label>
+                    <input
+                      type='text'
+                      required
+                      value={formData.lastName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, lastName: e.target.value })
+                      }
+                      className='w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                      placeholder='Doe'
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className='mb-1 block text-sm font-medium text-gray-700'>
                     Email *
@@ -290,7 +337,7 @@ export default function StaffPage() {
                 <thead className='bg-gray-50'>
                   <tr>
                     <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                      Staff ID
+                      Staff Member
                     </th>
                     <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Role
@@ -312,7 +359,7 @@ export default function StaffPage() {
                       key={member.id}
                       className='transition-colors hover:bg-gray-50'
                     >
-                      <td className='whitespace-nowrap px-4 py-2'>
+                      <td className='px-4 py-2'>
                         <div className='flex items-center'>
                           <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600'>
                             {member.role === 'admin'
@@ -322,9 +369,25 @@ export default function StaffPage() {
                                 : '📚'}
                           </div>
                           <div className='ml-3'>
-                            <div className='font-mono text-sm text-gray-900'>
-                              {member.id.substring(0, 8)}...
-                            </div>
+                            {member.users?.first_name || member.users?.last_name ? (
+                              <>
+                                <div className='text-sm font-medium text-gray-900'>
+                                  {member.users.first_name} {member.users.last_name}
+                                </div>
+                                <div className='text-xs text-gray-500'>
+                                  {member.users.email}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className='text-sm font-medium text-gray-900'>
+                                  {member.users?.email || 'No email'}
+                                </div>
+                                <div className='font-mono text-xs text-gray-400'>
+                                  {member.id.substring(0, 8)}...
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       </td>

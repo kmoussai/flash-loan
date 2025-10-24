@@ -167,6 +167,8 @@ export async function createClientUser(params: CreateUserParams, isServer = true
 export interface CreateStaffParams {
   email: string
   password: string
+  firstName?: string
+  lastName?: string
   role: StaffRole
   department?: string
   autoConfirmEmail?: boolean
@@ -207,7 +209,9 @@ export async function createStaffMember(params: CreateStaffParams, isServer = tr
     user_metadata: {
       signup_type: 'staff',
       role: params.role,
-      department: params.department
+      department: params.department,
+      first_name: params.firstName,
+      last_name: params.lastName
     }
   })
 
@@ -216,6 +220,7 @@ export async function createStaffMember(params: CreateStaffParams, isServer = tr
   }
 
   // The trigger will automatically create the staff in public.staff
+  // and insert first_name/last_name into public.users from user_metadata
   // Wait a moment for trigger to complete
   await new Promise(resolve => setTimeout(resolve, 100))
 
@@ -434,7 +439,9 @@ export async function getAllStaffMembers(isServer = false) {
   }
 
   // RLS will handle permissions automatically
-  const { data, error } = await supabase
+  // Join with users table to get first_name and last_name
+  // Since staff.id = users.id, we can manually join them
+  const { data: staffData, error } = await supabase
     .from('staff')
     .select('*')
     .order('created_at', { ascending: false })
@@ -444,6 +451,29 @@ export async function getAllStaffMembers(isServer = false) {
     return { success: false, error: error.message }
   }
 
-  return { success: true, staff: data }
+  // Manually fetch user details for each staff member
+  const staffIds = staffData.map(s => s.id)
+  
+  const { data: usersData, error: usersError } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, email')
+    .in('id', staffIds)
+
+  if (usersError) {
+    console.error('[getAllStaffMembers] Error fetching users:', usersError.message)
+    // Return staff data without user details if users fetch fails
+    return { success: true, staff: staffData.map(s => ({ ...s, users: null })) }
+  }
+
+  // Combine staff with their user details
+  const staffWithUsers = staffData.map(staff => {
+    const user = usersData.find(u => u.id === staff.id)
+    return {
+      ...staff,
+      users: user || null
+    }
+  })
+
+  return { success: true, staff: staffWithUsers }
 }
 
