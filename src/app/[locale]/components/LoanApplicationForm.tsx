@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
+import { useParams } from 'next/navigation'
 import Button from './Button'
 import Select from './Select'
 
@@ -104,6 +105,15 @@ const CANADIAN_PROVINCES = [
 
 export default function LoanApplicationForm() {
   const t = useTranslations('')
+  const params = useParams()
+  const locale = params.locale as string
+
+  // Update preferred language when locale changes
+  useEffect(() => {
+    if (locale && formData.preferredLanguage !== locale) {
+      updateFormData('preferredLanguage', locale)
+    }
+  }, [locale])
   const [showPreQualification, setShowPreQualification] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('loanFormPreQualification')
@@ -149,7 +159,7 @@ export default function LoanApplicationForm() {
       email: '',
       phone: '',
       dateOfBirth: '',
-      preferredLanguage: '',
+      preferredLanguage: locale || 'en',
       streetNumber: '',
       streetName: '',
       apartmentNumber: '',
@@ -518,7 +528,7 @@ export default function LoanApplicationForm() {
       email: '',
       phone: '',
       dateOfBirth: '',
-      preferredLanguage: 'en',
+      preferredLanguage: locale || 'en',
       streetNumber: '',
       streetName: '',
       apartmentNumber: '',
@@ -740,57 +750,62 @@ export default function LoanApplicationForm() {
   // Pre-qualification screen
   if (showPreQualification) {
     return (
-      <div className='mx-auto max-w-4xl'>
-        <div className='rounded-lg bg-background-secondary p-4 sm:p-6 md:p-8'>
+      <div className='mx-auto max-w-5xl'>
+        <div className='rounded-2xl bg-white/80 backdrop-blur-xl border border-white/20 shadow-xl shadow-[#097fa5]/10 p-6 sm:p-8 md:p-10'>
           {/* Header */}
-          <div className='mb-6 text-center sm:mb-8'>
-            <h2 className='mb-3 text-2xl font-bold text-primary sm:mb-4 sm:text-3xl'>
+          <div className='mb-8 text-center'>
+            <div className='mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#333366] via-[#097fa5] to-[#0a95c2] shadow-xl shadow-[#097fa5]/30'>
+              <svg className='h-8 w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
+              </svg>
+            </div>
+            <h2 className='mb-4 text-4xl font-bold bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-transparent'>
               {t('Get_Quick_Loan_Quote')}
             </h2>
-            <p className='text-base text-secondary sm:text-lg'>
+            <p className='text-lg text-gray-600'>
               {t('Answer_Simple_Questions')}
             </p>
           </div>
 
           {/* Requirements */}
-          <div className='mb-6 grid gap-4 sm:mb-8 sm:gap-6 md:grid-cols-2'>
+          <div className='mb-8 grid gap-6 sm:gap-8 md:grid-cols-2'>
             {/* 18+ Requirement */}
-            <div className='flex flex-col items-center rounded-lg bg-background p-4 text-center sm:p-6'>
-              <div className='mb-3 text-5xl font-bold text-gray-400 sm:mb-4 sm:text-6xl'>18+</div>
-              <p className='text-xs text-text-secondary sm:text-sm'>{t('Must_Be_18')}</p>
+            <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-white/90 to-white/70 backdrop-blur-sm border border-white/30 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
+              <div className='mb-4 text-6xl font-bold bg-gradient-to-r from-[#333366] to-[#097fa5] bg-clip-text text-transparent'>18+</div>
+              <p className='text-sm text-gray-600 font-medium'>{t('Must_Be_18')}</p>
             </div>
 
             {/* Canadian Resident Requirement */}
-            <div className='flex flex-col items-center rounded-lg bg-background p-4 text-center sm:p-6'>
-              <div className='mb-3 text-5xl sm:mb-4 sm:text-6xl'>🍁</div>
-              <p className='text-xs text-text-secondary sm:text-sm'>
+            <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-white/90 to-white/70 backdrop-blur-sm border border-white/30 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
+              <div className='mb-4 text-6xl'>🍁</div>
+              <p className='text-sm text-gray-600 font-medium'>
                 {t('Must_Be_Canadian')}
               </p>
             </div>
           </div>
 
           {/* Bankruptcy Question */}
-          <div className='mb-5 sm:mb-6'>
-            <p className='mb-3 text-base font-medium text-secondary sm:mb-4 sm:text-lg'>
+          <div className='mb-8'>
+            <p className='mb-4 text-lg font-semibold text-[#333366]'>
               {t('Bankruptcy_Question')}
             </p>
-            <div className='flex gap-3 sm:gap-4'>
+            <div className='flex gap-4'>
               <button
                 onClick={() => setBankruptcyPlan(true)}
-                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
+                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
                   bankruptcyPlan
-                    ? 'border-primary bg-primary text-white'
-                    : 'border-gray-300 bg-background text-primary hover:border-primary'
+                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
                 }`}
               >
                 {t('Yes')}
               </button>
               <button
                 onClick={() => setBankruptcyPlan(false)}
-                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
+                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
                   !bankruptcyPlan
-                    ? 'border-secondary bg-secondary text-white'
-                    : 'border-gray-300 bg-background text-primary hover:border-secondary'
+                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
                 }`}
               >
                 {t('No')}
@@ -799,8 +814,8 @@ export default function LoanApplicationForm() {
 
             {/* Warning Message */}
             {bankruptcyPlan && (
-              <div className='mt-3 rounded-lg border-2 border-red-500 bg-red-50 p-3 sm:mt-4 sm:p-4'>
-                <p className='text-xs font-semibold text-red-700 sm:text-sm'>
+              <div className='mt-4 rounded-xl border-2 border-red-500/50 bg-gradient-to-r from-red-50 to-red-100 p-4 shadow-lg'>
+                <p className='text-sm font-semibold text-red-700'>
                   {t('Bankruptcy_Warning')}
                 </p>
               </div>
@@ -808,27 +823,27 @@ export default function LoanApplicationForm() {
           </div>
 
           {/* Previous Borrower Question */}
-          <div className='mb-6 sm:mb-8'>
-            <p className='mb-3 text-sm text-primary sm:mb-4 sm:text-base'>
+          <div className='mb-8'>
+            <p className='mb-4 text-lg font-semibold text-[#333366]'>
               {t('Previous_Borrower_Question')}
             </p>
-            <div className='flex gap-3 sm:gap-4'>
+            <div className='flex gap-4'>
               <button
                 onClick={() => setPreviousBorrower(true)}
-                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
+                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
                   previousBorrower
-                    ? 'border-primary bg-primary text-white'
-                    : 'border-gray-300 bg-background text-primary hover:border-primary'
+                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
                 }`}
               >
                 {t('Yes')}
               </button>
               <button
                 onClick={() => setPreviousBorrower(false)}
-                className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all sm:px-6 sm:py-3 sm:text-base ${
+                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
                   !previousBorrower
-                    ? 'border-secondary bg-secondary text-white'
-                    : 'border-gray-300 bg-background text-primary hover:border-secondary'
+                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
                 }`}
               >
                 {t('No')}
@@ -837,11 +852,11 @@ export default function LoanApplicationForm() {
           </div>
 
           {/* Get Started Button */}
-          <div className='flex justify-center sm:justify-end'>
+          <div className='flex justify-center'>
             <Button
               size='large'
               onClick={() => setShowPreQualification(false)}
-              className='hover:bg-secondary/90 w-full bg-secondary text-white sm:w-auto'
+              className='px-8 py-4 text-lg font-semibold bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] text-white shadow-xl shadow-[#097fa5]/30 hover:shadow-2xl hover:scale-105 transition-all duration-300 w-full sm:w-auto'
             >
               {t('Get_Started')}
             </Button>
@@ -852,59 +867,56 @@ export default function LoanApplicationForm() {
   }
 
   return (
-    <div className='mx-auto max-w-4xl'>
+    <div className='mx-auto max-w-5xl'>
       {/* Start Over Button */}
-      <div className='mb-3 flex justify-end px-2 sm:mb-4 sm:px-0'>
+      <div className='mb-6 flex justify-end px-2 sm:px-0'>
         <button
           onClick={handleStartOver}
-          className='text-xs text-text-secondary transition-colors hover:text-primary hover:underline sm:text-sm'
+          className='rounded-lg bg-gradient-to-r from-gray-100 to-gray-200 px-4 py-2 text-sm text-gray-600 transition-all duration-300 hover:from-[#097fa5]/10 hover:to-[#0a95c2]/10 hover:text-[#333366] hover:shadow-md'
         >
           ← {t('Back_To_PreQualification') || 'Back to Pre-qualification'}
         </button>
       </div>
 
       {/* Step Indicators - Desktop Version (hidden on mobile) */}
-      <div className='mb-6 hidden sm:block'>
-        <div className='mx-auto flex max-w-3xl items-start justify-between'>
+      <div className='mb-8 hidden sm:block'>
+        <div className='relative mx-auto max-w-4xl'>
+          {/* Background gradient line */}
+          <div className='absolute top-6 left-6 right-6 h-0.5 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200'></div>
+          
+          <div className='relative flex items-center justify-between'>
           {stepsWithNumbers.map((step, index) => (
-            <React.Fragment key={step.number}>
-              {/* Step Circle with Icon */}
-              <div className='flex flex-col items-center'>
+              <div key={step.number} className='flex flex-col items-center relative'>
                 <div
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                  className={`flex h-12 w-12 items-center justify-center rounded-full transition-all duration-500 shadow-lg z-10 ${
                     currentStep >= step.number
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-gray-300 bg-background text-gray-400'
+                      ? 'bg-gradient-to-br from-[#333366] via-[#097fa5] to-[#0a95c2] text-white shadow-xl shadow-[#097fa5]/30 scale-110'
+                      : 'bg-white text-gray-400 border-2 border-gray-200 hover:border-[#097fa5]'
                   }`}
                 >
-                  {step.icon}
+                  {currentStep > step.number ? (
+                    <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={3} d='M5 13l4 4L19 7' />
+                    </svg>
+                  ) : (
+                    step.icon
+                  )}
                 </div>
-                {/* Step Label */}
-                <span className='mt-1.5 w-20 text-center text-xs text-text-secondary'>
+                <div className={`mt-3 text-center text-xs font-semibold transition-colors duration-300 ${
+                  currentStep >= step.number ? 'text-[#333366]' : 'text-gray-500'
+                }`}>
                   {step.title}
-                </span>
               </div>
-
-              {/* Connector Line */}
-              {index < stepsWithNumbers.length - 1 && (
-                <div className='relative mt-6 h-0.5 flex-1 bg-gray-300'>
-                  <div
-                    className='absolute left-0 top-0 h-full bg-primary transition-all duration-500'
-                    style={{
-                      width: currentStep > step.number ? '100%' : '0%'
-                    }}
-                  />
                 </div>
-              )}
-            </React.Fragment>
           ))}
+          </div>
         </div>
       </div>
 
       {/* Mobile Step Indicator - Compact dots version */}
-      <div className='mb-4 block px-2 sm:hidden'>
+      <div className='mb-6 block px-2 sm:hidden'>
         {/* Progress Text */}
-        <div className='mb-2 text-center text-xs font-medium text-text-secondary'>
+        <div className='mb-3 text-center text-sm font-semibold text-[#333366]'>
           {t('Step')} {currentStep} {t('Of')} {stepsWithNumbers.length}
         </div>
         {/* Dots */}
@@ -912,24 +924,24 @@ export default function LoanApplicationForm() {
           {stepsWithNumbers.map((step) => (
             <div
               key={step.number}
-              className={`h-2 w-2 rounded-full transition-all ${
+              className={`h-3 w-3 rounded-full transition-all duration-300 ${
                 currentStep === step.number
-                  ? 'w-8 bg-primary'
+                  ? 'w-8 bg-gradient-to-r from-[#333366] to-[#097fa5] shadow-lg shadow-[#097fa5]/30'
                   : currentStep > step.number
-                  ? 'bg-primary'
+                  ? 'bg-gradient-to-r from-[#333366] to-[#097fa5] shadow-lg shadow-[#097fa5]/30'
                   : 'bg-gray-300'
               }`}
             />
           ))}
         </div>
         {/* Current Step Title */}
-        <div className='mt-2 text-center text-sm font-semibold text-primary'>
+        <div className='mt-3 text-center text-sm font-bold text-[#333366]'>
           {stepsWithNumbers[currentStep - 1]?.title}
         </div>
       </div>
 
       {/* Form Content */}
-      <div className='rounded-lg bg-background-secondary p-4 sm:p-6'>
+      <div className='rounded-2xl bg-white/80 backdrop-blur-xl border border-white/20 shadow-xl shadow-[#097fa5]/10 p-6 sm:p-8'>
         {/* DEV ONLY: Developer Tools */}
         {process.env.NODE_ENV === 'development' && (
           <div className='mb-4 flex gap-3 justify-end'>
@@ -951,11 +963,11 @@ export default function LoanApplicationForm() {
         )}
         
         {/* Step Title - Hidden on mobile since it's shown in mobile indicator */}
-        <div className='mb-4 hidden sm:mb-6 sm:block'>
-          <h2 className='mb-2 text-2xl font-bold text-primary'>
+        <div className='mb-8 hidden sm:mb-8 sm:block text-center'>
+          <h2 className='mb-3 text-3xl font-bold bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-transparent'>
             {stepsWithNumbers[currentStep - 1]?.title}
           </h2>
-          <p className='text-sm text-text-secondary'>
+          <p className='text-gray-600 text-lg'>
             {stepsWithNumbers[currentStep - 1]?.description}
           </p>
         </div>
@@ -1010,23 +1022,6 @@ export default function LoanApplicationForm() {
               </div>
               <div>
                 <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Your_Language')} *
-                </label>
-                <Select
-                  value={formData.preferredLanguage}
-                  onValueChange={value => updateFormData('preferredLanguage', value)}
-                  placeholder={t('Select_Language')}
-                  options={[
-                    { value: 'en', label: 'English' },
-                    { value: 'fr', label: 'Français' }
-                  ]}
-                />
-              </div>
-            </div>
-
-            <div className='grid gap-4 md:grid-cols-2'>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Phone_Number')} *
                 </label>
                 <input
@@ -1037,6 +1032,9 @@ export default function LoanApplicationForm() {
                   placeholder='514-555-1234'
                 />
               </div>
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
               <div>
                 <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
                   {t('Email_Address')} *
@@ -1047,6 +1045,20 @@ export default function LoanApplicationForm() {
                   onChange={e => updateFormData('email', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='jean.tremblay@email.com'
+                />
+              </div>
+              <div>
+                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                  {t('Province')} *
+                </label>
+                <Select
+                  value={formData.province}
+                  onValueChange={value => updateFormData('province', value)}
+                  placeholder={t('Select_Province')}
+                  options={CANADIAN_PROVINCES.map(province => ({
+                    value: province,
+                    label: province
+                  }))}
                 />
               </div>
             </div>
@@ -1130,20 +1142,6 @@ export default function LoanApplicationForm() {
                   onChange={e => updateFormData('city', e.target.value)}
                   className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
                   placeholder='test'
-                />
-              </div>
-              <div>
-                <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
-                  {t('Province')} *
-                </label>
-                <Select
-                  value={formData.province}
-                  onValueChange={value => updateFormData('province', value)}
-                  placeholder={t('Select_Province')}
-                  options={CANADIAN_PROVINCES.map(prov => ({
-                    value: prov,
-                    label: prov
-                  }))}
                 />
               </div>
               <div>
@@ -1308,7 +1306,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference1FirstName}
                       onChange={e => updateFormData('reference1FirstName', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='dfsdf'
+                      placeholder='First name'
                     />
                   </div>
                   <div>
@@ -1320,7 +1318,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference1LastName}
                       onChange={e => updateFormData('reference1LastName', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='sdfsdf'
+                      placeholder='Last name'
                     />
                   </div>
                 </div>
@@ -1334,7 +1332,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference1Phone}
                       onChange={e => updateFormData('reference1Phone', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='(324) 242-3423'
+                      placeholder='Phone number'
                     />
                   </div>
                   <div>
@@ -1346,7 +1344,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference1Relationship}
                       onChange={e => updateFormData('reference1Relationship', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='Feds'
+                      placeholder='Relationship'
                     />
                   </div>
                 </div>
@@ -1367,7 +1365,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference2FirstName}
                       onChange={e => updateFormData('reference2FirstName', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='fsdafr'
+                      placeholder='First name'
                     />
                   </div>
                   <div>
@@ -1379,7 +1377,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference2LastName}
                       onChange={e => updateFormData('reference2LastName', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='fafs'
+                      placeholder='Last name'
                     />
                   </div>
                 </div>
@@ -1393,7 +1391,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference2Phone}
                       onChange={e => updateFormData('reference2Phone', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='(234) 235-3245'
+                      placeholder='Phone number'
                     />
                   </div>
                   <div>
@@ -1405,7 +1403,7 @@ export default function LoanApplicationForm() {
                       value={formData.reference2Relationship}
                       onChange={e => updateFormData('reference2Relationship', e.target.value)}
                       className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
-                      placeholder='dsfsdaf'
+                      placeholder='Relationship'
                     />
                   </div>
                 </div>
@@ -1695,12 +1693,18 @@ export default function LoanApplicationForm() {
 
         {/* Step 6: Bank Verification (IBV) */}
         {getCurrentStepKey() === 'ibv' && (
-          <div className='space-y-4'>
-            <div className='mb-6 text-center'>
-              <h2 className='mb-2 text-2xl font-bold text-primary'>
+          <div className='space-y-6'>
+            <div className='mb-8 text-center'>
+              <div className='mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#333366] via-[#097fa5] to-[#0a95c2] shadow-xl shadow-[#097fa5]/30'>
+                <svg className='h-8 w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <rect x='3' y='11' width='18' height='11' rx='2' ry='2' />
+                  <path d='M7 11V7a5 5 0 0 1 10 0v4' />
+                </svg>
+              </div>
+              <h2 className='mb-3 text-3xl font-bold bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-transparent'>
                 {t('Bank_Verification')}
               </h2>
-              <p className='text-text-secondary'>
+              <p className='text-gray-600 text-lg'>
                 {t('IBV_Step_Description')}
               </p>
             </div>
@@ -1717,13 +1721,13 @@ export default function LoanApplicationForm() {
                     <div className='ml-3'>
                       <h3 className='text-sm font-medium text-blue-800'>
                         {t('Why_Verify_Bank')}
-                      </h3>
+                </h3>
                       <div className='mt-2 text-sm text-blue-700'>
                         <ul className='list-disc ml-4 space-y-1'>
                           <li>{t('Instant_Approval')}</li>
                           <li>{t('Secure_Connection')}</li>
                           <li>{t('No_Documents_Needed')}</li>
-                        </ul>
+                  </ul>
                       </div>
                     </div>
                   </div>
@@ -1753,8 +1757,8 @@ export default function LoanApplicationForm() {
                       </h3>
                       <p className='text-sm text-gray-600'>
                         Select your financial institution to continue
-                      </p>
-                    </div>
+                  </p>
+                </div>
 
                     {/* Simulated bank selection */}
                     <div className='space-y-3'>
@@ -1770,10 +1774,10 @@ export default function LoanApplicationForm() {
                             TD
                           </div>
                           <span className='text-sm font-medium'>TD Bank</span>
-                        </button>
-                        
-                        <button
-                          type='button'
+              </button>
+
+              <button
+                type='button'
                           className='flex items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all'
                           onClick={() => {
                             setTimeout(() => setIbvVerified(true), 1500)
@@ -1826,8 +1830,8 @@ export default function LoanApplicationForm() {
                     <div className='text-center pt-4 border-t border-gray-200'>
                       <p className='text-xs text-gray-500'>
                         🔒 Your banking credentials are never shared with us
-                      </p>
-                    </div>
+                  </p>
+                </div>
                   </div>
                 </div>
 
@@ -1840,8 +1844,8 @@ export default function LoanApplicationForm() {
                       className='text-sm text-gray-500 hover:text-gray-700 underline'
                     >
                       Skip verification (DEV)
-                    </button>
-                  </div>
+              </button>
+            </div>
                 )}
               </>
             ) : (
@@ -1864,11 +1868,11 @@ export default function LoanApplicationForm() {
 
             {/* Confirmation - Only show when verified */}
             {ibvVerified && (
-              <div className='mt-6 rounded-lg border-2 border-primary/20 bg-primary/5 p-6'>
-                <label className='flex items-start cursor-pointer'>
-                  <input
-                    type='checkbox'
-                    checked={formData.confirmInformation}
+              <div className='mt-8 rounded-xl border-2 border-[#097fa5]/20 bg-gradient-to-r from-[#097fa5]/5 to-[#0a95c2]/5 p-6 shadow-lg'>
+                <label className='flex items-start cursor-pointer group'>
+                <input
+                  type='checkbox'
+                  checked={formData.confirmInformation}
                     onChange={e => {
                       const isChecked = e.target.checked
                       // When user accepts, set all consent fields to true
@@ -1877,12 +1881,12 @@ export default function LoanApplicationForm() {
                       updateFormData('agreePrivacy', isChecked)
                       updateFormData('consentCredit', isChecked)
                     }}
-                    className='mt-1 h-5 w-5 rounded border-gray-300 text-primary focus:ring-2 focus:ring-primary cursor-pointer'
+                    className='mt-1 h-6 w-6 rounded border-2 border-gray-300 text-[#097fa5] focus:ring-2 focus:ring-[#097fa5] cursor-pointer transition-all group-hover:border-[#097fa5]'
                   />
-                  <span className='ml-3 text-sm text-gray-700'>
-                    {t('Confirm_Information_Accurate')} <span className='text-red-600'>*</span>
-                  </span>
-                </label>
+                  <span className='ml-4 text-sm text-gray-700 font-medium'>
+                    {t('Confirm_Information_Accurate')} <span className='text-red-500 font-bold'>*</span>
+                </span>
+              </label>
               </div>
             )}
           </div>
@@ -1908,13 +1912,13 @@ export default function LoanApplicationForm() {
         )}
 
         {/* Navigation Buttons */}
-        <div className='mt-6 flex justify-between'>
+        <div className='mt-8 flex justify-between gap-4'>
           <Button
             onClick={prevStep}
             disabled={currentStep === 1}
             variant='secondary'
             size='large'
-            className={currentStep === 1 ? 'invisible' : ''}
+            className={`${currentStep === 1 ? 'invisible' : ''} bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 border border-gray-300 hover:from-gray-200 hover:to-gray-300 shadow-md transition-all duration-300`}
           >
             {t('Previous')}
           </Button>
@@ -1924,6 +1928,11 @@ export default function LoanApplicationForm() {
               onClick={handleSubmit} 
               size='large'
               disabled={!ibvVerified || !formData.confirmInformation || isSubmitting}
+              className={`px-8 py-3 text-lg font-semibold shadow-lg transition-all duration-300 ${
+                !ibvVerified || !formData.confirmInformation || isSubmitting
+                  ? 'bg-gradient-to-r from-gray-300 to-gray-400 text-gray-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] text-white hover:shadow-xl hover:shadow-[#097fa5]/30 hover:scale-105'
+              }`}
             >
               {isSubmitting 
                 ? t('Submitting') + '...' 
@@ -1935,7 +1944,11 @@ export default function LoanApplicationForm() {
               }
             </Button>
           ) : (
-            <Button onClick={nextStep} size='large'>
+            <Button
+              onClick={nextStep} 
+              size='large'
+              className='px-8 py-3 text-lg font-semibold bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] text-white shadow-lg shadow-[#097fa5]/30 hover:shadow-xl hover:scale-105 transition-all duration-300'
+            >
               {t('Continue')} →
             </Button>
           )}
