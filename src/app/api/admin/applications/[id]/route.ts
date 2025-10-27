@@ -83,11 +83,12 @@ export async function GET(
     }
 
     // Transform the data structure
+    const app = application as any
     const applicationData = {
-      ...application,
-      users: Array.isArray(application.users) ? application.users[0] : application.users,
-      addresses: application.addresses || [],
-      references: application.references || []
+      ...app,
+      users: Array.isArray(app.users) ? app.users[0] : app.users,
+      addresses: app.addresses || [],
+      references: app.references || []
     }
 
     return NextResponse.json({
