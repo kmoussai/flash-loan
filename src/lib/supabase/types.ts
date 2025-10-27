@@ -123,6 +123,12 @@ export interface LoanApplication {
   submitted_at: string | null
   approved_at: string | null
   rejected_at: string | null
+  // Flinks fields
+  flinks_login_id: string | null
+  flinks_request_id: string | null
+  flinks_institution: string | null
+  flinks_verification_status: string | null
+  flinks_connected_at: string | null
 }
 
 export interface Reference {

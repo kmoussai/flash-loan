@@ -31,6 +31,11 @@ export async function GET(request: NextRequest) {
         submitted_at,
         approved_at,
         rejected_at,
+        flinks_login_id,
+        flinks_request_id,
+        flinks_institution,
+        flinks_verification_status,
+        flinks_connected_at,
         users!loan_applications_client_id_fkey (
           id,
           first_name,

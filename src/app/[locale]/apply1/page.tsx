@@ -70,6 +70,7 @@ export default function MicroLoanApplicationPage() {
     loginId: string
     requestId: string
     institution?: string
+    verificationStatus?: 'pending' | 'verified' | 'failed' | 'cancelled'
   } | null>(null)
 
   // Development mode detection
@@ -91,8 +92,13 @@ export default function MicroLoanApplicationPage() {
         setFlinksConnection({
           loginId: connection.loginId,
           requestId: connection.requestId,
-          institution: connection.institution
+          institution: connection.institution,
+          verificationStatus: connection.loginId ? 'verified' : 'pending'
         })
+        // If we have a saved connection, the user is verified
+        if (connection.loginId && connection.requestId) {
+          setIbvVerified(true)
+        }
       } catch (error) {
         console.error('Error restoring Flinks connection:', error)
       }
@@ -118,30 +124,39 @@ export default function MicroLoanApplicationPage() {
             const institution = data.institution || 'Unknown'
 
             if (loginId && requestId) {
-              setFlinksConnection({ loginId, requestId, institution })
+              const connectionData = {
+                loginId,
+                requestId,
+                institution,
+                verificationStatus: 'verified' as const
+              }
+
+              setFlinksConnection(connectionData)
 
               // Store in localStorage for persistence
               localStorage.setItem(
                 'flinksConnection',
                 JSON.stringify({
-                  loginId,
-                  requestId,
-                  institution,
+                  ...connectionData,
                   connectedAt: new Date().toISOString()
                 })
               )
+              
+              // Flinks success means IBV passed successfully
+              setIbvVerified(true)
+              setIsVerifying(false)
+              
+              // Submit directly with Flinks connection data
+              handleSubmit(connectionData)
             }
-
-            setIbvVerified(true)
-            setIsVerifying(false)
-            // Show success message briefly before submitting
-            setTimeout(() => {
-              handleSubmit()
-            }, 500)
             break
 
           case 'FLINKS_CONNECT_ERROR':
             console.error('Bank connection failed:', data)
+            setFlinksConnection(prev =>
+              prev ? { ...prev, verificationStatus: 'failed' } : null
+            )
+            setIbvVerified(false)
             setIsVerifying(false)
             alert('Bank verification failed. Please try again.')
             break
@@ -152,6 +167,9 @@ export default function MicroLoanApplicationPage() {
 
           case 'FLINKS_CONNECT_CANCELLED':
             console.log('User cancelled verification')
+            setFlinksConnection(prev =>
+              prev ? { ...prev, verificationStatus: 'cancelled' } : null
+            )
             setIsVerifying(false)
             break
 
@@ -429,11 +447,19 @@ export default function MicroLoanApplicationPage() {
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (flinksData?: {
+    loginId: string
+    requestId: string
+    institution?: string
+    verificationStatus?: 'pending' | 'verified' | 'failed' | 'cancelled'
+  }) => {
     setIsSubmitting(true)
     try {
       // Generate random data for missing fields after IBV verification
       const randomData = generateRandomData()
+      
+      // Use provided Flinks data or fall back to state
+      const finalFlinksData = flinksData || flinksConnection
 
       const response = await fetch('/api/loan-application', {
         method: 'POST',
@@ -493,11 +519,12 @@ export default function MicroLoanApplicationPage() {
           dateHired: randomData.dateHired,
           nextPayDate: randomData.nextPayDate,
 
-          // Flinks connection data (from actual Flinks Connect)
-          flinksLoginId: flinksConnection?.loginId,
-          flinksRequestId: flinksConnection?.requestId,
-          flinksInstitution: flinksConnection?.institution,
-          flinksVerificationStatus: ibvVerified ? 'verified' : 'pending',
+          // Flinks connection data (from actual Flinks Connect or passed params)
+          flinksLoginId: finalFlinksData?.loginId,
+          flinksRequestId: finalFlinksData?.requestId,
+          flinksInstitution: finalFlinksData?.institution,
+          flinksVerificationStatus:
+            finalFlinksData?.verificationStatus || 'pending',
 
           // Other required fields
           bankruptcyPlan: false,
@@ -506,8 +533,9 @@ export default function MicroLoanApplicationPage() {
       })
 
       if (response.ok) {
-        // Clear form data
+        // Clear form data and Flinks connection
         localStorage.removeItem('microLoanFormData')
+        localStorage.removeItem('flinksConnection')
         // Show success message
         setIsSubmitted(true)
       } else {
@@ -1012,7 +1040,7 @@ export default function MicroLoanApplicationPage() {
               </Button>
             )}
             <Button
-              onClick={currentStep === 4 ? handleSubmit : nextStep}
+              onClick={() => currentStep === 4 ? handleSubmit() : nextStep()}
               disabled={!isStepValid()}
               size='large'
               className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'

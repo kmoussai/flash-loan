@@ -84,7 +84,7 @@ interface LoanApplicationRequestBody {
   flinksLoginId?: string
   flinksRequestId?: string
   flinksInstitution?: string
-  flinksVerificationStatus?: string
+  flinksVerificationStatus?: 'pending' | 'verified' | 'failed' | 'cancelled'
 }
 
 // ===========================
@@ -263,6 +263,15 @@ export async function POST(request: NextRequest) {
     if (!validateLoanAmount(body.loanAmount)) {
       return NextResponse.json(
         { error: 'Loan amount must be between $1 and $1,500' },
+        { status: 400 }
+      )
+    }
+    
+    // Validate Flinks verification status if provided
+    if (body.flinksVerificationStatus && 
+        !['pending', 'verified', 'failed', 'cancelled'].includes(body.flinksVerificationStatus)) {
+      return NextResponse.json(
+        { error: 'Invalid Flinks verification status. Must be one of: pending, verified, failed, cancelled' },
         { status: 400 }
       )
     }
