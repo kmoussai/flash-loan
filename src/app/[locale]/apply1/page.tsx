@@ -66,6 +66,11 @@ export default function MicroLoanApplicationPage() {
   const [ibvStep, setIbvStep] = useState(1)
   const [isVerifying, setIsVerifying] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [flinksConnection, setFlinksConnection] = useState<{
+    loginId: string
+    requestId: string
+    institution?: string
+  } | null>(null)
 
   // Development mode detection
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -77,28 +82,62 @@ export default function MicroLoanApplicationPage() {
     }
   }, [locale, formData.preferredLanguage])
 
+  // Restore Flinks connection from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('flinksConnection')
+    if (stored) {
+      try {
+        const connection = JSON.parse(stored)
+        setFlinksConnection({
+          loginId: connection.loginId,
+          requestId: connection.requestId,
+          institution: connection.institution
+        })
+      } catch (error) {
+        console.error('Error restoring Flinks connection:', error)
+      }
+    }
+  }, [])
+
   // Flinks Connect event listener
   useEffect(() => {
     const handleFlinksMessage = (event: MessageEvent) => {
       // Only accept messages from Flinks demo
       if (event.origin !== 'https://demo.flinks.com') return
-
-      console.log('Flinks Connect Event:', event.data)
-
-     
       // Handle different Flinks events
       if (event.data && typeof event.data === 'object') {
-        const { step, data } = event.data
+        const { step, ...data } = event.data
 
         switch (step) {
-          case 'FLINKS_CONNECT_SUCCESS':
+          case 'REDIRECT':
             console.log('Bank connection successful:', data)
+
+            // Capture Flinks connection data
+            const loginId = data.loginId
+            const requestId = data.requestId
+            const institution = data.institution || 'Unknown'
+
+            if (loginId && requestId) {
+              setFlinksConnection({ loginId, requestId, institution })
+
+              // Store in localStorage for persistence
+              localStorage.setItem(
+                'flinksConnection',
+                JSON.stringify({
+                  loginId,
+                  requestId,
+                  institution,
+                  connectedAt: new Date().toISOString()
+                })
+              )
+            }
+
             setIbvVerified(true)
             setIsVerifying(false)
-            // Auto-submit after verification
+            // Show success message briefly before submitting
             setTimeout(() => {
               handleSubmit()
-            }, 1000)
+            }, 500)
             break
 
           case 'FLINKS_CONNECT_ERROR':
@@ -125,7 +164,7 @@ export default function MicroLoanApplicationPage() {
     // Add event listener when on step 4 (Bank Verification)
     if (currentStep === 4) {
       window.addEventListener('message', handleFlinksMessage)
-      
+
       // Cleanup on unmount
       return () => {
         window.removeEventListener('message', handleFlinksMessage)
@@ -454,6 +493,12 @@ export default function MicroLoanApplicationPage() {
           dateHired: randomData.dateHired,
           nextPayDate: randomData.nextPayDate,
 
+          // Flinks connection data (from actual Flinks Connect)
+          flinksLoginId: flinksConnection?.loginId,
+          flinksRequestId: flinksConnection?.requestId,
+          flinksInstitution: flinksConnection?.institution,
+          flinksVerificationStatus: ibvVerified ? 'verified' : 'pending',
+
           // Other required fields
           bankruptcyPlan: false,
           confirmInformation: formData.confirmInformation
@@ -599,7 +644,6 @@ export default function MicroLoanApplicationPage() {
     )
   }
 
-
   return (
     <div className='min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/20 px-4 py-4 sm:py-8'>
       <div className='mx-auto max-w-2xl'>
@@ -646,23 +690,23 @@ export default function MicroLoanApplicationPage() {
           </div>
         )}
 
-          {/* Progress Bar */}
-          <div className='mb-8'>
-            <div className='mb-4 flex items-center justify-between'>
-              <span className='text-sm font-medium text-gray-600'>
-                Step {currentStep} of 4
-              </span>
-              <span className='text-sm font-medium text-gray-600'>
-                {Math.round((currentStep / 4) * 100)}% Complete
-              </span>
-            </div>
-            <div className='h-2 w-full rounded-full bg-gray-200'>
-              <div
-                className='h-2 rounded-full bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] transition-all duration-300'
-                style={{ width: `${(currentStep / 4) * 100}%` }}
-              />
-            </div>
+        {/* Progress Bar */}
+        <div className='mb-8'>
+          <div className='mb-4 flex items-center justify-between'>
+            <span className='text-sm font-medium text-gray-600'>
+              Step {currentStep} of 4
+            </span>
+            <span className='text-sm font-medium text-gray-600'>
+              {Math.round((currentStep / 4) * 100)}% Complete
+            </span>
           </div>
+          <div className='h-2 w-full rounded-full bg-gray-200'>
+            <div
+              className='h-2 rounded-full bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] transition-all duration-300'
+              style={{ width: `${(currentStep / 4) * 100}%` }}
+            />
+          </div>
+        </div>
 
         {/* Form Container */}
         <div className='rounded-2xl border border-white/20 bg-white/80 p-4 shadow-xl shadow-[#097fa5]/10 backdrop-blur-xl sm:p-6 md:p-8'>
@@ -909,13 +953,12 @@ export default function MicroLoanApplicationPage() {
           {/* Step 4: Bank Verification */}
           {currentStep === 4 && (
             <div className='space-y-6'>
-
               {/* Flinks Connect Demo */}
               <div className='mb-6 sm:mb-8'>
                 <div className='overflow-hidden rounded-xl border border-gray-200 shadow-lg'>
                   {/* Flinks Connect iframe */}
                   <iframe
-                    className='flinksconnect w-full h-[500px] sm:h-[600px] md:h-[650px]'
+                    className='flinksconnect h-[500px] w-full sm:h-[600px] md:h-[650px]'
                     src='https://demo.flinks.com/v2/?headerEnable=false&demo=true'
                     title='Flinks Connect Demo'
                     allow='camera; microphone; geolocation'
@@ -974,8 +1017,11 @@ export default function MicroLoanApplicationPage() {
               size='large'
               className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
             >
-              {currentStep === 3 ? t('Continue_To_Verification') : 
-               currentStep === 4 ? t('Submit_Application') : t('Next')}
+              {currentStep === 3
+                ? t('Continue_To_Verification')
+                : currentStep === 4
+                  ? t('Submit_Application')
+                  : t('Next')}
             </Button>
           </div>
         </div>

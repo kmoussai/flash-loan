@@ -79,6 +79,12 @@ interface LoanApplicationRequestBody {
   
   // Confirmation
   confirmInformation: boolean
+  
+  // Flinks Connection Data (optional)
+  flinksLoginId?: string
+  flinksRequestId?: string
+  flinksInstitution?: string
+  flinksVerificationStatus?: string
 }
 
 // ===========================
@@ -381,7 +387,12 @@ export async function POST(request: NextRequest) {
       p_rent_or_mortgage_cost: body.rentOrMortgageCost ? parseFloat(body.rentOrMortgageCost) : null,
       p_heating_electricity_cost: body.heatingElectricityCost ? parseFloat(body.heatingElectricityCost) : null,
       p_car_loan: body.carLoan ? parseFloat(body.carLoan) : null,
-      p_furniture_loan: body.furnitureLoan ? parseFloat(body.furnitureLoan) : null
+      p_furniture_loan: body.furnitureLoan ? parseFloat(body.furnitureLoan) : null,
+      // Flinks connection data
+      p_flinks_login_id: body.flinksLoginId || null,
+      p_flinks_request_id: body.flinksRequestId || null,
+      p_flinks_institution: body.flinksInstitution || null,
+      p_flinks_verification_status: body.flinksVerificationStatus || 'pending'
     })
     
     if (submitError) {
