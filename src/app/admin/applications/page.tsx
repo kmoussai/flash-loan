@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
 import type { LoanApplication, ApplicationStatus } from '@/src/lib/supabase/types'
@@ -43,6 +44,7 @@ interface StatusCounts {
 }
 
 export default function ApplicationsPage() {
+  const router = useRouter()
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([])
   const [filteredApplications, setFilteredApplications] = useState<ApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -434,7 +436,10 @@ export default function ApplicationsPage() {
                         {formatDate(app.created_at)}
                       </td>
                       <td className='whitespace-nowrap px-4 py-2 text-sm'>
-                        <button className='mr-2 text-blue-600 hover:text-blue-800'>
+                        <button 
+                          onClick={() => router.push(`/admin/applications/${app.id}`)}
+                          className='mr-2 text-blue-600 hover:text-blue-800'
+                        >
                           View
                         </button>
                         <button className='text-green-600 hover:text-green-800'>
