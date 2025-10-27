@@ -29,7 +29,7 @@ export default function ApplyPage() {
               <Link href='/'>
                 <div className='relative h-10 w-28'>
                   <Image
-                    src='https://flash-loan.ca/wp-content/uploads/2025/01/FlashLoanLogo.png'
+                    src='/images/FlashLoanLogo.png'
                     alt='Flash-Loan Logo'
                     width={128}
                     height={48}
@@ -54,7 +54,7 @@ export default function ApplyPage() {
             <Link href='/'>
               <div className='relative h-12 w-32'>
                 <Image
-                  src='https://flash-loan.ca/wp-content/uploads/2025/01/FlashLoanLogo.png'
+                  src='/images/FlashLoanLogo.png'
                   alt='Flash-Loan Logo'
                   width={128}
                   height={48}

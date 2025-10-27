@@ -21,7 +21,7 @@ export const Header: FC<Props> = ({ locale }) => {
           <div className='flex flex-row items-center space-x-3'>
             <div className='relative h-12 w-32'>
               <Image
-                src='https://flash-loan.ca/wp-content/uploads/2025/01/FlashLoanLogo.png'
+                src='/images/FlashLoanLogo.png'
                 alt='Flash-Loan Logo'
                 width={48}
                 height={48}

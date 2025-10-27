@@ -54,7 +54,7 @@ export default function About() {
           <div className='mt-12 flex justify-center'>
             <div className='h-80 w-full max-w-2xl rounded-lg overflow-hidden shadow-lg'>
               <Image 
-                src='https://flash-loan.ca/wp-content/uploads/2025/01/crop-businessman-giving-contract-to-woman-to-sign-3760067-1024x682.jpeg'
+                src='/images/crop-businessman-giving-contract-to-woman-to-sign-3760067-1024x682.jpeg'
                 alt={t('Contract_Signing_Image_Alt')}
                 width={1024}
                 height={682}
