@@ -9,6 +9,8 @@ export type KycStatus = 'pending' | 'verified' | 'rejected'
 export type AddressType = 'current' | 'previous' | 'mailing' | 'work'
 export type LoanType = 'without-documents' | 'with-documents'
 export type ApplicationStatus = 'pending' | 'processing' | 'approved' | 'rejected' | 'cancelled'
+export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'other'
+export type IbvStatus = 'pending' | 'processing' | 'verified' | 'failed' | 'cancelled' | 'expired'
 export type IncomeSourceType = 
   | 'employed' 
   | 'employment-insurance' 
@@ -54,6 +56,89 @@ export type IncomeFields =
   | EmploymentInsuranceIncomeFields 
   | SelfEmployedIncomeFields 
   | OtherIncomeFields
+
+// ===========================
+// IBV PROVIDER DATA TYPES (JSONB)
+// ===========================
+
+export interface FlinksIbvData {
+  flinks_login_id: string
+  flinks_request_id: string
+  flinks_institution?: string
+  flinks_connected_at?: string
+}
+
+export interface InveriteIbvData {
+  // Connection metadata
+  session_id?: string
+  applicant_id?: string
+  request_guid?: string
+  verified_at?: string
+  
+  // Account information
+  account_info?: {
+    institution_number: string
+    transit_number: string
+    account_number: string
+    account_name: string
+    account_holder: string
+    balance: {
+      available: number | null
+      current: number | null
+    }
+  }
+  
+  // Account statistics
+  account_stats?: {
+    periods: string[]
+    number_of_deposits: Record<string, number>
+    amount_of_deposits: Record<string, number>
+    average_amount_of_deposits: Record<string, number>
+    avg_number_of_deposits: Record<string, number>
+    highest_deposit: number
+    lowest_deposit: number
+    number_of_withdrawals: Record<string, number>
+    amount_of_withdrawals: Record<string, number>
+    average_amount_of_withdrawals: Record<string, number>
+    average_number_of_withdrawals: Record<string, number>
+    highest_withdrawal: number
+    lowest_withdrawal: number
+    number_of_nsfs: number
+    highest_balance: number
+    lowest_balance: number
+    average_balance: number
+    highest_overdraft: number
+    lowest_overdraft: number
+    number_of_overdrafts: number
+    average_amount_of_overdrafts: number
+  }
+  
+  // Account statement/transactions
+  account_statement?: Array<{
+    date: string
+    description: string
+    debit: number | null
+    credit: number | null
+    balance: number
+  }>
+}
+
+export interface PlaidIbvData {
+  item_id: string
+  request_id?: string
+  institution?: string
+  access_token?: string
+}
+
+export interface OtherIbvData {
+  [key: string]: any
+}
+
+export type IbvProviderData = 
+  | FlinksIbvData 
+  | InveriteIbvData 
+  | PlaidIbvData 
+  | OtherIbvData
 
 // ===========================
 // TABLE TYPES
@@ -123,7 +208,12 @@ export interface LoanApplication {
   submitted_at: string | null
   approved_at: string | null
   rejected_at: string | null
-  // Flinks fields
+  // Modular IBV fields
+  ibv_provider: IbvProvider | null
+  ibv_status: IbvStatus | null
+  ibv_provider_data: IbvProviderData | null
+  ibv_verified_at: string | null
+  // Legacy Flinks fields (deprecated, kept for backward compatibility)
   flinks_login_id: string | null
   flinks_request_id: string | null
   flinks_institution: string | null
@@ -255,6 +345,11 @@ export interface LoanApplicationUpdate {
   submitted_at?: string
   approved_at?: string
   rejected_at?: string
+  // IBV fields
+  ibv_provider?: IbvProvider | null
+  ibv_status?: IbvStatus | null
+  ibv_provider_data?: IbvProviderData | null
+  ibv_verified_at?: string | null
 }
 
 export interface ReferenceUpdate {

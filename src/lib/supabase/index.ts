@@ -28,7 +28,13 @@ export type {
   AddressType,
   LoanType,
   ApplicationStatus,
-  IncomeSourceType
+  IncomeSourceType,
+  IbvProvider,
+  IbvStatus,
+  IbvProviderData,
+  FlinksIbvData,
+  InveriteIbvData,
+  PlaidIbvData
 } from './types'
 
 // Export user and staff helpers
@@ -87,3 +93,10 @@ export type {
   CreateStaffParams
 } from './admin-helpers'
 
+// Export IBV helpers
+export {
+  createIbvProviderData,
+  getProviderSpecificData,
+  determineIbvStatus,
+  isIbvDataComplete
+} from './ibv-helpers'
