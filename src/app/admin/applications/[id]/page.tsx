@@ -4,7 +4,20 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
+import Button from '@/src/app/[locale]/components/Button'
 import type { LoanApplication, ApplicationStatus } from '@/src/lib/supabase/types'
+
+// Mock IBV KPI data
+interface IBVKPIs {
+  bankVerificationScore: number
+  averageAccountBalance: number
+  monthlyIncomeVerified: number
+  accountAge: number // in days
+  transactionCount: number
+  overdraftOccurrences: number
+  kycRiskLevel: 'low' | 'medium' | 'high'
+  overallRiskScore: number
+}
 
 // Extended type for application with client details
 interface ApplicationWithDetails extends LoanApplication {
@@ -51,11 +64,31 @@ export default function ApplicationDetailsPage() {
   const [application, setApplication] = useState<ApplicationWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | 'all'>('all')
+  const [ibvKpis, setIbvKpis] = useState<IBVKPIs | null>(null)
+  const [showApproveModal, setShowApproveModal] = useState(false)
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [processing, setProcessing] = useState(false)
+
+  // Generate mock IBV KPIs
+  const generateMockIBVKPIs = (): IBVKPIs => {
+    const riskLevels = ['low', 'medium', 'high'] as const
+    return {
+      bankVerificationScore: Math.random() * 40 + 60, // 60-100
+      averageAccountBalance: Math.random() * 5000 + 1000, // $1,000 - $6,000
+      monthlyIncomeVerified: Math.random() * 2000 + 1500, // $1,500 - $3,500
+      accountAge: Math.random() * 1800 + 365, // 1-5 years in days
+      transactionCount: Math.floor(Math.random() * 50 + 10), // 10-60 transactions
+      overdraftOccurrences: Math.floor(Math.random() * 5), // 0-5 overdrafts
+      kycRiskLevel: riskLevels[Math.floor(Math.random() * 3)],
+      overallRiskScore: Math.random() * 50 + 30 // 30-80
+    }
+  }
 
   useEffect(() => {
     if (applicationId) {
       fetchApplicationDetails()
+      // Generate mock IBV KPIs
+      setIbvKpis(generateMockIBVKPIs())
     }
   }, [applicationId])
 
@@ -122,6 +155,50 @@ export default function ApplicationDetailsPage() {
       style: 'currency',
       currency: 'CAD'
     }).format(amount)
+  }
+
+  const formatCurrencyShort = (amount: number) => {
+    return new Intl.NumberFormat('en-CA', {
+      style: 'currency',
+      currency: 'CAD',
+      notation: 'compact'
+    }).format(amount)
+  }
+
+  const getRiskColor = (level: string) => {
+    switch(level) {
+      case 'low': return 'text-green-600 bg-green-50'
+      case 'medium': return 'text-yellow-600 bg-yellow-50'
+      case 'high': return 'text-red-600 bg-red-50'
+      default: return 'text-gray-600 bg-gray-50'
+    }
+  }
+
+  const getScoreColor = (score: number, maxScore: number = 100) => {
+    const percentage = (score / maxScore) * 100
+    if (percentage >= 80) return 'text-green-600'
+    if (percentage >= 60) return 'text-yellow-600'
+    return 'text-red-600'
+  }
+
+  const handleApprove = async () => {
+    setProcessing(true)
+    // TODO: Implement approve API call
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    setProcessing(false)
+    setShowApproveModal(false)
+    alert('Application approved successfully!')
+    router.push('/admin/applications')
+  }
+
+  const handleReject = async () => {
+    setProcessing(true)
+    // TODO: Implement reject API call
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    setProcessing(false)
+    setShowRejectModal(false)
+    alert('Application rejected.')
+    router.push('/admin/applications')
   }
 
   const getAddressString = () => {
@@ -195,50 +272,280 @@ export default function ApplicationDetailsPage() {
           </div>
         </div>
 
-        {/* Client Information Card */}
-        <div className='rounded-lg bg-white p-6 shadow-sm'>
-          <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-            <span className='text-xl'>👤</span>
-            <h2 className='text-lg font-semibold text-gray-900'>Client Information</h2>
-          </div>
-          
-          <div className='grid gap-6 md:grid-cols-2'>
-            <div>
-              <label className='text-xs font-medium text-gray-500'>Full Name</label>
-              <p className='mt-1 text-sm font-medium text-gray-900'>
-                {application.users?.first_name} {application.users?.last_name}
-              </p>
+        {/* Principal Client Information Row */}
+        <div className='rounded-xl bg-gradient-to-br from-[#333366] via-[#2a2d5a] to-[#1f2147] shadow-xl overflow-hidden border border-white/10'>
+          <div className='px-6 py-4'>
+            <div className='flex items-center justify-between'>
+              <div className='flex items-center gap-6'>
+                {/* Full Name */}
+                <div className='flex items-center gap-3'>
+                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
+                    <span className='text-2xl'>👤</span>
+                  </div>
+                  <div>
+                    <label className='text-xs font-bold text-white/60 uppercase'>Full Name</label>
+                    <p className='text-xl font-black text-white mt-0.5'>
+                      {application.users?.first_name} {application.users?.last_name}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Age */}
+                <div className='flex items-center gap-3 pl-6 border-l border-white/10'>
+                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
+                    <span className='text-2xl'>🎂</span>
+                  </div>
+                  <div>
+                    <label className='text-xs font-bold text-white/60 uppercase'>Age</label>
+                    <p className='text-xl font-black text-white mt-0.5'>
+                      {application.users?.date_of_birth 
+                        ? new Date().getFullYear() - new Date(application.users.date_of_birth).getFullYear()
+                        : 'N/A'} years old
+                    </p>
+                  </div>
+                </div>
+
+                {/* KYC Status */}
+                <div className='flex items-center gap-3 pl-6 border-l border-white/10'>
+                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
+                    <span className='text-2xl'>✅</span>
+                  </div>
+                  <div>
+                    <label className='text-xs font-bold text-white/60 uppercase'>KYC Status</label>
+                    <div className='mt-1'>
+                      <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-black uppercase ${
+                        application.users?.kyc_status === 'verified' 
+                          ? 'bg-[#097fa5] text-white shadow-lg' 
+                          : 'bg-yellow-500 text-white shadow-lg'
+                      }`}>
+                        {application.users?.kyc_status || 'PENDING'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            
+          </div>
+        </div>
+
+        {/* IBV Verification & Loan Details - Side by Side */}
+        <div className='grid gap-6 lg:grid-cols-2'>
+          {/* IBV Verification - Left Side */}
+          <div className='overflow-hidden rounded-xl bg-gradient-to-br from-[#333366] via-[#2a2d5a] to-[#1f2147] shadow-xl border border-white/10'>
+            <div className='bg-gradient-to-r from-[#097fa5]/20 to-transparent px-5 py-4'>
+              <div className='flex items-center gap-3'>
+                <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#097fa5] to-[#0a95c2] shadow-lg'>
+                  <span className='text-3xl text-white'>🏦</span>
+                </div>
+                <div className='flex-1'>
+                  <h2 className='text-xl font-black text-white'>IBV Verification</h2>
+                  <p className='text-xs text-white/60'>Risk Assessment</p>
+                </div>
+              </div>
+            </div>
+
+            {ibvKpis && (
+              <div className='bg-white p-5'>
+                <div className='grid gap-3 mb-4'>
+                  {/* Risk Score Header */}
+                  <div className='rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50 p-4 border-2 border-indigo-200'>
+                    <div className='flex items-center justify-between'>
+                      <div>
+                        <label className='text-xs font-bold text-gray-500 uppercase'>Overall Risk Score</label>
+                        <p className={`text-3xl font-black ${
+                          ibvKpis.overallRiskScore >= 70 ? 'text-green-600' : 
+                          ibvKpis.overallRiskScore >= 50 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {Math.round(ibvKpis.overallRiskScore)}%
+                        </p>
+                      </div>
+                      <div className='text-center'>
+                        <div className='flex h-14 w-14 items-center justify-center rounded-xl bg-white shadow-lg border-2 border-indigo-200 text-3xl'>
+                          {ibvKpis.overallRiskScore >= 70 ? '✅' : ibvKpis.overallRiskScore >= 50 ? '⚠️' : '❌'}
+                        </div>
+                        <p className={`mt-1 text-xs font-black ${
+                          ibvKpis.overallRiskScore >= 70 ? 'text-green-600' : 
+                          ibvKpis.overallRiskScore >= 50 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {ibvKpis.overallRiskScore >= 70 ? 'APPROVE' : ibvKpis.overallRiskScore >= 50 ? 'REVIEW' : 'REJECT'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Compact Metrics */}
+                  <div className='grid grid-cols-2 gap-2'>
+                    <div className='rounded-lg bg-green-50 p-3 border border-green-200'>
+                      <div className='flex items-center gap-2 mb-1'>
+                        <span className='text-sm'>📊</span>
+                        <label className='text-xs font-bold text-gray-600'>Verification</label>
+                      </div>
+                      <p className={`text-xl font-black ${getScoreColor(ibvKpis.bankVerificationScore)}`}>
+                        {Math.round(ibvKpis.bankVerificationScore)}%
+                      </p>
+                    </div>
+
+                    <div className='rounded-lg bg-blue-50 p-3 border border-blue-200'>
+                      <div className='flex items-center gap-2 mb-1'>
+                        <span className='text-sm'>💳</span>
+                        <label className='text-xs font-bold text-gray-600'>Balance</label>
+                      </div>
+                      <p className='text-lg font-black text-blue-600 truncate'>{formatCurrency(ibvKpis.averageAccountBalance)}</p>
+                    </div>
+
+                    <div className='rounded-lg bg-purple-50 p-3 border border-purple-200'>
+                      <div className='flex items-center gap-2 mb-1'>
+                        <span className='text-sm'>💵</span>
+                        <label className='text-xs font-bold text-gray-600'>Income</label>
+                      </div>
+                      <p className='text-lg font-black text-purple-600 truncate'>{formatCurrency(ibvKpis.monthlyIncomeVerified)}</p>
+                    </div>
+
+                    <div className='rounded-lg bg-orange-50 p-3 border border-orange-200'>
+                      <div className='flex items-center gap-2 mb-1'>
+                        <span className='text-sm'>✅</span>
+                        <label className='text-xs font-bold text-gray-600'>KYC</label>
+                      </div>
+                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black uppercase ${getRiskColor(ibvKpis.kycRiskLevel)}`}>
+                        {ibvKpis.kycRiskLevel}
+                      </span>
+                    </div>
+
+                    <div className='rounded-lg bg-teal-50 p-3 border border-teal-200'>
+                      <div className='flex items-center gap-2 mb-1'>
+                        <span className='text-sm'>⏰</span>
+                        <label className='text-xs font-bold text-gray-600'>Age</label>
+                      </div>
+                      <p className='text-xl font-black text-teal-600'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
+                    </div>
+
+                    <div className='rounded-lg bg-violet-50 p-3 border border-violet-200'>
+                      <div className='flex items-center gap-2 mb-1'>
+                        <span className='text-sm'>📈</span>
+                        <label className='text-xs font-bold text-gray-600'>Transactions</label>
+                      </div>
+                      <p className='text-xl font-black text-violet-600'>{ibvKpis.transactionCount}</p>
+                    </div>
+
+                    <div className={`rounded-lg p-3 border col-span-2 ${
+                      ibvKpis.overdraftOccurrences === 0 ? 'bg-green-50 border-green-200' : 
+                      ibvKpis.overdraftOccurrences <= 2 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
+                    }`}>
+                      <div className='flex items-center gap-2 mb-1'>
+                        <span className='text-sm'>⚠️</span>
+                        <label className='text-xs font-bold text-gray-600'>Overdrafts</label>
+                      </div>
+                      <p className={`text-2xl font-black ${
+                        ibvKpis.overdraftOccurrences === 0 ? 'text-green-600' : 
+                        ibvKpis.overdraftOccurrences <= 2 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {ibvKpis.overdraftOccurrences} in last 90 days
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Loan Information - Right Side */}
+          <div className='overflow-hidden rounded-xl bg-gradient-to-br from-[#097fa5] via-[#0a95c2] to-[#097fa5] shadow-xl border border-white/10'>
+            <div className='bg-gradient-to-r from-[#333366]/20 to-transparent px-5 py-4'>
+              <div className='flex items-center gap-3'>
+                <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#333366] to-[#2a2d5a] shadow-lg'>
+                  <span className='text-3xl text-white'>💰</span>
+                </div>
+                <div className='flex-1'>
+                  <h2 className='text-xl font-black text-white'>Loan Details</h2>
+                  <p className='text-xs text-white/60'>Application Information</p>
+                </div>
+              </div>
+            </div>
+
+            <div className='bg-gray-50 p-5'>
+              <div className='grid gap-4'>
+                {/* Loan Amount - Large */}
+                <div className='rounded-lg bg-gradient-to-br from-[#333366] to-[#097fa5] p-4 border-2 border-[#333366]/50 shadow-lg'>
+                  <label className='text-xs font-bold text-white uppercase mb-1 block'>Loan Amount</label>
+                  <p className='text-4xl font-black text-white drop-shadow-lg'>
+                    {formatCurrency(application.loan_amount)}
+                  </p>
+                </div>
+
+                {/* Income Source */}
+                <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <label className='text-xs font-bold text-gray-500 uppercase'>Income Source</label>
+                      <p className='text-lg font-black text-gray-900 capitalize mt-1'>
+                        {application.income_source.replace(/-/g, ' ')}
+                      </p>
+                    </div>
+                    <span className='text-2xl'>💼</span>
+                  </div>
+                </div>
+
+                {/* Bankruptcy Plan */}
+                <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <label className='text-xs font-bold text-gray-500 uppercase'>Bankruptcy Plan</label>
+                      <p className='text-lg font-black text-gray-900 mt-1'>
+                        {application.bankruptcy_plan ? 'Yes' : 'No'}
+                      </p>
+                    </div>
+                    <span className='text-2xl'>{application.bankruptcy_plan ? '⚠️' : '✅'}</span>
+                  </div>
+                </div>
+
+                {/* Income Fields Summary */}
+                {application.income_fields && Object.keys(application.income_fields).length > 0 && (
+                  <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
+                    <label className='text-xs font-bold text-gray-500 uppercase mb-2 block'>Income Details</label>
+                    <div className='space-y-1 text-xs text-gray-700'>
+                      {Object.entries(application.income_fields).slice(0, 3).map(([key, value]) => (
+                        <p key={key}>
+                          <span className='font-semibold capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
+                        </p>
+                      ))}
+                      {Object.keys(application.income_fields).length > 3 && (
+                        <p className='text-gray-500'>+{Object.keys(application.income_fields).length - 3} more</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Client Information - Compact */}
+        <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+          <h3 className='mb-4 text-lg font-bold text-gray-900'>Additional Information</h3>
+          
+          <div className='grid gap-4 md:grid-cols-3'>
+            {/* Email */}
             <div>
               <label className='text-xs font-medium text-gray-500'>Email</label>
-              <p className='mt-1 text-sm text-gray-900'>{application.users?.email || 'N/A'}</p>
+              <p className='mt-1 text-sm font-medium text-gray-900'>{application.users?.email || 'N/A'}</p>
             </div>
             
+            {/* Phone */}
             <div>
               <label className='text-xs font-medium text-gray-500'>Phone</label>
-              <p className='mt-1 text-sm text-gray-900'>{application.users?.phone || 'N/A'}</p>
+              <p className='mt-1 text-sm font-medium text-gray-900'>{application.users?.phone || 'N/A'}</p>
             </div>
             
+            {/* Language */}
             <div>
-              <label className='text-xs font-medium text-gray-500'>Date of Birth</label>
-              <p className='mt-1 text-sm text-gray-900'>{formatDate(application.users?.date_of_birth || null)}</p>
-            </div>
-            
-            <div>
-              <label className='text-xs font-medium text-gray-500'>Preferred Language</label>
-              <p className='mt-1 text-sm text-gray-900'>{application.users?.preferred_language || 'N/A'}</p>
-            </div>
-            
-            <div>
-              <label className='text-xs font-medium text-gray-500'>KYC Status</label>
-              <p className='mt-1 text-sm text-gray-900 uppercase'>{application.users?.kyc_status || 'N/A'}</p>
+              <label className='text-xs font-medium text-gray-500'>Language</label>
+              <p className='mt-1 text-sm font-medium text-gray-900'>{application.users?.preferred_language || 'N/A'}</p>
             </div>
           </div>
 
           {/* Address */}
           {application.addresses && application.addresses.length > 0 && (
-            <div className='mt-6 border-t border-gray-200 pt-6'>
+            <div className='mt-4 pt-4 border-t border-gray-200'>
               <label className='text-xs font-medium text-gray-500'>Address</label>
               <p className='mt-1 text-sm text-gray-900'>{getAddressString()}</p>
               {application.addresses[0].moving_date && (
@@ -249,10 +556,10 @@ export default function ApplicationDetailsPage() {
             </div>
           )}
 
-          {/* Financial Obligations (if Quebec) */}
+          {/* Financial Obligations - Compact */}
           {(application.users?.residence_status || application.users?.gross_salary) && (
-            <div className='mt-6 border-t border-gray-200 pt-6'>
-              <label className='text-xs font-medium text-gray-500'>Financial Obligations</label>
+            <div className='mt-4 pt-4 border-t border-gray-200'>
+              <label className='text-xs font-medium text-gray-500'>Financial Information</label>
               <div className='mt-2 grid gap-2 text-sm'>
                 {application.users?.residence_status && (
                   <p className='text-gray-700'>Residence: <span className='font-medium'>{application.users.residence_status}</span></p>
@@ -277,102 +584,138 @@ export default function ApplicationDetailsPage() {
           )}
         </div>
 
-        {/* Loan Information Card */}
-        <div className='rounded-lg bg-white p-6 shadow-sm'>
-          <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-            <span className='text-xl'>💰</span>
-            <h2 className='text-lg font-semibold text-gray-900'>Loan Information</h2>
+        {/* Income Details */}
+        {application.income_fields && Object.keys(application.income_fields).length > 0 && (
+          <div className='rounded-lg bg-white p-6 shadow-sm border border-gray-200'>
+            <h3 className='mb-4 text-lg font-bold text-gray-900'>Income Details</h3>
+            <div className='grid gap-2 text-sm'>
+              {Object.entries(application.income_fields).map(([key, value]) => (
+                <p key={key} className='text-gray-700'>
+                  <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
+                </p>
+              ))}
+            </div>
           </div>
-          
-          <div className='grid gap-6 md:grid-cols-2'>
-            <div>
-              <label className='text-xs font-medium text-gray-500'>Loan Amount</label>
-              <p className='mt-1 text-lg font-bold text-gray-900'>
-                {formatCurrency(application.loan_amount)}
-              </p>
+        )}
+        <div className='rounded-xl bg-gradient-to-br from-white to-blue-50 p-6 shadow-lg border-2 border-blue-100'>
+          <div className='mb-6 flex items-center gap-3 border-b-2 border-blue-200 pb-4'>
+            <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-2xl text-white shadow-lg'>
+              🏦
             </div>
-            
             <div>
-              <label className='text-xs font-medium text-gray-500'>Loan Type</label>
-              <p className='mt-1 text-sm text-gray-900 capitalize'>
-                {application.loan_type === 'with-documents' ? 'With Documents' : 'Without Documents'}
-              </p>
-            </div>
-            
-            <div>
-              <label className='text-xs font-medium text-gray-500'>Income Source</label>
-              <p className='mt-1 text-sm text-gray-900 capitalize'>
-                {application.income_source.replace(/-/g, ' ')}
-              </p>
-            </div>
-            
-            <div>
-              <label className='text-xs font-medium text-gray-500'>Bankruptcy Plan</label>
-              <p className='mt-1 text-sm text-gray-900'>
-                {application.bankruptcy_plan ? 'Yes' : 'No'}
-              </p>
+              <h2 className='text-xl font-bold text-gray-900'>IBV Verification & Risk Assessment</h2>
+              <p className='text-sm text-gray-600'>Instant Bank Verification Analysis</p>
             </div>
           </div>
 
-          {/* Income Fields */}
-          {application.income_fields && Object.keys(application.income_fields).length > 0 && (
-            <div className='mt-6 border-t border-gray-200 pt-6'>
-              <label className='text-xs font-medium text-gray-500'>Income Details</label>
-              <div className='mt-2 grid gap-2 text-sm'>
-                {Object.entries(application.income_fields).map(([key, value]) => (
-                  <p key={key} className='text-gray-700'>
-                    <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
-                  </p>
-                ))}
+          {ibvKpis && (
+            <div className='grid gap-6 md:grid-cols-2 lg:grid-cols-3'>
+              {/* Overall Risk Score */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <div className='mb-2 flex items-center justify-between'>
+                  <label className='text-xs font-semibold text-gray-500 uppercase'>Risk Score</label>
+                  <span className={`text-lg font-bold ${getScoreColor(ibvKpis.overallRiskScore)}`}>
+                    {Math.round(ibvKpis.overallRiskScore)}%
+                  </span>
+                </div>
+                <div className='h-2 w-full rounded-full bg-gray-100'>
+                  <div 
+                    className={`h-2 rounded-full ${
+                      ibvKpis.overallRiskScore >= 70 ? 'bg-green-500' : 
+                      ibvKpis.overallRiskScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${ibvKpis.overallRiskScore}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Bank Verification Score */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <div className='mb-2 flex items-center justify-between'>
+                  <label className='text-xs font-semibold text-gray-500 uppercase'>Bank Verification</label>
+                  <span className={`text-lg font-bold ${getScoreColor(ibvKpis.bankVerificationScore)}`}>
+                    {Math.round(ibvKpis.bankVerificationScore)}%
+                  </span>
+                </div>
+                <div className='h-2 w-full rounded-full bg-gray-100'>
+                  <div 
+                    className='h-2 rounded-full bg-green-500'
+                    style={{ width: `${ibvKpis.bankVerificationScore}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* KYC Risk Level */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <div className='mb-2 flex items-center justify-between'>
+                  <label className='text-xs font-semibold text-gray-500 uppercase'>KYC Risk</label>
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${getRiskColor(ibvKpis.kycRiskLevel)}`}>
+                    {ibvKpis.kycRiskLevel}
+                  </span>
+                </div>
+                <p className='text-sm text-gray-600 mt-2'>Identity verification status</p>
+              </div>
+
+              {/* Average Account Balance */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Avg Balance</label>
+                <p className='text-2xl font-bold text-blue-600'>{formatCurrency(ibvKpis.averageAccountBalance)}</p>
+                <p className='text-xs text-gray-500 mt-1'>Last 90 days average</p>
+              </div>
+
+              {/* Monthly Income Verified */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Verified Income</label>
+                <p className='text-2xl font-bold text-green-600'>{formatCurrency(ibvKpis.monthlyIncomeVerified)}</p>
+                <p className='text-xs text-gray-500 mt-1'>Monthly verified</p>
+              </div>
+
+              {/* Account Age */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Account Age</label>
+                <p className='text-2xl font-bold text-indigo-600'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
+                <p className='text-xs text-gray-500 mt-1'>{Math.round(ibvKpis.accountAge)} days</p>
+              </div>
+
+              {/* Transaction Count */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Transactions</label>
+                <p className='text-2xl font-bold text-purple-600'>{ibvKpis.transactionCount}</p>
+                <p className='text-xs text-gray-500 mt-1'>Last 30 days</p>
+              </div>
+
+              {/* Overdraft Occurrences */}
+              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
+                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Overdrafts</label>
+                <p className={`text-2xl font-bold ${ibvKpis.overdraftOccurrences === 0 ? 'text-green-600' : ibvKpis.overdraftOccurrences <= 2 ? 'text-yellow-600' : 'text-red-600'}`}>
+                  {ibvKpis.overdraftOccurrences}
+                </p>
+                <p className='text-xs text-gray-500 mt-1'>Last 90 days</p>
+              </div>
+
+              {/* Recommendation */}
+              <div className='rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 p-5 shadow-sm border-2 border-blue-200 col-span-full'>
+                <div className='flex items-center gap-3'>
+                  <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-md'>
+                    {ibvKpis.overallRiskScore >= 70 ? '✅' : ibvKpis.overallRiskScore >= 50 ? '⚠️' : '❌'}
+                  </div>
+                  <div>
+                    <p className='text-sm font-semibold text-gray-700'>
+                      {ibvKpis.overallRiskScore >= 70 
+                        ? 'Recommendation: APPROVE' 
+                        : ibvKpis.overallRiskScore >= 50 
+                        ? 'Recommendation: MANUAL REVIEW REQUIRED'
+                        : 'Recommendation: REJECT'}
+                    </p>
+                    <p className='text-xs text-gray-600 mt-1'>
+                      Based on IBV analysis, account history, and risk assessment
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
         </div>
-
-        {/* Flinks Information Card */}
-        {application.flinks_login_id && (
-          <div className='rounded-lg bg-white p-6 shadow-sm'>
-            <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-              <span className='text-xl'>🔐</span>
-              <h2 className='text-lg font-semibold text-gray-900'>Flinks Verification</h2>
-            </div>
-            
-            <div className='grid gap-6 md:grid-cols-2'>
-              <div>
-                <label className='text-xs font-medium text-gray-500'>Institution</label>
-                <p className='mt-1 text-sm text-gray-900'>{application.flinks_institution || 'N/A'}</p>
-              </div>
-              
-              <div>
-                <label className='text-xs font-medium text-gray-500'>Verification Status</label>
-                <p className='mt-1'>
-                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                    application.flinks_verification_status === 'verified' 
-                      ? 'bg-green-100 text-green-800' 
-                      : application.flinks_verification_status === 'failed'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {application.flinks_verification_status?.toUpperCase() || 'PENDING'}
-                  </span>
-                </p>
-              </div>
-
-              {application.flinks_connected_at && (
-                <div>
-                  <label className='text-xs font-medium text-gray-500'>Connected At</label>
-                  <p className='mt-1 text-sm text-gray-900'>{formatDateTime(application.flinks_connected_at)}</p>
-                </div>
-              )}
-            </div>
-
-            {application.flinks_login_id && (
-              <div className='mt-4 rounded-md bg-gray-50 p-3 text-xs'>
-                <p className='text-gray-500'>Login ID: <span className='font-mono text-gray-900'>{application.flinks_login_id}</span></p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* References Card */}
         {application.references && application.references.length > 0 && (
@@ -464,25 +807,136 @@ export default function ApplicationDetailsPage() {
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className='flex items-center justify-end gap-3'>
-          <button
-            onClick={() => router.push('/admin/applications')}
-            className='rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50'
-          >
-            Back to Applications
-          </button>
-          
-          <button
-            className='rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700'
-            onClick={() => {
-              // TODO: Implement process action
-              alert('Process functionality coming soon')
-            }}
-          >
-            Process Application
-          </button>
+        {/* Action Buttons - Modern Decision Interface */}
+        <div className='rounded-xl bg-white p-6 shadow-sm border border-gray-200'>
+          <div className='mb-4 flex items-center justify-between border-b border-gray-200 pb-4'>
+            <div>
+              <h3 className='text-lg font-semibold text-gray-900'>Decision</h3>
+              <p className='text-sm text-gray-600'>Review all information and KPIs before making a decision</p>
+            </div>
+            <button
+              onClick={() => router.push('/admin/applications')}
+              className='rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
+            >
+              ← Back to Applications
+            </button>
+          </div>
+
+          {application.application_status === 'pending' && (
+            <div className='flex items-center justify-center gap-4'>
+              <Button
+                onClick={() => setShowRejectModal(true)}
+                className='bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105'
+              >
+                ❌ Reject Application
+              </Button>
+              <Button
+                onClick={() => setShowApproveModal(true)}
+                className='bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105'
+              >
+                ✅ Approve Application
+              </Button>
+            </div>
+          )}
+
+          {application.application_status !== 'pending' && (
+            <div className='text-center py-8'>
+              <p className='text-gray-600'>This application has already been processed.</p>
+              <button
+                onClick={() => setShowApproveModal(true)}
+                className='mt-4 rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors'
+              >
+                View Details
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Approve Modal */}
+        {showApproveModal && (
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm'>
+            <div className='mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl'>
+              <div className='mb-4 text-center'>
+                <div className='mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100'>
+                  <span className='text-3xl'>✅</span>
+                </div>
+                <h3 className='text-xl font-bold text-gray-900'>Approve Application</h3>
+                <p className='mt-2 text-sm text-gray-600'>
+                  Are you sure you want to approve this application?
+                </p>
+                {ibvKpis && (
+                  <div className='mt-4 rounded-lg bg-green-50 p-3 text-left text-xs text-gray-700'>
+                    <p className='font-semibold mb-1'>Based on IBV Analysis:</p>
+                    <ul className='space-y-1'>
+                      <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
+                      <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
+                      <li>• KYC Level: {ibvKpis.kycRiskLevel.toUpperCase()}</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div className='flex gap-3'>
+                <button
+                  onClick={() => setShowApproveModal(false)}
+                  disabled={processing}
+                  className='flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApprove}
+                  disabled={processing}
+                  className='flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50'
+                >
+                  {processing ? 'Processing...' : 'Confirm Approval'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reject Modal */}
+        {showRejectModal && (
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm'>
+            <div className='mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl'>
+              <div className='mb-4 text-center'>
+                <div className='mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100'>
+                  <span className='text-3xl'>❌</span>
+                </div>
+                <h3 className='text-xl font-bold text-gray-900'>Reject Application</h3>
+                <p className='mt-2 text-sm text-gray-600'>
+                  Please provide a reason for rejection:
+                </p>
+                {ibvKpis && (
+                  <div className='mt-4 rounded-lg bg-red-50 p-3 text-left text-xs text-gray-700'>
+                    <p className='font-semibold mb-1'>Based on IBV Analysis:</p>
+                    <ul className='space-y-1'>
+                      <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
+                      <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
+                      <li>• KYC Level: {ibvKpis.kycRiskLevel.toUpperCase()}</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div className='flex gap-3'>
+                <button
+                  onClick={() => setShowRejectModal(false)}
+                  disabled={processing}
+                  className='flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReject}
+                  disabled={processing}
+                  className='flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50'
+                >
+                  {processing ? 'Processing...' : 'Confirm Rejection'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminDashboardLayout>
   )
