@@ -297,13 +297,13 @@ export default function ClientsPage() {
                 <thead className='bg-gray-50'>
                   <tr>
                     <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                      Client ID
+                      Client Name
+                    </th>
+                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                      Email
                     </th>
                     <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       KYC Status
-                    </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                      National ID
                     </th>
                     <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Joined
@@ -321,15 +321,25 @@ export default function ClientsPage() {
                     >
                       <td className='whitespace-nowrap px-4 py-2'>
                         <div className='flex items-center'>
-                          <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-600'>
-                            {client.kyc_status === 'verified' ? '✓' : '👤'}
+                          <div className='flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white'>
+                            {client.first_name?.[0] || client.last_name?.[0] || '👤'}
                           </div>
                           <div className='ml-3'>
-                            <div className='font-mono text-sm text-gray-900'>
-                              {client.id.substring(0, 8)}...
+                            <div className='font-semibold text-gray-900'>
+                              {client.first_name && client.last_name 
+                                ? `${client.first_name} ${client.last_name}`
+                                : client.first_name || client.last_name || 'Unknown'}
+                            </div>
+                            <div className='text-xs font-mono text-gray-500'>
+                              ID: {client.id.substring(0, 8)}...
                             </div>
                           </div>
                         </div>
+                      </td>
+                      <td className='whitespace-nowrap px-4 py-2 text-sm text-gray-900'>
+                        {client.email || (
+                          <span className='text-gray-400'>No email</span>
+                        )}
                       </td>
                       <td className='whitespace-nowrap px-4 py-2'>
                         <span
@@ -337,11 +347,6 @@ export default function ClientsPage() {
                         >
                           {client.kyc_status.toUpperCase()}
                         </span>
-                      </td>
-                      <td className='whitespace-nowrap px-4 py-2 text-sm text-gray-900'>
-                        {client.national_id || (
-                          <span className='text-gray-400'>Not provided</span>
-                        )}
                       </td>
                       <td className='whitespace-nowrap px-4 py-2 text-xs text-gray-500'>
                         {formatDate(client.created_at)}
