@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
 import Button from '@/src/app/[locale]/components/Button'
-import type { LoanApplication, ApplicationStatus } from '@/src/lib/supabase/types'
+import type { LoanApplication, ApplicationStatus, InveriteIbvData } from '@/src/lib/supabase/types'
 
 // Mock IBV KPI data
 interface IBVKPIs {
@@ -68,6 +68,31 @@ export default function ApplicationDetailsPage() {
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [showTransactionsModal, setShowTransactionsModal] = useState(false)
+  const [transactionSearch, setTransactionSearch] = useState('')
+
+  // Get transactions from Inverite data
+  const getTransactions = () => {
+    if (!application?.ibv_provider_data) return []
+    if (application.ibv_provider !== 'inverite') return []
+    
+    const inveriteData = application.ibv_provider_data as InveriteIbvData
+    if (!inveriteData || !inveriteData.account_statement) return []
+    
+    return inveriteData.account_statement
+  }
+
+  // Filter transactions based on search
+  const getFilteredTransactions = () => {
+    const transactions = getTransactions()
+    if (!transactionSearch) return transactions
+    
+    const searchLower = transactionSearch.toLowerCase()
+    return transactions.filter(tx =>
+      tx.description.toLowerCase().includes(searchLower) ||
+      tx.date.includes(searchLower)
+    )
+  }
 
   // Generate mock IBV KPIs
   const generateMockIBVKPIs = (): IBVKPIs => {
@@ -419,13 +444,17 @@ export default function ApplicationDetailsPage() {
                       <p className='text-xl font-black text-teal-600'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
                     </div>
 
-                    <div className='rounded-lg bg-violet-50 p-3 border border-violet-200'>
+                    <button 
+                      onClick={() => setShowTransactionsModal(true)}
+                      className='rounded-lg bg-violet-50 p-3 border border-violet-200 hover:bg-violet-100 transition-colors cursor-pointer text-left w-full'
+                    >
                       <div className='flex items-center gap-2 mb-1'>
                         <span className='text-sm'>📈</span>
                         <label className='text-xs font-bold text-gray-600'>Transactions</label>
                       </div>
                       <p className='text-xl font-black text-violet-600'>{ibvKpis.transactionCount}</p>
-                    </div>
+                      <p className='text-xs text-violet-600 mt-1'>Click to view details →</p>
+                    </button>
 
                     <div className={`rounded-lg p-3 border col-span-2 ${
                       ibvKpis.overdraftOccurrences === 0 ? 'bg-green-50 border-green-200' : 
@@ -597,126 +626,7 @@ export default function ApplicationDetailsPage() {
             </div>
           </div>
         )}
-        <div className='rounded-xl bg-gradient-to-br from-white to-blue-50 p-6 shadow-lg border-2 border-blue-100'>
-          <div className='mb-6 flex items-center gap-3 border-b-2 border-blue-200 pb-4'>
-            <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-2xl text-white shadow-lg'>
-              🏦
-            </div>
-            <div>
-              <h2 className='text-xl font-bold text-gray-900'>IBV Verification & Risk Assessment</h2>
-              <p className='text-sm text-gray-600'>Instant Bank Verification Analysis</p>
-            </div>
-          </div>
-
-          {ibvKpis && (
-            <div className='grid gap-6 md:grid-cols-2 lg:grid-cols-3'>
-              {/* Overall Risk Score */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <div className='mb-2 flex items-center justify-between'>
-                  <label className='text-xs font-semibold text-gray-500 uppercase'>Risk Score</label>
-                  <span className={`text-lg font-bold ${getScoreColor(ibvKpis.overallRiskScore)}`}>
-                    {Math.round(ibvKpis.overallRiskScore)}%
-                  </span>
-                </div>
-                <div className='h-2 w-full rounded-full bg-gray-100'>
-                  <div 
-                    className={`h-2 rounded-full ${
-                      ibvKpis.overallRiskScore >= 70 ? 'bg-green-500' : 
-                      ibvKpis.overallRiskScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${ibvKpis.overallRiskScore}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Bank Verification Score */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <div className='mb-2 flex items-center justify-between'>
-                  <label className='text-xs font-semibold text-gray-500 uppercase'>Bank Verification</label>
-                  <span className={`text-lg font-bold ${getScoreColor(ibvKpis.bankVerificationScore)}`}>
-                    {Math.round(ibvKpis.bankVerificationScore)}%
-                  </span>
-                </div>
-                <div className='h-2 w-full rounded-full bg-gray-100'>
-                  <div 
-                    className='h-2 rounded-full bg-green-500'
-                    style={{ width: `${ibvKpis.bankVerificationScore}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* KYC Risk Level */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <div className='mb-2 flex items-center justify-between'>
-                  <label className='text-xs font-semibold text-gray-500 uppercase'>KYC Risk</label>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${getRiskColor(ibvKpis.kycRiskLevel)}`}>
-                    {ibvKpis.kycRiskLevel}
-                  </span>
-                </div>
-                <p className='text-sm text-gray-600 mt-2'>Identity verification status</p>
-              </div>
-
-              {/* Average Account Balance */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Avg Balance</label>
-                <p className='text-2xl font-bold text-blue-600'>{formatCurrency(ibvKpis.averageAccountBalance)}</p>
-                <p className='text-xs text-gray-500 mt-1'>Last 90 days average</p>
-              </div>
-
-              {/* Monthly Income Verified */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Verified Income</label>
-                <p className='text-2xl font-bold text-green-600'>{formatCurrency(ibvKpis.monthlyIncomeVerified)}</p>
-                <p className='text-xs text-gray-500 mt-1'>Monthly verified</p>
-              </div>
-
-              {/* Account Age */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Account Age</label>
-                <p className='text-2xl font-bold text-indigo-600'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
-                <p className='text-xs text-gray-500 mt-1'>{Math.round(ibvKpis.accountAge)} days</p>
-              </div>
-
-              {/* Transaction Count */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Transactions</label>
-                <p className='text-2xl font-bold text-purple-600'>{ibvKpis.transactionCount}</p>
-                <p className='text-xs text-gray-500 mt-1'>Last 30 days</p>
-              </div>
-
-              {/* Overdraft Occurrences */}
-              <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-                <label className='text-xs font-semibold text-gray-500 uppercase mb-2 block'>Overdrafts</label>
-                <p className={`text-2xl font-bold ${ibvKpis.overdraftOccurrences === 0 ? 'text-green-600' : ibvKpis.overdraftOccurrences <= 2 ? 'text-yellow-600' : 'text-red-600'}`}>
-                  {ibvKpis.overdraftOccurrences}
-                </p>
-                <p className='text-xs text-gray-500 mt-1'>Last 90 days</p>
-              </div>
-
-              {/* Recommendation */}
-              <div className='rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 p-5 shadow-sm border-2 border-blue-200 col-span-full'>
-                <div className='flex items-center gap-3'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-md'>
-                    {ibvKpis.overallRiskScore >= 70 ? '✅' : ibvKpis.overallRiskScore >= 50 ? '⚠️' : '❌'}
-                  </div>
-                  <div>
-                    <p className='text-sm font-semibold text-gray-700'>
-                      {ibvKpis.overallRiskScore >= 70 
-                        ? 'Recommendation: APPROVE' 
-                        : ibvKpis.overallRiskScore >= 50 
-                        ? 'Recommendation: MANUAL REVIEW REQUIRED'
-                        : 'Recommendation: REJECT'}
-                    </p>
-                    <p className='text-xs text-gray-600 mt-1'>
-                      Based on IBV analysis, account history, and risk assessment
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
+     
         {/* References Card */}
         {application.references && application.references.length > 0 && (
           <div className='rounded-lg bg-white p-6 shadow-sm'>
@@ -932,6 +842,111 @@ export default function ApplicationDetailsPage() {
                   className='flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50'
                 >
                   {processing ? 'Processing...' : 'Confirm Rejection'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Transactions Modal */}
+        {showTransactionsModal && (
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm' onClick={() => setShowTransactionsModal(false)}>
+            <div className='mx-4 w-full max-w-4xl h-[700px] rounded-2xl bg-white shadow-2xl flex flex-col' onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className='border-b border-gray-200 px-6 py-4 flex-shrink-0'>
+                <div className='flex items-center justify-between'>
+                  <div className='flex items-center gap-3'>
+                    <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600'>
+                      <span className='text-3xl text-white'>🏦</span>
+                    </div>
+                    <div>
+                      <h3 className='text-xl font-bold text-gray-900'>Transaction History</h3>
+                      <p className='text-sm text-gray-600'>
+                        {getTransactions().length} transactions found
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowTransactionsModal(false)}
+                    className='flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors'
+                  >
+                    <span className='text-2xl'>×</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search */}
+              <div className='border-b border-gray-200 px-6 py-4 flex-shrink-0'>
+                <input
+                  type='text'
+                  placeholder='Search transactions...'
+                  value={transactionSearch}
+                  onChange={(e) => setTransactionSearch(e.target.value)}
+                  className='w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20'
+                />
+              </div>
+
+              {/* Transaction List */}
+              <div className='flex-1 overflow-y-auto px-6 py-4'>
+                {getFilteredTransactions().length === 0 ? (
+                  <div className='py-12 text-center'>
+                    <span className='mb-4 block text-5xl'>📭</span>
+                    <p className='text-gray-600'>No transactions found</p>
+                    {transactionSearch && (
+                      <p className='mt-2 text-sm text-gray-500'>Try a different search term</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className='space-y-3'>
+                    {getFilteredTransactions().map((tx, index) => {
+                      // Calculate amount from debit/credit
+                      const amount = tx.credit || -(tx.debit || 0)
+                      const isCredit = amount > 0
+                      
+                      return (
+                        <div 
+                          key={index} 
+                          className='rounded-lg border border-gray-200 p-4 hover:border-violet-300 hover:bg-violet-50/50 transition-colors'
+                        >
+                          <div className='flex items-center justify-between'>
+                            <div className='flex-1'>
+                              <div className='flex items-center gap-3'>
+                                <span className='text-2xl'>
+                                  {isCredit ? '⬇️' : '⬆️'}
+                                </span>
+                                <div>
+                                  <p className='font-semibold text-gray-900'>{tx.description}</p>
+                                  <p className='text-sm text-gray-600'>{tx.date}</p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className='text-right'>
+                              <p className={`text-lg font-bold ${
+                                isCredit ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {formatCurrency(amount)}
+                              </p>
+                              {tx.balance !== undefined && (
+                                <p className='text-xs text-gray-500'>
+                                  Balance: {formatCurrency(tx.balance)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className='border-t border-gray-200 px-6 py-4 flex-shrink-0'>
+                <button
+                  onClick={() => setShowTransactionsModal(false)}
+                  className='w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors'
+                >
+                  Close
                 </button>
               </div>
             </div>
