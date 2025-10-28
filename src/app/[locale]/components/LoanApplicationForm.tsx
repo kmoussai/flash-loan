@@ -752,162 +752,215 @@ export default function LoanApplicationForm() {
   // Pre-qualification screen
   if (showPreQualification) {
     return (
-      <div className='mx-auto max-w-5xl'>
-        <div className='rounded-2xl bg-white/80 backdrop-blur-xl border border-white/20 shadow-xl shadow-[#097fa5]/10 p-6 sm:p-8 md:p-10'>
-          {/* Header */}
-          <div className='mb-8 text-center'>
-            <div className='mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#333366] via-[#097fa5] to-[#0a95c2] shadow-xl shadow-[#097fa5]/30'>
-              <svg className='h-8 w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
-              </svg>
-            </div>
-            <h2 className='mb-4 text-4xl font-bold bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-transparent'>
-              {t('Get_Quick_Loan_Quote')}
-            </h2>
-            <p className='text-lg text-gray-600'>
-              {t('Answer_Simple_Questions')}
-            </p>
-          </div>
+      <div className='mx-auto max-w-4xl px-4'>
+        {/* Main Card with Glassmorphism */}
+        <div className='relative'>
+          {/* Glow Effect - Hidden on mobile */}
+          <div className='hidden sm:block absolute -inset-0.5 bg-gradient-to-br from-[#333366] via-[#097fa5] to-[#0a95c2] rounded-2xl sm:rounded-3xl blur-xl opacity-20 animate-pulse'></div>
+          
+          <div className='relative rounded-2xl sm:rounded-3xl bg-white shadow-xl overflow-hidden'>
+            {/* Animated Top Bar */}
+            <div className='h-1 sm:h-2 bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2]'></div>
 
-          {/* Requirements */}
-          <div className='mb-8 grid gap-6 sm:gap-8 md:grid-cols-2'>
-            {/* 18+ Requirement */}
-            <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-white/90 to-white/70 backdrop-blur-sm border border-white/30 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
-              <div className='mb-4 text-6xl font-bold bg-gradient-to-r from-[#333366] to-[#097fa5] bg-clip-text text-transparent'>18+</div>
-              <p className='text-sm text-gray-600 font-medium'>{t('Must_Be_18')}</p>
-            </div>
-
-            {/* Canadian Resident Requirement */}
-            <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-white/90 to-white/70 backdrop-blur-sm border border-white/30 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
-              <div className='mb-4 text-6xl'>🍁</div>
-              <p className='text-sm text-gray-600 font-medium'>
-                {t('Must_Be_Canadian')}
-              </p>
-            </div>
-          </div>
-
-          {/* Bankruptcy Question */}
-          <div className='mb-8'>
-            <p className='mb-4 text-lg font-semibold text-[#333366]'>
-              {t('Bankruptcy_Question')}
-            </p>
-            <div className='flex gap-4'>
-              <button
-                onClick={() => setBankruptcyPlan(true)}
-                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
-                  bankruptcyPlan
-                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
-                }`}
-              >
-                {t('Yes')}
-              </button>
-              <button
-                onClick={() => setBankruptcyPlan(false)}
-                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
-                  !bankruptcyPlan
-                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
-                }`}
-              >
-                {t('No')}
-              </button>
-            </div>
-
-            {/* Warning Message */}
-            {bankruptcyPlan && (
-              <div className='mt-4 rounded-xl border-2 border-red-500/50 bg-gradient-to-r from-red-50 to-red-100 p-4 shadow-lg'>
-                <p className='text-sm font-semibold text-red-700'>
-                  {t('Bankruptcy_Warning')}
+            <div className='p-4 sm:p-6 md:p-8'>
+              {/* Compact Header */}
+              <div className='mb-6 text-center'>
+                <div className='relative mb-3 inline-block'>
+                  {/* Pulse Animation Ring - Smaller on mobile */}
+                  <div className='absolute inset-0 rounded-full bg-gradient-to-br from-[#097fa5] to-[#0a95c2] animate-ping opacity-20'></div>
+                  <div className='relative inline-flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-br from-[#333366] via-[#097fa5] to-[#0a95c2] shadow-xl'>
+                    <svg className='h-6 w-6 sm:h-8 sm:w-8 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2.5} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
+                    </svg>
+                  </div>
+                </div>
+                <h2 className='mb-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight'>
+                  <span className='bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-transparent'>
+                    {t('Get_Quick_Loan_Quote')}
+                  </span>
+                </h2>
+                <p className='text-sm sm:text-base text-gray-500 font-medium'>
+                  {t('Answer_Simple_Questions')}
                 </p>
               </div>
-            )}
-          </div>
 
-          {/* Previous Borrower Question */}
-          <div className='mb-8'>
-            <p className='mb-4 text-lg font-semibold text-[#333366]'>
-              {t('Previous_Borrower_Question')}
-            </p>
-            <div className='flex gap-4'>
-              <button
-                onClick={() => setPreviousBorrower(true)}
-                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
-                  previousBorrower
-                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
-                }`}
-              >
-                {t('Yes')}
-              </button>
-              <button
-                onClick={() => setPreviousBorrower(false)}
-                className={`flex-1 rounded-xl border-2 px-6 py-3 text-sm font-semibold transition-all duration-300 ${
-                  !previousBorrower
-                    ? 'border-[#097fa5] bg-gradient-to-r from-[#333366] to-[#097fa5] text-white shadow-lg shadow-[#097fa5]/30'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5] hover:shadow-md'
-                }`}
-              >
-                {t('No')}
-              </button>
-            </div>
-          </div>
-
-          {/* Application Options */}
-          <div className='space-y-4'>
-            <div className='text-center mb-6'>
-              <h3 className='text-xl font-semibold text-[#333366] mb-2'>
-                {t('Choose_Application_Type')}
-              </h3>
-              <p className='text-gray-600'>
-                {t('Select_Best_Option')}
-              </p>
-            </div>
-            
-            <div className='grid gap-4 md:grid-cols-2'>
-              {/* Quick Apply Option */}
-              <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
-                <div className='mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg'>
-                  <svg className='h-6 w-6 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 10V3L4 14h7v7l9-11h-7z' />
-                  </svg>
+              {/* Compact Requirements Cards */}
+              <div className='mb-6 grid gap-3 sm:gap-4 md:grid-cols-2'>
+                <div className='group relative rounded-xl sm:rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-4 sm:p-5 transition-all duration-300 hover:scale-[1.02] hover:border-[#097fa5]/50 hover:shadow-md'>
+                  <div className='mb-2 text-5xl sm:text-6xl font-black bg-gradient-to-r from-[#333366] to-[#097fa5] bg-clip-text text-transparent'>
+                    18+
+                  </div>
+                  <p className='text-xs font-semibold text-gray-600 uppercase tracking-wider'>
+                    {t('Must_Be_18')}
+                  </p>
                 </div>
-                <h4 className='mb-2 text-lg font-semibold text-green-800'>
-                  {t('Quick_Apply')}
-                </h4>
-                <p className='mb-4 text-sm text-green-700'>
-                  {t('Quick_Apply_Description')}
-                </p>
-                <Link href='/apply1'>
-                  <Button
-                    size='medium'
-                    className='w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30 hover:shadow-xl hover:scale-105 transition-all duration-300'
+
+                <div className='group relative rounded-xl sm:rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-4 sm:p-5 transition-all duration-300 hover:scale-[1.02] hover:border-[#097fa5]/50 hover:shadow-md'>
+                  <div className='mb-2 text-5xl sm:text-6xl'>🍁</div>
+                  <p className='text-xs font-semibold text-gray-600 uppercase tracking-wider'>
+                    {t('Must_Be_Canadian')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Compact Bankruptcy Question */}
+              <div className='mb-5'>
+                <div className='mb-3 flex items-center gap-2'>
+                  <div className='h-0.5 sm:h-1 w-6 sm:w-8 rounded-full bg-gradient-to-r from-[#333366] to-[#097fa5]'></div>
+                  <p className='text-sm sm:text-base font-bold text-gray-800'>
+                    {t('Bankruptcy_Question')}
+                  </p>
+                </div>
+                <div className='grid grid-cols-2 gap-2 sm:gap-3'>
+                  <button
+                    onClick={() => setBankruptcyPlan(true)}
+                    className={`group relative overflow-hidden rounded-xl sm:rounded-2xl border-2 px-4 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-bold transition-all duration-300 ${
+                      bankruptcyPlan
+                        ? 'border-[#097fa5] bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg transform scale-[1.02]'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5]/50'
+                    }`}
                   >
-                    {t('Start_Quick_Apply')}
-                  </Button>
-                </Link>
+                    <span className='relative z-10'>{t('Yes')}</span>
+                  </button>
+                  <button
+                    onClick={() => setBankruptcyPlan(false)}
+                    className={`group relative overflow-hidden rounded-xl sm:rounded-2xl border-2 px-4 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-bold transition-all duration-300 ${
+                      !bankruptcyPlan
+                        ? 'border-[#097fa5] bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg transform scale-[1.02]'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5]/50'
+                    }`}
+                  >
+                    <span className='relative z-10'>{t('No')}</span>
+                  </button>
+                </div>
+
+                {bankruptcyPlan && (
+                  <div className='mt-3 rounded-xl sm:rounded-2xl border-l-4 border-orange-500 bg-gradient-to-r from-orange-50 to-orange-100 p-3 sm:p-4'>
+                    <div className='flex items-start gap-2'>
+                      <span className='text-xl sm:text-2xl'>⚠️</span>
+                      <p className='text-xs sm:text-sm font-semibold text-orange-800'>
+                        {t('Bankruptcy_Warning')}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Full Application Option */}
-              <div className='group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 p-6 text-center shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105'>
-                <div className='mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 shadow-lg'>
-                  <svg className='h-6 w-6 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
-                  </svg>
+              {/* Compact Previous Borrower Question */}
+              <div className='mb-6'>
+                <div className='mb-3 flex items-center gap-2'>
+                  <div className='h-0.5 sm:h-1 w-6 sm:w-8 rounded-full bg-gradient-to-r from-[#333366] to-[#097fa5]'></div>
+                  <p className='text-sm sm:text-base font-bold text-gray-800'>
+                    {t('Previous_Borrower_Question')}
+                  </p>
                 </div>
-                <h4 className='mb-2 text-lg font-semibold text-blue-800'>
-                  {t('Full_Application')}
-                </h4>
-                <p className='mb-4 text-sm text-blue-700'>
-                  {t('Full_Application_Description')}
-                </p>
-                <Button
-                  size='medium'
-                  onClick={() => setShowPreQualification(false)}
-                  className='w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-300'
-                >
-                  {t('Start_Full_Application')}
-                </Button>
+                <div className='grid grid-cols-2 gap-2 sm:gap-3'>
+                  <button
+                    onClick={() => setPreviousBorrower(true)}
+                    className={`group relative overflow-hidden rounded-xl sm:rounded-2xl border-2 px-4 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-bold transition-all duration-300 ${
+                      previousBorrower
+                        ? 'border-[#097fa5] bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg transform scale-[1.02]'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5]/50'
+                    }`}
+                  >
+                    <span className='relative z-10'>{t('Yes')}</span>
+                  </button>
+                  <button
+                    onClick={() => setPreviousBorrower(false)}
+                    className={`group relative overflow-hidden rounded-xl sm:rounded-2xl border-2 px-4 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-bold transition-all duration-300 ${
+                      !previousBorrower
+                        ? 'border-[#097fa5] bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg transform scale-[1.02]'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-[#097fa5]/50'
+                    }`}
+                  >
+                    <span className='relative z-10'>{t('No')}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Compact Application Type Selection */}
+              <div className='space-y-4'>
+                <div className='text-center'>
+                  <h3 className='mb-1 text-lg sm:text-xl font-bold text-gray-900'>
+                    {t('Choose_Application_Type')}
+                  </h3>
+                  <p className='text-xs sm:text-sm text-gray-500'>
+                    {t('Select_Best_Option')}
+                  </p>
+                </div>
+                
+                <div className='grid gap-3 sm:gap-4 md:grid-cols-2'>
+                  {/* Quick Apply - Compact Design */}
+                  <Link href='/apply1' className='group block'>
+                    <div className='relative h-full overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-5 sm:p-6 shadow-md transition-all duration-300 hover:scale-[1.02] hover:border-green-400 hover:shadow-lg'>
+                      {/* Top Badge */}
+                      <div className='mb-3 inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 sm:px-3 py-1'>
+                        <div className='h-1.5 w-1.5 animate-pulse rounded-full bg-green-500'></div>
+                        <span className='text-[10px] sm:text-xs font-bold uppercase tracking-wider text-green-700'>
+                          Fast Track
+                        </span>
+                      </div>
+
+                      {/* Icon */}
+                      <div className='mb-3 flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3'>
+                        <svg className='h-6 w-6 sm:h-7 sm:w-7 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2.5}>
+                          <path strokeLinecap='round' strokeLinejoin='round' d='M13 10V3L4 14h7v7l9-11h-7z' />
+                        </svg>
+                      </div>
+
+                      <h4 className='mb-1.5 text-lg sm:text-xl font-bold text-gray-900'>
+                        {t('Quick_Apply')}
+                      </h4>
+                      <p className='mb-4 text-xs sm:text-sm text-gray-600 leading-relaxed'>
+                        {t('Quick_Apply_Description')}
+                      </p>
+
+                      {/* CTA Button */}
+                      <div className='inline-flex w-full items-center justify-center gap-1.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-4 sm:px-5 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-white shadow-md transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg'>
+                        <span>{t('Start_Quick_Apply')}</span>
+                        <svg className='h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:translate-x-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 7l5 5m0 0l-5 5m5-5H6' />
+                        </svg>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Full Application - Compact Design */}
+                  <div className='group relative overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-5 sm:p-6 shadow-md transition-all duration-300 hover:scale-[1.02] hover:border-blue-400 hover:shadow-lg'>
+                    {/* Top Badge */}
+                    <div className='mb-3 inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 sm:px-3 py-1'>
+                      <div className='h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500'></div>
+                      <span className='text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-700'>
+                        Complete
+                      </span>
+                    </div>
+
+                    {/* Icon */}
+                    <div className='mb-3 flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-3'>
+                      <svg className='h-6 w-6 sm:h-7 sm:w-7 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2.5}>
+                        <path strokeLinecap='round' strokeLinejoin='round' d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                      </svg>
+                    </div>
+
+                    <h4 className='mb-1.5 text-lg sm:text-xl font-bold text-gray-900'>
+                      {t('Full_Application')}
+                    </h4>
+                    <p className='mb-4 text-xs sm:text-sm text-gray-600 leading-relaxed'>
+                      {t('Full_Application_Description')}
+                    </p>
+
+                    {/* CTA Button */}
+                    <button
+                      onClick={() => setShowPreQualification(false)}
+                      className='inline-flex w-full items-center justify-center gap-1.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-4 sm:px-5 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-white shadow-md transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg'
+                    >
+                      <span>{t('Start_Full_Application')}</span>
+                      <svg className='h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:translate-x-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 7l5 5m0 0l-5 5m5-5H6' />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
