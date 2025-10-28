@@ -25,11 +25,28 @@ export async function GET(
 
     const supabase = await createServerSupabaseAdminClient()
 
-    // Fetch application with all related data
+    // Fetch application with needed related data for details page
     const { data: application, error } = await supabase
       .from('loan_applications')
       .select(`
-        *,
+        id,
+        loan_amount,
+        loan_type,
+        income_source,
+        income_fields,
+        application_status,
+        bankruptcy_plan,
+        ibv_provider,
+        ibv_status,
+        ibv_provider_data,
+        ibv_verified_at,
+        staff_notes,
+        rejection_reason,
+        created_at,
+        updated_at,
+        submitted_at,
+        approved_at,
+        rejected_at,
         users!loan_applications_client_id_fkey (
           id,
           first_name,
@@ -87,8 +104,8 @@ export async function GET(
     const applicationData = {
       ...app,
       users: Array.isArray(app.users) ? app.users[0] : app.users,
-      addresses: app.addresses || [],
-      references: app.references || []
+      addresses: Array.isArray(app.addresses) ? app.addresses : (app.addresses ? [app.addresses] : []),
+      references: Array.isArray(app.references) ? app.references : []
     }
 
     return NextResponse.json({

@@ -2,25 +2,19 @@
 import { useTranslations } from 'next-intl'
 import { Link } from '@/src/navigation'
 import Button from '../components/Button'
-import Select from '../components/Select'
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-
-const CANADIAN_PROVINCES = [
-  'Alberta',
-  'British Columbia',
-  'Manitoba',
-  'New Brunswick',
-  'Newfoundland and Labrador',
-  'Northwest Territories',
-  'Nova Scotia',
-  'Nunavut',
-  'Ontario',
-  'Prince Edward Island',
-  'Quebec',
-  'Saskatchewan',
-  'Yukon'
-]
+import {
+  restoreInveriteConnection,
+  addInveriteListener,
+  persistInveriteConnection,
+  type InveriteConnection
+} from '@/src/lib/ibv/inverite'
+import { createIbvProviderData, determineIbvStatus } from '@/src/lib/supabase/ibv-helpers'
+import Step1PersonalInfo from './components/Step1PersonalInfo'
+import Step2LoanDetails from './components/Step2LoanDetails'
+import Step3Confirmation from './components/Step3Confirmation'
+import Step4BankVerification from './components/Step4BankVerification'
 
 interface MicroLoanFormData {
   firstName: string
@@ -66,12 +60,7 @@ export default function MicroLoanApplicationPage() {
   const [ibvStep, setIbvStep] = useState(1)
   const [isVerifying, setIsVerifying] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
-  const [flinksConnection, setFlinksConnection] = useState<{
-    loginId: string
-    requestId: string
-    institution?: string
-    verificationStatus?: 'pending' | 'verified' | 'failed' | 'cancelled'
-  } | null>(null)
+  const [inveriteConnection, setInveriteConnection] = useState<InveriteConnection | null>(null)
 
   // Development mode detection
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -83,111 +72,40 @@ export default function MicroLoanApplicationPage() {
     }
   }, [locale, formData.preferredLanguage])
 
-  // Restore Flinks connection from localStorage on mount
+  // Restore Inverite connection from storage on mount
   useEffect(() => {
-    const stored = localStorage.getItem('flinksConnection')
-    if (stored) {
-      try {
-        const connection = JSON.parse(stored)
-        setFlinksConnection({
-          loginId: connection.loginId,
-          requestId: connection.requestId,
-          institution: connection.institution,
-          verificationStatus: connection.loginId ? 'verified' : 'pending'
-        })
-        // If we have a saved connection, the user is verified
-        if (connection.loginId && connection.requestId) {
-          setIbvVerified(true)
-        }
-      } catch (error) {
-        console.error('Error restoring Flinks connection:', error)
-      }
+    const restored = restoreInveriteConnection()
+    if (restored) {
+      setInveriteConnection(restored)
+      setIbvVerified(true)
     }
   }, [])
 
-  // Flinks Connect event listener
+  // Inverite event listener
   useEffect(() => {
-    const handleFlinksMessage = (event: MessageEvent) => {
-      // Only accept messages from Flinks demo
-      if (event.origin !== 'https://demo.flinks.com') return
-      // Handle different Flinks events
-      if (event.data && typeof event.data === 'object') {
-        const { step, ...data } = event.data
+    if (currentStep !== 4) return
 
-        switch (step) {
-          case 'REDIRECT':
-            console.log('Bank connection successful:', data)
-
-            // Capture Flinks connection data
-            const loginId = data.loginId
-            const requestId = data.requestId
-            const institution = data.institution || 'Unknown'
-
-            if (loginId && requestId) {
-              const connectionData = {
-                loginId,
-                requestId,
-                institution,
-                verificationStatus: 'verified' as const
-              }
-
-              setFlinksConnection(connectionData)
-
-              // Store in localStorage for persistence
-              localStorage.setItem(
-                'flinksConnection',
-                JSON.stringify({
-                  ...connectionData,
-                  connectedAt: new Date().toISOString()
-                })
-              )
-              
-              // Flinks success means IBV passed successfully
-              setIbvVerified(true)
-              setIsVerifying(false)
-              
-              // Submit directly with Flinks connection data
-              handleSubmit(connectionData)
-            }
-            break
-
-          case 'FLINKS_CONNECT_ERROR':
-            console.error('Bank connection failed:', data)
-            setFlinksConnection(prev =>
-              prev ? { ...prev, verificationStatus: 'failed' } : null
-            )
-            setIbvVerified(false)
-            setIsVerifying(false)
-            alert('Bank verification failed. Please try again.')
-            break
-
-          case 'FLINKS_DATA_READY':
-            console.log('Verification data ready:', data)
-            break
-
-          case 'FLINKS_CONNECT_CANCELLED':
-            console.log('User cancelled verification')
-            setFlinksConnection(prev =>
-              prev ? { ...prev, verificationStatus: 'cancelled' } : null
-            )
-            setIsVerifying(false)
-            break
-
-          default:
-            console.log('Unknown Flinks event:', step, data)
-        }
+    const cleanup = addInveriteListener(true, {
+      onSuccess: (connection) => {
+        setInveriteConnection(connection)
+        persistInveriteConnection(connection)
+        setIbvVerified(true)
+        setIsVerifying(false)
+        handleSubmit(connection)
+      },
+      onError: () => {
+        setInveriteConnection(prev => (prev ? { ...prev, verificationStatus: 'failed' } : null))
+        setIbvVerified(false)
+        setIsVerifying(false)
+        alert('Bank verification failed. Please try again.')
+      },
+      onCancel: () => {
+        setInveriteConnection(prev => (prev ? { ...prev, verificationStatus: 'cancelled' } : null))
+        setIsVerifying(false)
       }
-    }
+    })
 
-    // Add event listener when on step 4 (Bank Verification)
-    if (currentStep === 4) {
-      window.addEventListener('message', handleFlinksMessage)
-
-      // Cleanup on unmount
-      return () => {
-        window.removeEventListener('message', handleFlinksMessage)
-      }
-    }
+    return cleanup
   }, [currentStep])
 
   // Save form data to localStorage
@@ -447,19 +365,23 @@ export default function MicroLoanApplicationPage() {
     }
   }
 
-  const handleSubmit = async (flinksData?: {
-    loginId: string
-    requestId: string
-    institution?: string
-    verificationStatus?: 'pending' | 'verified' | 'failed' | 'cancelled'
-  }) => {
+  const handleSubmit = async (inveriteData?: InveriteConnection) => {
     setIsSubmitting(true)
     try {
       // Generate random data for missing fields after IBV verification
       const randomData = generateRandomData()
       
-      // Use provided Flinks data or fall back to state
-      const finalFlinksData = flinksData || flinksConnection
+      // Use provided Inverite data or fall back to state
+      const finalInveriteData = inveriteData || inveriteConnection
+
+      // Create IBV provider data using helper function
+      const ibvProviderData = finalInveriteData 
+        ? createIbvProviderData('inverite', finalInveriteData)
+        : null
+      
+      const ibvStatus = finalInveriteData
+        ? determineIbvStatus('inverite', finalInveriteData.verificationStatus)
+        : null
 
       const response = await fetch('/api/loan-application', {
         method: 'POST',
@@ -519,12 +441,11 @@ export default function MicroLoanApplicationPage() {
           dateHired: randomData.dateHired,
           nextPayDate: randomData.nextPayDate,
 
-          // Flinks connection data (from actual Flinks Connect or passed params)
-          flinksLoginId: finalFlinksData?.loginId,
-          flinksRequestId: finalFlinksData?.requestId,
-          flinksInstitution: finalFlinksData?.institution,
-          flinksVerificationStatus:
-            finalFlinksData?.verificationStatus || 'pending',
+          // Modular IBV data (provider-agnostic)
+          ibvProvider: finalInveriteData ? 'inverite' : null,
+          ibvStatus: ibvStatus,
+          ibvProviderData: ibvProviderData,
+          ibvVerifiedAt: ibvStatus === 'verified' ? new Date().toISOString() : null,
 
           // Other required fields
           bankruptcyPlan: false,
@@ -533,9 +454,9 @@ export default function MicroLoanApplicationPage() {
       })
 
       if (response.ok) {
-        // Clear form data and Flinks connection
+        // Clear form data and Inverite connection
         localStorage.removeItem('microLoanFormData')
-        localStorage.removeItem('flinksConnection')
+        localStorage.removeItem('inveriteConnection')
         // Show success message
         setIsSubmitted(true)
       } else {
@@ -740,291 +661,22 @@ export default function MicroLoanApplicationPage() {
         <div className='rounded-2xl border border-white/20 bg-white/80 p-4 shadow-xl shadow-[#097fa5]/10 backdrop-blur-xl sm:p-6 md:p-8'>
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
-            <div className='space-y-6'>
-              <div className='mb-6 text-center'>
-                <h2 className='mb-2 bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-2xl font-bold text-transparent'>
-                  {t('Personal_Information')}
-                </h2>
-                <p className='text-gray-600'>{t('Basic_Info_Required')}</p>
-              </div>
-
-              <div className='grid gap-4 md:grid-cols-2'>
-                <div>
-                  <label className='mb-2 block text-sm font-medium text-primary'>
-                    {t('First_Name')} *
-                  </label>
-                  <input
-                    type='text'
-                    value={formData.firstName}
-                    onChange={e => updateFormData('firstName', e.target.value)}
-                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                    placeholder='Jean'
-                  />
-                </div>
-                <div>
-                  <label className='mb-2 block text-sm font-medium text-primary'>
-                    {t('Last_Name')} *
-                  </label>
-                  <input
-                    type='text'
-                    value={formData.lastName}
-                    onChange={e => updateFormData('lastName', e.target.value)}
-                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                    placeholder='Tremblay'
-                  />
-                </div>
-              </div>
-
-              <div className='grid gap-4 md:grid-cols-2'>
-                <div>
-                  <label className='mb-2 block text-sm font-medium text-primary'>
-                    {t('Email_Address')} *
-                  </label>
-                  <input
-                    type='email'
-                    value={formData.email}
-                    onChange={e => updateFormData('email', e.target.value)}
-                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                    placeholder='jean@email.com'
-                  />
-                </div>
-                <div>
-                  <label className='mb-2 block text-sm font-medium text-primary'>
-                    {t('Phone_Number')} *
-                  </label>
-                  <input
-                    type='tel'
-                    value={formData.phone}
-                    onChange={e => updateFormData('phone', e.target.value)}
-                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                    placeholder='514-555-1234'
-                  />
-                </div>
-              </div>
-
-              <div className='grid gap-4 md:grid-cols-2'>
-                <div>
-                  <label className='mb-2 block text-sm font-medium text-primary'>
-                    {t('Date_of_Birth')} *
-                  </label>
-                  <input
-                    type='date'
-                    value={formData.dateOfBirth}
-                    onChange={e =>
-                      updateFormData('dateOfBirth', e.target.value)
-                    }
-                    className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-                  />
-                </div>
-                <div>
-                  <label className='mb-2 block text-sm font-medium text-primary'>
-                    {t('Province')} *
-                  </label>
-                  <Select
-                    value={formData.province}
-                    onValueChange={value => updateFormData('province', value)}
-                    placeholder={t('Select_Province')}
-                    options={CANADIAN_PROVINCES.map(province => ({
-                      value: province,
-                      label: province
-                    }))}
-                  />
-                </div>
-              </div>
-            </div>
+            <Step1PersonalInfo formData={formData} onUpdate={updateFormData} />
           )}
 
           {/* Step 2: Loan Details */}
           {currentStep === 2 && (
-            <div className='space-y-6'>
-              <div className='mb-6 text-center'>
-                <h2 className='mb-2 bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-2xl font-bold text-transparent'>
-                  {t('Loan_Details')}
-                </h2>
-                <p className='text-gray-600'>{t('Select_Amount_Needed')}</p>
-              </div>
-
-              <div>
-                <label className='mb-2 block text-sm font-medium text-primary'>
-                  {t('How_Much_Do_You_Need')} *
-                </label>
-                <Select
-                  value={formData.loanAmount}
-                  onValueChange={value => updateFormData('loanAmount', value)}
-                  placeholder={t('Choose_Desired_Amount')}
-                  options={[
-                    { value: '250', label: '$250' },
-                    { value: '300', label: '$300' },
-                    { value: '400', label: '$400' },
-                    { value: '500', label: '$500' },
-                    { value: '600', label: '$600' },
-                    { value: '750', label: '$750' },
-                    { value: '800', label: '$800' },
-                    { value: '900', label: '$900' },
-                    { value: '1000', label: '$1,000' },
-                    { value: '1250', label: '$1,250' },
-                    { value: '1500', label: '$1,500' }
-                  ]}
-                />
-              </div>
-
-              <div className='rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-blue-50 p-6'>
-                <h3 className='mb-2 text-lg font-semibold text-green-800'>
-                  {t('Why_Choose_Micro_Loan')}
-                </h3>
-                <ul className='space-y-2 text-sm text-green-700'>
-                  <li className='flex items-center'>
-                    <svg
-                      className='mr-2 h-4 w-4 text-green-600'
-                      fill='currentColor'
-                      viewBox='0 0 20 20'
-                    >
-                      <path
-                        fillRule='evenodd'
-                        d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z'
-                        clipRule='evenodd'
-                      />
-                    </svg>
-                    {t('Fast_Approval')}
-                  </li>
-                  <li className='flex items-center'>
-                    <svg
-                      className='mr-2 h-4 w-4 text-green-600'
-                      fill='currentColor'
-                      viewBox='0 0 20 20'
-                    >
-                      <path
-                        fillRule='evenodd'
-                        d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z'
-                        clipRule='evenodd'
-                      />
-                    </svg>
-                    {t('No_Credit_Check')}
-                  </li>
-                  <li className='flex items-center'>
-                    <svg
-                      className='mr-2 h-4 w-4 text-green-600'
-                      fill='currentColor'
-                      viewBox='0 0 20 20'
-                    >
-                      <path
-                        fillRule='evenodd'
-                        d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z'
-                        clipRule='evenodd'
-                      />
-                    </svg>
-                    {t('Secure_Bank_Verification')}
-                  </li>
-                </ul>
-              </div>
-            </div>
+            <Step2LoanDetails formData={formData} onUpdate={updateFormData} />
           )}
 
           {/* Step 3: Confirmation */}
           {currentStep === 3 && (
-            <div className='space-y-6'>
-              <div className='mb-6 text-center'>
-                <h2 className='mb-2 bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] bg-clip-text text-2xl font-bold text-transparent'>
-                  {t('Final_Confirmation')}
-                </h2>
-                <p className='text-gray-600'>{t('Review_And_Confirm')}</p>
-              </div>
-
-              <div className='space-y-4 rounded-xl bg-gray-50 p-6'>
-                <h3 className='mb-4 text-lg font-semibold text-primary'>
-                  {t('Application_Summary')}
-                </h3>
-                <div className='grid gap-3 text-sm'>
-                  <div className='flex justify-between'>
-                    <span className='text-gray-600'>{t('Name')}:</span>
-                    <span className='font-medium'>
-                      {formData.firstName} {formData.lastName}
-                    </span>
-                  </div>
-                  <div className='flex justify-between'>
-                    <span className='text-gray-600'>{t('Email')}:</span>
-                    <span className='font-medium'>{formData.email}</span>
-                  </div>
-                  <div className='flex justify-between'>
-                    <span className='text-gray-600'>{t('Phone')}:</span>
-                    <span className='font-medium'>{formData.phone}</span>
-                  </div>
-                  <div className='flex justify-between'>
-                    <span className='text-gray-600'>{t('Loan_Amount')}:</span>
-                    <span className='font-medium text-green-600'>
-                      ${formData.loanAmount}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className='flex items-start space-x-3'>
-                <input
-                  type='checkbox'
-                  id='confirmInformation'
-                  checked={formData.confirmInformation}
-                  onChange={e =>
-                    updateFormData('confirmInformation', e.target.checked)
-                  }
-                  className='mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary'
-                />
-                <label
-                  htmlFor='confirmInformation'
-                  className='text-sm text-gray-700'
-                >
-                  {t('Confirm_Information_Accurate')}
-                </label>
-              </div>
-            </div>
+            <Step3Confirmation formData={formData} onUpdate={updateFormData} />
           )}
 
           {/* Step 4: Bank Verification */}
           {currentStep === 4 && (
-            <div className='space-y-6'>
-              {/* Flinks Connect Demo */}
-              <div className='mb-6 sm:mb-8'>
-                <div className='overflow-hidden rounded-xl border border-gray-200 shadow-lg'>
-                  {/* Flinks Connect iframe */}
-                  <iframe
-                    className='flinksconnect h-[500px] w-full sm:h-[600px] md:h-[650px]'
-                    src='https://demo.flinks.com/v2/?headerEnable=false&demo=true'
-                    title='Flinks Connect Demo'
-                    allow='camera; microphone; geolocation'
-                  ></iframe>
-                </div>
-              </div>
-              {/* Verification Status */}
-              {ibvVerified && (
-                <div className='rounded-lg border border-green-200 bg-green-50 p-4'>
-                  <div className='flex items-center'>
-                    <div className='flex-shrink-0'>
-                      <svg
-                        className='h-5 w-5 text-green-600'
-                        fill='none'
-                        viewBox='0 0 24 24'
-                        stroke='currentColor'
-                      >
-                        <path
-                          strokeLinecap='round'
-                          strokeLinejoin='round'
-                          strokeWidth={2}
-                          d='M5 13l4 4L19 7'
-                        />
-                      </svg>
-                    </div>
-                    <div className='ml-3'>
-                      <h3 className='text-sm font-medium text-green-800'>
-                        {t('Verification_Complete') || 'Verification Complete'}
-                      </h3>
-                      <p className='mt-1 text-sm text-green-700'>
-                        {t('Submitting_Application') ||
-                          'Submitting your loan application...'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <Step4BankVerification ibvVerified={ibvVerified} />
           )}
 
           {/* Navigation Buttons */}
@@ -1067,3 +719,4 @@ export default function MicroLoanApplicationPage() {
     </div>
   )
 }
+

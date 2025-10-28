@@ -80,11 +80,11 @@ interface LoanApplicationRequestBody {
   // Confirmation
   confirmInformation: boolean
   
-  // Flinks Connection Data (optional)
-  flinksLoginId?: string
-  flinksRequestId?: string
-  flinksInstitution?: string
-  flinksVerificationStatus?: 'pending' | 'verified' | 'failed' | 'cancelled'
+  // IBV Data (modular, provider-agnostic)
+  ibvProvider?: 'flinks' | 'inverite' | 'plaid' | 'other'
+  ibvStatus?: 'pending' | 'processing' | 'verified' | 'failed' | 'cancelled' | 'expired'
+  ibvProviderData?: any
+  ibvVerifiedAt?: string
 }
 
 // ===========================
@@ -267,11 +267,11 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Validate Flinks verification status if provided
-    if (body.flinksVerificationStatus && 
-        !['pending', 'verified', 'failed', 'cancelled'].includes(body.flinksVerificationStatus)) {
+    // Validate IBV status if provided
+    if (body.ibvStatus && 
+        !['pending', 'processing', 'verified', 'failed', 'cancelled', 'expired'].includes(body.ibvStatus)) {
       return NextResponse.json(
-        { error: 'Invalid Flinks verification status. Must be one of: pending, verified, failed, cancelled' },
+        { error: 'Invalid IBV status. Must be one of: pending, processing, verified, failed, cancelled, expired' },
         { status: 400 }
       )
     }
@@ -397,11 +397,10 @@ export async function POST(request: NextRequest) {
       p_heating_electricity_cost: body.heatingElectricityCost ? parseFloat(body.heatingElectricityCost) : null,
       p_car_loan: body.carLoan ? parseFloat(body.carLoan) : null,
       p_furniture_loan: body.furnitureLoan ? parseFloat(body.furnitureLoan) : null,
-      // Flinks connection data
-      p_flinks_login_id: body.flinksLoginId || null,
-      p_flinks_request_id: body.flinksRequestId || null,
-      p_flinks_institution: body.flinksInstitution || null,
-      p_flinks_verification_status: body.flinksVerificationStatus || 'pending'
+      // IBV data (modular, provider-agnostic)
+      p_ibv_provider: body.ibvProvider || null,
+      p_ibv_status: body.ibvStatus || null,
+      p_ibv_provider_data: body.ibvProviderData || null
     })
     
     if (submitError) {

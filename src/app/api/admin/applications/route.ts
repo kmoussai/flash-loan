@@ -17,49 +17,21 @@ export async function GET(request: NextRequest) {
       .from('loan_applications')
       .select(`
         id,
-        client_id,
         loan_amount,
         loan_type,
-        income_source,
         application_status,
-        assigned_to,
-        bankruptcy_plan,
-        staff_notes,
-        rejection_reason,
+        ibv_provider,
+        ibv_status,
         created_at,
-        updated_at,
-        submitted_at,
-        approved_at,
-        rejected_at,
-        flinks_login_id,
-        flinks_request_id,
-        flinks_institution,
-        flinks_verification_status,
-        flinks_connected_at,
         users!loan_applications_client_id_fkey (
           id,
           first_name,
           last_name,
           email,
-          phone,
-          preferred_language,
-          kyc_status
+          phone
         ),
         addresses (
-          id,
-          street_number,
-          street_name,
-          apartment_number,
-          city,
-          province,
-          postal_code
-        ),
-        references (
-          id,
-          first_name,
-          last_name,
-          phone,
-          relationship
+          province
         )
       `)
       .order('created_at', { ascending: false })
