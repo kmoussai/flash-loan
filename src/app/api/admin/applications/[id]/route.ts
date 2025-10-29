@@ -26,6 +26,7 @@ export async function GET(
     const supabase = await createServerSupabaseAdminClient()
 
     // Fetch application with needed related data for details page
+    // Note: Using select('*') and explicit fields to ensure JSONB fields are fully returned
     const { data: application, error } = await supabase
       .from('loan_applications')
       .select(`
@@ -101,8 +102,40 @@ export async function GET(
 
     // Transform the data structure
     const app = application as any
+    
+    // Fetch ibv_provider_data separately to ensure it's complete (large JSONB fields can be truncated)
+    // This is a workaround for PostgREST potentially truncating large JSONB in complex queries with joins
+    let fullIbvData: any = app.ibv_provider_data || null
+    if (app.ibv_provider_data) {
+      // Try fetching ibv_provider_data separately to ensure completeness
+      const { data: ibvDataOnly, error: ibvError } = await supabase
+        .from('loan_applications')
+        .select('ibv_provider_data')
+        .eq('id', applicationId)
+        .single()
+      
+      if (!ibvError && ibvDataOnly) {
+        const ibvDataRecord = ibvDataOnly as any
+        if (ibvDataRecord.ibv_provider_data) {
+          fullIbvData = ibvDataRecord.ibv_provider_data
+          console.log('[API] Fetched ibv_provider_data separately to ensure completeness')
+          // Log size for debugging
+          const ibvDataStr = JSON.stringify(fullIbvData)
+          console.log(`[API] ibv_provider_data size: ${ibvDataStr.length} characters`)
+          if (fullIbvData.accounts && Array.isArray(fullIbvData.accounts) && fullIbvData.accounts.length > 0) {
+            const txCount = fullIbvData.accounts.reduce((sum: number, acc: any) => {
+              return sum + (Array.isArray(acc.transactions) ? acc.transactions.length : 0)
+            }, 0)
+            console.log(`[API] Total transactions in ibv_provider_data: ${txCount}`)
+          }
+        }
+      }
+    }
+    
     const applicationData = {
       ...app,
+      // Use the separately fetched ibv_provider_data to ensure it's complete
+      ibv_provider_data: fullIbvData,
       users: Array.isArray(app.users) ? app.users[0] : app.users,
       addresses: Array.isArray(app.addresses) ? app.addresses : (app.addresses ? [app.addresses] : []),
       references: Array.isArray(app.references) ? app.references : []

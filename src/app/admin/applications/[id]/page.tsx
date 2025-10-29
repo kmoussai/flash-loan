@@ -70,16 +70,102 @@ export default function ApplicationDetailsPage() {
   const [processing, setProcessing] = useState(false)
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [transactionSearch, setTransactionSearch] = useState('')
+  const [fetchingInveriteData, setFetchingInveriteData] = useState(false)
+  const [fetchedTransactions, setFetchedTransactions] = useState<any[] | null>(null)
+  const [loadingTransactions, setLoadingTransactions] = useState(false)
 
   // Get transactions from Inverite data
+  // Transactions are nested inside accounts[].transactions array
   const getTransactions = () => {
+    // Prefer on-demand fetched transactions to avoid heavy JSONB in main payload
+    if (Array.isArray(fetchedTransactions)) return fetchedTransactions
     if (!application?.ibv_provider_data) return []
     if (application.ibv_provider !== 'inverite') return []
     
-    const inveriteData = application.ibv_provider_data as InveriteIbvData
-    if (!inveriteData || !inveriteData.account_statement) return []
+    const inveriteData = application.ibv_provider_data as any
     
-    return inveriteData.account_statement
+    // Primary path: Check accounts array for transactions
+    if (inveriteData?.accounts && Array.isArray(inveriteData.accounts)) {
+      const allTransactions: any[] = []
+      
+      inveriteData.accounts.forEach((account: any, accountIndex: number) => {
+        // Check if this account has transactions
+        if (account?.transactions && Array.isArray(account.transactions) && account.transactions.length > 0) {
+          account.transactions.forEach((tx: any) => {
+            if (!tx) return // Skip null/undefined transactions
+            
+            // Map Inverite transaction fields to our expected format
+            allTransactions.push({
+              description: tx.details || tx.description || 'No description',
+              date: tx.date || '',
+              // Convert string amounts to numbers (handle empty strings)
+              credit: tx.credit && tx.credit !== '' ? parseFloat(String(tx.credit)) : null,
+              debit: tx.debit && tx.debit !== '' ? parseFloat(String(tx.debit)) : null,
+              balance: tx.balance && tx.balance !== '' ? parseFloat(String(tx.balance)) : null,
+              // Include additional Inverite fields
+              category: tx.category || null,
+              flags: Array.isArray(tx.flags) ? tx.flags : [],
+              // Include account information for context
+              account_index: accountIndex,
+              account_type: account.type || null,
+              account_description: account.account_description || null,
+              account_number: account.account || null,
+              institution: account.institution || null,
+              // Keep original transaction for reference
+              _original: tx
+            })
+          })
+        }
+      })
+      
+      if (allTransactions.length > 0) {
+        // Sort by date (newest first), handle invalid dates
+        const sorted = allTransactions.sort((a, b) => {
+          try {
+            const dateA = a.date ? new Date(a.date).getTime() : 0
+            const dateB = b.date ? new Date(b.date).getTime() : 0
+            if (isNaN(dateA) || isNaN(dateB)) return 0
+            return dateB - dateA
+          } catch {
+            return 0
+          }
+        })
+        
+        return sorted
+      }
+    }
+    
+    // Fallback 1: Check account_info.transactions (if account_info is a single object)
+    if (inveriteData?.account_info?.transactions && Array.isArray(inveriteData.account_info.transactions)) {
+      const transactions = inveriteData.account_info.transactions.map((tx: any) => ({
+        description: tx.details || tx.description || 'No description',
+        date: tx.date || '',
+        credit: tx.credit && tx.credit !== '' ? parseFloat(String(tx.credit)) : null,
+        debit: tx.debit && tx.debit !== '' ? parseFloat(String(tx.debit)) : null,
+        balance: tx.balance && tx.balance !== '' ? parseFloat(String(tx.balance)) : null,
+        category: tx.category || null,
+        flags: Array.isArray(tx.flags) ? tx.flags : [],
+        _original: tx
+      }))
+      
+      return transactions.sort((a: any, b: any) => {
+        try {
+          const dateA = a.date ? new Date(a.date).getTime() : 0
+          const dateB = b.date ? new Date(b.date).getTime() : 0
+          if (isNaN(dateA) || isNaN(dateB)) return 0
+          return dateB - dateA
+        } catch {
+          return 0
+        }
+      })
+    }
+    
+    // Fallback 2: Legacy account_statement format
+    if (inveriteData?.account_statement && Array.isArray(inveriteData.account_statement) && inveriteData.account_statement.length > 0) {
+      return inveriteData.account_statement
+    }
+    
+    return []
   }
 
   // Filter transactions based on search
@@ -88,9 +174,11 @@ export default function ApplicationDetailsPage() {
     if (!transactionSearch) return transactions
     
     const searchLower = transactionSearch.toLowerCase()
-    return transactions.filter(tx =>
-      tx.description.toLowerCase().includes(searchLower) ||
-      tx.date.includes(searchLower)
+    return transactions.filter((tx: any) =>
+      (tx.description && tx.description.toLowerCase().includes(searchLower)) ||
+      (tx.date && tx.date.includes(searchLower)) ||
+      (tx.category && tx.category.toLowerCase().includes(searchLower)) ||
+      (tx.account_description && tx.account_description.toLowerCase().includes(searchLower))
     )
   }
 
@@ -226,6 +314,41 @@ export default function ApplicationDetailsPage() {
     router.push('/admin/applications')
   }
 
+  const handleFetchInveriteData = async () => {
+    if (!application) return
+
+    const inveriteData = application.ibv_provider_data as InveriteIbvData
+    const requestGuid = inveriteData?.request_guid
+
+    if (!requestGuid) {
+      alert('No request GUID found for this application')
+      return
+    }
+
+    try {
+      setFetchingInveriteData(true)
+      
+      const response = await fetch(`/api/inverite/fetch/${requestGuid}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch Inverite data')
+      }
+
+      const result = await response.json()
+      
+      // Refresh application details
+      await fetchApplicationDetails()
+      
+      // Show success message
+    } catch (error: any) {
+      console.error('Error fetching Inverite data:', error)
+      alert(`Error: ${error.message || 'Failed to fetch data from Inverite'}`)
+    } finally {
+      setFetchingInveriteData(false)
+    }
+  }
+
   const getAddressString = () => {
     if (!application?.addresses || application.addresses.length === 0) return 'N/A'
     const addr = application.addresses[0]
@@ -358,14 +481,36 @@ export default function ApplicationDetailsPage() {
           {/* IBV Verification - Left Side */}
           <div className='overflow-hidden rounded-xl bg-gradient-to-br from-[#333366] via-[#2a2d5a] to-[#1f2147] shadow-xl border border-white/10'>
             <div className='bg-gradient-to-r from-[#097fa5]/20 to-transparent px-5 py-4'>
-              <div className='flex items-center gap-3'>
-                <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#097fa5] to-[#0a95c2] shadow-lg'>
-                  <span className='text-3xl text-white'>🏦</span>
+              <div className='flex items-center justify-between gap-3'>
+                <div className='flex items-center gap-3 flex-1'>
+                  <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#097fa5] to-[#0a95c2] shadow-lg'>
+                    <span className='text-3xl text-white'>🏦</span>
+                  </div>
+                  <div className='flex-1'>
+                    <h2 className='text-xl font-black text-white'>IBV Verification</h2>
+                    <p className='text-xs text-white/60'>Risk Assessment</p>
+                  </div>
                 </div>
-                <div className='flex-1'>
-                  <h2 className='text-xl font-black text-white'>IBV Verification</h2>
-                  <p className='text-xs text-white/60'>Risk Assessment</p>
-                </div>
+                {application.ibv_provider === 'inverite' && 
+                 (application.ibv_provider_data as any)?.request_guid && (
+                  <button
+                    onClick={handleFetchInveriteData}
+                    disabled={fetchingInveriteData}
+                    className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#097fa5] to-[#0a95c2] px-4 py-2 text-sm font-medium text-white shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
+                  >
+                    {fetchingInveriteData ? (
+                      <>
+                        <div className='h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent'></div>
+                        <span>Fetching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🔄</span>
+                        <span>Fetch Data</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -445,15 +590,39 @@ export default function ApplicationDetailsPage() {
                     </div>
 
                     <button 
-                      onClick={() => setShowTransactionsModal(true)}
+                      onClick={async () => {
+                        setShowTransactionsModal(true)
+                        // Fetch transactions on demand
+                        try {
+                          setLoadingTransactions(true)
+                          const res = await fetch(`/api/admin/applications/${applicationId}/transactions`)
+                          if (!res.ok) {
+                            const err = await res.json().catch(() => ({}))
+                            throw new Error(err.error || 'Failed to load transactions')
+                          }
+                          const data = await res.json()
+                          setFetchedTransactions(Array.isArray(data.transactions) ? data.transactions : [])
+                        } catch (e: any) {
+                          console.error('Failed to fetch transactions:', e)
+                          setFetchedTransactions([])
+                        } finally {
+                          setLoadingTransactions(false)
+                        }
+                      }}
                       className='rounded-lg bg-violet-50 p-3 border border-violet-200 hover:bg-violet-100 transition-colors cursor-pointer text-left w-full'
                     >
                       <div className='flex items-center gap-2 mb-1'>
                         <span className='text-sm'>📈</span>
                         <label className='text-xs font-bold text-gray-600'>Transactions</label>
                       </div>
-                      <p className='text-xl font-black text-violet-600'>{ibvKpis.transactionCount}</p>
-                      <p className='text-xs text-violet-600 mt-1'>Click to view details →</p>
+                      <p className='text-xl font-black text-violet-600'>
+                        {Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length || 0}
+                      </p>
+                      <p className='text-xs text-violet-600 mt-1'>
+                        {(Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length) > 0 
+                          ? 'Click to view details →' 
+                          : 'No transactions available'}
+                      </p>
                     </button>
 
                     <div className={`rounded-lg p-3 border col-span-2 ${
@@ -862,7 +1031,7 @@ export default function ApplicationDetailsPage() {
                     <div>
                       <h3 className='text-xl font-bold text-gray-900'>Transaction History</h3>
                       <p className='text-sm text-gray-600'>
-                        {getTransactions().length} transactions found
+                        {loadingTransactions ? 'Loading transactions…' : `${getTransactions().length} transactions found`}
                       </p>
                     </div>
                   </div>
@@ -888,7 +1057,12 @@ export default function ApplicationDetailsPage() {
 
               {/* Transaction List */}
               <div className='flex-1 overflow-y-auto px-6 py-4'>
-                {getFilteredTransactions().length === 0 ? (
+                {loadingTransactions ? (
+                  <div className='py-12 text-center'>
+                    <div className='mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-violet-600'></div>
+                    <p className='mt-4 text-gray-600'>Loading transactions…</p>
+                  </div>
+                ) : getFilteredTransactions().length === 0 ? (
                   <div className='py-12 text-center'>
                     <span className='mb-4 block text-5xl'>📭</span>
                     <p className='text-gray-600'>No transactions found</p>
@@ -898,7 +1072,7 @@ export default function ApplicationDetailsPage() {
                   </div>
                 ) : (
                   <div className='space-y-3'>
-                    {getFilteredTransactions().map((tx, index) => {
+                    {getFilteredTransactions().map((tx: any, index: number) => {
                       // Calculate amount from debit/credit
                       const amount = tx.credit || -(tx.debit || 0)
                       const isCredit = amount > 0
@@ -914,9 +1088,39 @@ export default function ApplicationDetailsPage() {
                                 <span className='text-2xl'>
                                   {isCredit ? '⬇️' : '⬆️'}
                                 </span>
-                                <div>
+                                <div className='flex-1'>
                                   <p className='font-semibold text-gray-900'>{tx.description}</p>
-                                  <p className='text-sm text-gray-600'>{tx.date}</p>
+                                  <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600'>
+                                    <span>{tx.date}</span>
+                                    {tx.account_description && (
+                                      <>
+                                        <span className='text-gray-400'>•</span>
+                                        <span className='rounded-full bg-blue-100 px-2 py-0.5 text-blue-700'>
+                                          {tx.account_description}
+                                        </span>
+                                      </>
+                                    )}
+                                    {tx.category && (
+                                      <>
+                                        <span className='text-gray-400'>•</span>
+                                        <span className='text-gray-500 capitalize'>
+                                          {tx.category.split('/').pop()}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {tx.flags && tx.flags.length > 0 && (
+                                    <div className='mt-1 flex flex-wrap gap-1'>
+                                      {tx.flags.map((flag: string, flagIndex: number) => (
+                                        <span
+                                          key={flagIndex}
+                                          className='rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700'
+                                        >
+                                          {flag.replace(/_/g, ' ')}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -926,7 +1130,7 @@ export default function ApplicationDetailsPage() {
                               }`}>
                                 {formatCurrency(amount)}
                               </p>
-                              {tx.balance !== undefined && (
+                              {tx.balance !== null && tx.balance !== undefined && (
                                 <p className='text-xs text-gray-500'>
                                   Balance: {formatCurrency(tx.balance)}
                                 </p>
