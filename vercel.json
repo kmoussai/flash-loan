@@ -4,7 +4,7 @@
         "source": "/(.*)",
         "headers": [
           { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-          { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' https://flash-loan.ca https://*flash-loan.vercel.app;" }
+          { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' https://flash-loan.ca https://*.vercel.app;" }
         ]
       }
     ]
