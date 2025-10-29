@@ -229,17 +229,17 @@ export default function ApplicationDetailsPage() {
   const getStatusBadgeColor = (status: ApplicationStatus) => {
     switch (status) {
       case 'approved':
-        return 'bg-green-100 text-green-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'processing':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'rejected':
-        return 'bg-red-100 text-red-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'cancelled':
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
     }
   }
 
@@ -279,19 +279,11 @@ export default function ApplicationDetailsPage() {
   }
 
   const getRiskColor = (level: string) => {
-    switch(level) {
-      case 'low': return 'text-green-600 bg-green-50'
-      case 'medium': return 'text-yellow-600 bg-yellow-50'
-      case 'high': return 'text-red-600 bg-red-50'
-      default: return 'text-gray-600 bg-gray-50'
-    }
+    return 'text-gray-700 bg-gray-50 border border-gray-200'
   }
 
   const getScoreColor = (score: number, maxScore: number = 100) => {
-    const percentage = (score / maxScore) * 100
-    if (percentage >= 80) return 'text-green-600'
-    if (percentage >= 60) return 'text-yellow-600'
-    return 'text-red-600'
+    return 'text-gray-900'
   }
 
   const handleApprove = async () => {
@@ -360,8 +352,8 @@ export default function ApplicationDetailsPage() {
       <AdminDashboardLayout>
         <div className='flex h-96 items-center justify-center'>
           <div className='text-center'>
-            <div className='mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600'></div>
-            <p className='mt-4 text-gray-600'>Loading application details...</p>
+            <div className='mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900'></div>
+            <p className='mt-4 text-sm text-gray-600'>Loading application details...</p>
           </div>
         </div>
       </AdminDashboardLayout>
@@ -373,11 +365,10 @@ export default function ApplicationDetailsPage() {
       <AdminDashboardLayout>
         <div className='flex h-96 items-center justify-center'>
           <div className='text-center'>
-            <span className='mb-4 block text-4xl'>⚠️</span>
-            <p className='text-red-600'>{error || 'Application not found'}</p>
+            <p className='text-gray-600'>{error || 'Application not found'}</p>
             <button
               onClick={() => router.push('/admin/applications')}
-              className='mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700'
+              className='mt-4 rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50'
             >
               Back to Applications
             </button>
@@ -391,123 +382,97 @@ export default function ApplicationDetailsPage() {
     <AdminDashboardLayout>
       <div className='space-y-6'>
         {/* Header */}
-        <div className='flex items-center justify-between'>
-          <div>
-            <div className='flex items-center gap-3'>
-              <button
-                onClick={() => router.push('/admin/applications')}
-                className='flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50'
-              >
-                ←
-              </button>
-              <div>
-                <h1 className='text-2xl font-bold text-gray-900'>
-                  Application Details
-                </h1>
-                <p className='text-xs text-gray-600'>
-                  Application #{application.id.slice(0, 8)}...
-                </p>
-              </div>
+        <div className='flex items-center justify-between border-b border-gray-200 pb-6'>
+          <div className='flex items-center gap-4'>
+            <button
+              onClick={() => router.push('/admin/applications')}
+              className='flex h-8 w-8 items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors'
+            >
+              <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 19l-7-7 7-7' />
+              </svg>
+            </button>
+            <div>
+              <h1 className='text-2xl font-semibold text-gray-900'>
+                Application Details
+              </h1>
+              <p className='text-sm text-gray-500 mt-1'>
+                ID: {application.id.slice(0, 8)}
+              </p>
             </div>
           </div>
           
           <div className='flex items-center gap-3'>
             <span
-              className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${getStatusBadgeColor(application.application_status)}`}
+              className={`inline-flex rounded px-3 py-1 text-xs font-medium uppercase tracking-wide ${getStatusBadgeColor(application.application_status)}`}
             >
-              {application.application_status.toUpperCase()}
+              {application.application_status}
             </span>
           </div>
         </div>
 
-        {/* Principal Client Information Row */}
-        <div className='rounded-xl bg-gradient-to-br from-[#333366] via-[#2a2d5a] to-[#1f2147] shadow-xl overflow-hidden border border-white/10'>
-          <div className='px-6 py-4'>
-            <div className='flex items-center justify-between'>
-              <div className='flex items-center gap-6'>
-                {/* Full Name */}
-                <div className='flex items-center gap-3'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
-                    <span className='text-2xl'>👤</span>
-                  </div>
-                  <div>
-                    <label className='text-xs font-bold text-white/60 uppercase'>Full Name</label>
-                    <p className='text-xl font-black text-white mt-0.5'>
-                      {application.users?.first_name} {application.users?.last_name}
-                    </p>
-                  </div>
-                </div>
+        {/* Client Information */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-blue-50 border-b border-gray-200 px-6 py-4'>
+            <h3 className='text-lg font-semibold text-gray-900'>Client Information</h3>
+          </div>
+          <div className='p-6'>
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+            <div>
+              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Full Name</label>
+              <p className='text-lg font-medium text-gray-900 mt-1'>
+                {application.users?.first_name} {application.users?.last_name}
+              </p>
+            </div>
 
-                {/* Age */}
-                <div className='flex items-center gap-3 pl-6 border-l border-white/10'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
-                    <span className='text-2xl'>🎂</span>
-                  </div>
-                  <div>
-                    <label className='text-xs font-bold text-white/60 uppercase'>Age</label>
-                    <p className='text-xl font-black text-white mt-0.5'>
-                      {application.users?.date_of_birth 
-                        ? new Date().getFullYear() - new Date(application.users.date_of_birth).getFullYear()
-                        : 'N/A'} years old
-                    </p>
-                  </div>
-                </div>
+            <div>
+              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Age</label>
+              <p className='text-lg font-medium text-gray-900 mt-1'>
+                {application.users?.date_of_birth 
+                  ? new Date().getFullYear() - new Date(application.users.date_of_birth).getFullYear()
+                  : 'N/A'} years
+              </p>
+            </div>
 
-                {/* KYC Status */}
-                <div className='flex items-center gap-3 pl-6 border-l border-white/10'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
-                    <span className='text-2xl'>✅</span>
-                  </div>
-                  <div>
-                    <label className='text-xs font-bold text-white/60 uppercase'>KYC Status</label>
-                    <div className='mt-1'>
-                      <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-black uppercase ${
-                        application.users?.kyc_status === 'verified' 
-                          ? 'bg-[#097fa5] text-white shadow-lg' 
-                          : 'bg-yellow-500 text-white shadow-lg'
-                      }`}>
-                        {application.users?.kyc_status || 'PENDING'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+            <div>
+              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>KYC Status</label>
+              <div className='mt-1'>
+                <span className={`inline-flex rounded px-2 py-1 text-xs font-medium uppercase tracking-wide bg-gray-50 text-gray-700 border border-gray-200`}>
+                  {application.users?.kyc_status || 'PENDING'}
+                </span>
               </div>
             </div>
+          </div>
           </div>
         </div>
 
         {/* IBV Verification & Loan Details - Side by Side */}
         <div className='grid gap-6 lg:grid-cols-2'>
           {/* IBV Verification - Left Side */}
-          <div className='overflow-hidden rounded-xl bg-gradient-to-br from-[#333366] via-[#2a2d5a] to-[#1f2147] shadow-xl border border-white/10'>
-            <div className='bg-gradient-to-r from-[#097fa5]/20 to-transparent px-5 py-4'>
-              <div className='flex items-center justify-between gap-3'>
-                <div className='flex items-center gap-3 flex-1'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#097fa5] to-[#0a95c2] shadow-lg'>
-                    <span className='text-3xl text-white'>🏦</span>
-                  </div>
-                  <div className='flex-1'>
-                    <h2 className='text-xl font-black text-white'>IBV Verification</h2>
-                    <p className='text-xs text-white/60'>Risk Assessment</p>
-                  </div>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-purple-50 border-b border-gray-200 px-6 py-4'>
+              <div className='flex items-center justify-between'>
+                <div>
+                  <h2 className='text-lg font-semibold text-gray-900'>IBV Verification</h2>
+                  <p className='text-sm text-gray-500 mt-0.5'>Risk Assessment</p>
                 </div>
                 {application.ibv_provider === 'inverite' && 
                  (application.ibv_provider_data as any)?.request_guid && (
                   <button
                     onClick={handleFetchInveriteData}
                     disabled={fetchingInveriteData}
-                    className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#097fa5] to-[#0a95c2] px-4 py-2 text-sm font-medium text-white shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
+                    className='rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
                   >
                     {fetchingInveriteData ? (
-                      <>
-                        <div className='h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent'></div>
-                        <span>Fetching...</span>
-                      </>
+                      <span className='flex items-center gap-2'>
+                        <svg className='h-3 w-3 animate-spin' fill='none' viewBox='0 0 24 24'>
+                          <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4' />
+                          <path className='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z' />
+                        </svg>
+                        Fetching...
+                      </span>
                     ) : (
-                      <>
-                        <span>🔄</span>
-                        <span>Fetch Data</span>
-                      </>
+                      'Fetch Data'
                     )}
                   </button>
                 )}
@@ -515,84 +480,57 @@ export default function ApplicationDetailsPage() {
             </div>
 
             {ibvKpis && (
-              <div className='bg-white p-5'>
-                <div className='grid gap-3 mb-4'>
-                  {/* Risk Score Header */}
-                  <div className='rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50 p-4 border-2 border-indigo-200'>
+              <div className='p-6'>
+                <div className='space-y-4'>
+                  {/* Risk Score */}
+                  <div className='rounded border border-gray-200 bg-gray-50 p-4'>
                     <div className='flex items-center justify-between'>
                       <div>
-                        <label className='text-xs font-bold text-gray-500 uppercase'>Overall Risk Score</label>
-                        <p className={`text-3xl font-black ${
-                          ibvKpis.overallRiskScore >= 70 ? 'text-green-600' : 
-                          ibvKpis.overallRiskScore >= 50 ? 'text-yellow-600' : 'text-red-600'
-                        }`}>
+                        <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Overall Risk Score</label>
+                        <p className={`text-2xl font-semibold text-gray-900 mt-1`}>
                           {Math.round(ibvKpis.overallRiskScore)}%
                         </p>
                       </div>
-                      <div className='text-center'>
-                        <div className='flex h-14 w-14 items-center justify-center rounded-xl bg-white shadow-lg border-2 border-indigo-200 text-3xl'>
-                          {ibvKpis.overallRiskScore >= 70 ? '✅' : ibvKpis.overallRiskScore >= 50 ? '⚠️' : '❌'}
-                        </div>
-                        <p className={`mt-1 text-xs font-black ${
-                          ibvKpis.overallRiskScore >= 70 ? 'text-green-600' : 
-                          ibvKpis.overallRiskScore >= 50 ? 'text-yellow-600' : 'text-red-600'
-                        }`}>
-                          {ibvKpis.overallRiskScore >= 70 ? 'APPROVE' : ibvKpis.overallRiskScore >= 50 ? 'REVIEW' : 'REJECT'}
-                        </p>
+                      <div className='text-sm font-medium text-gray-600 capitalize'>
+                        {ibvKpis.overallRiskScore >= 70 ? 'Approve' : ibvKpis.overallRiskScore >= 50 ? 'Review' : 'Reject'}
                       </div>
                     </div>
                   </div>
 
-                  {/* Compact Metrics */}
-                  <div className='grid grid-cols-2 gap-2'>
-                    <div className='rounded-lg bg-green-50 p-3 border border-green-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>📊</span>
-                        <label className='text-xs font-bold text-gray-600'>Verification</label>
-                      </div>
-                      <p className={`text-xl font-black ${getScoreColor(ibvKpis.bankVerificationScore)}`}>
+                  {/* Metrics Grid */}
+                  <div className='grid grid-cols-2 gap-3'>
+                    <div className='rounded border border-gray-200 bg-white p-3'>
+                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Verification</label>
+                      <p className={`text-lg font-semibold ${getScoreColor(ibvKpis.bankVerificationScore)} mt-1`}>
                         {Math.round(ibvKpis.bankVerificationScore)}%
                       </p>
                     </div>
 
-                    <div className='rounded-lg bg-blue-50 p-3 border border-blue-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>💳</span>
-                        <label className='text-xs font-bold text-gray-600'>Balance</label>
-                      </div>
-                      <p className='text-lg font-black text-blue-600 truncate'>{formatCurrency(ibvKpis.averageAccountBalance)}</p>
+                    <div className='rounded border border-gray-200 bg-white p-3'>
+                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Balance</label>
+                      <p className='text-lg font-semibold text-gray-900 truncate mt-1'>{formatCurrency(ibvKpis.averageAccountBalance)}</p>
                     </div>
 
-                    <div className='rounded-lg bg-purple-50 p-3 border border-purple-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>💵</span>
-                        <label className='text-xs font-bold text-gray-600'>Income</label>
-                      </div>
-                      <p className='text-lg font-black text-purple-600 truncate'>{formatCurrency(ibvKpis.monthlyIncomeVerified)}</p>
+                    <div className='rounded border border-gray-200 bg-white p-3'>
+                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Income</label>
+                      <p className='text-lg font-semibold text-gray-900 truncate mt-1'>{formatCurrency(ibvKpis.monthlyIncomeVerified)}</p>
                     </div>
 
-                    <div className='rounded-lg bg-orange-50 p-3 border border-orange-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>✅</span>
-                        <label className='text-xs font-bold text-gray-600'>KYC</label>
-                      </div>
-                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black uppercase ${getRiskColor(ibvKpis.kycRiskLevel)}`}>
+                    <div className='rounded border border-gray-200 bg-white p-3'>
+                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>KYC</label>
+                      <span className={`inline-flex rounded px-2 py-1 text-xs font-medium uppercase tracking-wide mt-1 ${getRiskColor(ibvKpis.kycRiskLevel)}`}>
                         {ibvKpis.kycRiskLevel}
                       </span>
                     </div>
 
-                    <div className='rounded-lg bg-teal-50 p-3 border border-teal-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>⏰</span>
-                        <label className='text-xs font-bold text-gray-600'>Age</label>
-                      </div>
-                      <p className='text-xl font-black text-teal-600'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
+                    <div className='rounded border border-gray-200 bg-white p-3'>
+                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Account Age</label>
+                      <p className='text-lg font-semibold text-gray-900 mt-1'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
                     </div>
 
                     <button 
                       onClick={async () => {
                         setShowTransactionsModal(true)
-                        // Fetch transactions on demand
                         try {
                           setLoadingTransactions(true)
                           const res = await fetch(`/api/admin/applications/${applicationId}/transactions`)
@@ -609,34 +547,20 @@ export default function ApplicationDetailsPage() {
                           setLoadingTransactions(false)
                         }
                       }}
-                      className='rounded-lg bg-violet-50 p-3 border border-violet-200 hover:bg-violet-100 transition-colors cursor-pointer text-left w-full'
+                      className='rounded border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors text-left'
                     >
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>📈</span>
-                        <label className='text-xs font-bold text-gray-600'>Transactions</label>
-                      </div>
-                      <p className='text-xl font-black text-violet-600'>
+                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Transactions</label>
+                      <p className='text-lg font-semibold text-gray-900 mt-1'>
                         {Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length || 0}
                       </p>
-                      <p className='text-xs text-violet-600 mt-1'>
-                        {(Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length) > 0 
-                          ? 'Click to view details →' 
-                          : 'No transactions available'}
+                      <p className='text-xs text-gray-500 mt-1'>
+                        {getTransactions().length > 0 ? 'Click to view' : 'No transactions'}
                       </p>
                     </button>
 
-                    <div className={`rounded-lg p-3 border col-span-2 ${
-                      ibvKpis.overdraftOccurrences === 0 ? 'bg-green-50 border-green-200' : 
-                      ibvKpis.overdraftOccurrences <= 2 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
-                    }`}>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>⚠️</span>
-                        <label className='text-xs font-bold text-gray-600'>Overdrafts</label>
-                      </div>
-                      <p className={`text-2xl font-black ${
-                        ibvKpis.overdraftOccurrences === 0 ? 'text-green-600' : 
-                        ibvKpis.overdraftOccurrences <= 2 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
+                    <div className={`rounded border border-gray-200 bg-white p-3 col-span-2`}>
+                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Overdrafts</label>
+                      <p className={`text-xl font-semibold mt-1 text-gray-900`}>
                         {ibvKpis.overdraftOccurrences} in last 90 days
                       </p>
                     </div>
@@ -647,67 +571,52 @@ export default function ApplicationDetailsPage() {
           </div>
 
           {/* Loan Information - Right Side */}
-          <div className='overflow-hidden rounded-xl bg-gradient-to-br from-[#097fa5] via-[#0a95c2] to-[#097fa5] shadow-xl border border-white/10'>
-            <div className='bg-gradient-to-r from-[#333366]/20 to-transparent px-5 py-4'>
-              <div className='flex items-center gap-3'>
-                <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#333366] to-[#2a2d5a] shadow-lg'>
-                  <span className='text-3xl text-white'>💰</span>
-                </div>
-                <div className='flex-1'>
-                  <h2 className='text-xl font-black text-white'>Loan Details</h2>
-                  <p className='text-xs text-white/60'>Application Information</p>
-                </div>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-teal-50 border-b border-gray-200 px-6 py-4'>
+              <div>
+                <h2 className='text-lg font-semibold text-gray-900'>Loan Details</h2>
+                <p className='text-sm text-gray-500 mt-0.5'>Application Information</p>
               </div>
             </div>
 
-            <div className='bg-gray-50 p-5'>
-              <div className='grid gap-4'>
-                {/* Loan Amount - Large */}
-                <div className='rounded-lg bg-gradient-to-br from-[#333366] to-[#097fa5] p-4 border-2 border-[#333366]/50 shadow-lg'>
-                  <label className='text-xs font-bold text-white uppercase mb-1 block'>Loan Amount</label>
-                  <p className='text-4xl font-black text-white drop-shadow-lg'>
+            <div className='p-6'>
+              <div className='space-y-4'>
+                {/* Loan Amount */}
+                <div className='rounded border border-gray-200 bg-gray-50 p-4'>
+                  <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Loan Amount</label>
+                  <p className='text-3xl font-semibold text-gray-900 mt-1'>
                     {formatCurrency(application.loan_amount)}
                   </p>
                 </div>
 
                 {/* Income Source */}
-                <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
-                  <div className='flex items-center justify-between'>
-                    <div>
-                      <label className='text-xs font-bold text-gray-500 uppercase'>Income Source</label>
-                      <p className='text-lg font-black text-gray-900 capitalize mt-1'>
-                        {application.income_source.replace(/-/g, ' ')}
-                      </p>
-                    </div>
-                    <span className='text-2xl'>💼</span>
-                  </div>
+                <div className='rounded border border-gray-200 bg-white p-3'>
+                  <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Income Source</label>
+                  <p className='text-base font-medium text-gray-900 capitalize mt-1'>
+                    {application.income_source.replace(/-/g, ' ')}
+                  </p>
                 </div>
 
                 {/* Bankruptcy Plan */}
-                <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
-                  <div className='flex items-center justify-between'>
-                    <div>
-                      <label className='text-xs font-bold text-gray-500 uppercase'>Bankruptcy Plan</label>
-                      <p className='text-lg font-black text-gray-900 mt-1'>
-                        {application.bankruptcy_plan ? 'Yes' : 'No'}
-                      </p>
-                    </div>
-                    <span className='text-2xl'>{application.bankruptcy_plan ? '⚠️' : '✅'}</span>
-                  </div>
+                <div className='rounded border border-gray-200 bg-white p-3'>
+                  <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Bankruptcy Plan</label>
+                  <p className='text-base font-medium text-gray-900 mt-1'>
+                    {application.bankruptcy_plan ? 'Yes' : 'No'}
+                  </p>
                 </div>
 
                 {/* Income Fields Summary */}
                 {application.income_fields && Object.keys(application.income_fields).length > 0 && (
-                  <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
-                    <label className='text-xs font-bold text-gray-500 uppercase mb-2 block'>Income Details</label>
-                    <div className='space-y-1 text-xs text-gray-700'>
+                  <div className='rounded border border-gray-200 bg-white p-3'>
+                    <label className='text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block'>Income Details</label>
+                    <div className='space-y-1 text-sm text-gray-700'>
                       {Object.entries(application.income_fields).slice(0, 3).map(([key, value]) => (
                         <p key={key}>
-                          <span className='font-semibold capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
+                          <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
                         </p>
                       ))}
                       {Object.keys(application.income_fields).length > 3 && (
-                        <p className='text-gray-500'>+{Object.keys(application.income_fields).length - 3} more</p>
+                        <p className='text-gray-500 text-xs'>+{Object.keys(application.income_fields).length - 3} more</p>
                       )}
                     </div>
                   </div>
@@ -717,11 +626,13 @@ export default function ApplicationDetailsPage() {
           </div>
         </div>
 
-        {/* Additional Client Information - Compact */}
-        <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-          <h3 className='mb-4 text-lg font-bold text-gray-900'>Additional Information</h3>
-          
-          <div className='grid gap-4 md:grid-cols-3'>
+        {/* Additional Client Information */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-gray-50 border-b border-gray-200 px-6 py-4'>
+            <h3 className='text-lg font-semibold text-gray-900'>Additional Information</h3>
+          </div>
+          <div className='p-6'>
+            <div className='grid gap-4 md:grid-cols-3'>
             {/* Email */}
             <div>
               <label className='text-xs font-medium text-gray-500'>Email</label>
@@ -780,57 +691,58 @@ export default function ApplicationDetailsPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Income Details */}
         {application.income_fields && Object.keys(application.income_fields).length > 0 && (
-          <div className='rounded-lg bg-white p-6 shadow-sm border border-gray-200'>
-            <h3 className='mb-4 text-lg font-bold text-gray-900'>Income Details</h3>
-            <div className='grid gap-2 text-sm'>
-              {Object.entries(application.income_fields).map(([key, value]) => (
-                <p key={key} className='text-gray-700'>
-                  <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
-                </p>
-              ))}
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-emerald-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>Income Details</h3>
+            </div>
+            <div className='p-6'>
+              <div className='grid gap-2 text-sm'>
+                {Object.entries(application.income_fields).map(([key, value]) => (
+                  <p key={key} className='text-gray-700'>
+                    <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
+                  </p>
+                ))}
+              </div>
             </div>
           </div>
         )}
      
-        {/* References Card */}
+        {/* References */}
         {application.references && application.references.length > 0 && (
-          <div className='rounded-lg bg-white p-6 shadow-sm'>
-            <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-              <span className='text-xl'>📋</span>
-              <h2 className='text-lg font-semibold text-gray-900'>References</h2>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-amber-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>References</h3>
             </div>
-            
-            <div className='space-y-4'>
+            <div className='p-6'>
+              <div className='space-y-4'>
               {application.references.map((ref, index) => (
-                <div key={ref.id} className='rounded-lg border border-gray-200 p-4'>
-                  <div className='mb-2 flex items-center gap-2'>
-                    <span className='flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-600'>
-                      {index + 1}
-                    </span>
-                    <h3 className='font-medium text-gray-900'>{ref.first_name} {ref.last_name}</h3>
+                <div key={ref.id} className='rounded border border-gray-200 p-4'>
+                  <div className='mb-3'>
+                    <h4 className='font-medium text-gray-900'>{ref.first_name} {ref.last_name}</h4>
                   </div>
-                  <div className='grid gap-2 text-sm'>
-                    <p className='text-gray-600'>Phone: {ref.phone}</p>
-                    <p className='text-gray-600'>Relationship: {ref.relationship}</p>
+                  <div className='space-y-1 text-sm text-gray-600'>
+                    <p>Phone: {ref.phone}</p>
+                    <p>Relationship: {ref.relationship}</p>
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Timeline Card */}
-        <div className='rounded-lg bg-white p-6 shadow-sm'>
-          <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-            <span className='text-xl'>📅</span>
-            <h2 className='text-lg font-semibold text-gray-900'>Timeline</h2>
+        {/* Timeline */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-indigo-50 border-b border-gray-200 px-6 py-4'>
+            <h3 className='text-lg font-semibold text-gray-900'>Timeline</h3>
           </div>
-          
-          <div className='space-y-3 text-sm'>
+          <div className='p-6'>
+            <div className='space-y-3 text-sm'>
             <div className='flex items-center gap-3'>
               <span className='text-gray-500'>Created:</span>
               <span className='font-medium text-gray-900'>{formatDateTime(application.created_at)}</span>
@@ -846,14 +758,14 @@ export default function ApplicationDetailsPage() {
             {application.approved_at && (
               <div className='flex items-center gap-3'>
                 <span className='text-gray-500'>Approved:</span>
-                <span className='font-medium text-green-600'>{formatDateTime(application.approved_at)}</span>
+                <span className='font-medium text-gray-900'>{formatDateTime(application.approved_at)}</span>
               </div>
             )}
             
             {application.rejected_at && (
               <div className='flex items-center gap-3'>
                 <span className='text-gray-500'>Rejected:</span>
-                <span className='font-medium text-red-600'>{formatDateTime(application.rejected_at)}</span>
+                <span className='font-medium text-gray-900'>{formatDateTime(application.rejected_at)}</span>
               </div>
             )}
             
@@ -862,90 +774,87 @@ export default function ApplicationDetailsPage() {
               <span className='font-medium text-gray-900'>{formatDateTime(application.updated_at)}</span>
             </div>
           </div>
+          </div>
         </div>
 
-        {/* Staff Notes (if any) */}
+        {/* Staff Notes */}
         {application.staff_notes && (
-          <div className='rounded-lg bg-white p-6 shadow-sm'>
-            <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-              <span className='text-xl'>📝</span>
-              <h2 className='text-lg font-semibold text-gray-900'>Staff Notes</h2>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-slate-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>Staff Notes</h3>
             </div>
-            <p className='text-sm text-gray-700'>{application.staff_notes}</p>
+            <div className='p-6'>
+              <p className='text-sm text-gray-700'>{application.staff_notes}</p>
+            </div>
           </div>
         )}
 
-        {/* Rejection Reason (if any) */}
+        {/* Rejection Reason */}
         {application.rejection_reason && (
-          <div className='rounded-lg bg-red-50 p-6 shadow-sm border border-red-200'>
-            <div className='mb-4 flex items-center gap-2 border-b border-red-200 pb-3'>
-              <span className='text-xl'>❌</span>
-              <h2 className='text-lg font-semibold text-red-900'>Rejection Reason</h2>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-red-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>Rejection Reason</h3>
             </div>
-            <p className='text-sm text-red-700'>{application.rejection_reason}</p>
+            <div className='p-6'>
+              <p className='text-sm text-gray-700'>{application.rejection_reason}</p>
+            </div>
           </div>
         )}
 
-        {/* Action Buttons - Modern Decision Interface */}
-        <div className='rounded-xl bg-white p-6 shadow-sm border border-gray-200'>
-          <div className='mb-4 flex items-center justify-between border-b border-gray-200 pb-4'>
-            <div>
-              <h3 className='text-lg font-semibold text-gray-900'>Decision</h3>
-              <p className='text-sm text-gray-600'>Review all information and KPIs before making a decision</p>
+        {/* Action Buttons */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-green-50 border-b border-gray-200 px-6 py-4'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <h3 className='text-lg font-semibold text-gray-900'>Decision</h3>
+                <p className='text-sm text-gray-500 mt-0.5'>Review all information and KPIs before making a decision</p>
+              </div>
+              <button
+                onClick={() => router.push('/admin/applications')}
+                className='rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
+              >
+                Back to Applications
+              </button>
             </div>
-            <button
-              onClick={() => router.push('/admin/applications')}
-              className='rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
-            >
-              ← Back to Applications
-            </button>
           </div>
-
-          {application.application_status === 'pending' && (
+          <div className='p-6'>
+            {application.application_status === 'pending' && (
             <div className='flex items-center justify-center gap-4'>
               <Button
                 onClick={() => setShowRejectModal(true)}
-                className='bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105'
+                className='rounded border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
               >
-                ❌ Reject Application
+                Reject Application
               </Button>
               <Button
                 onClick={() => setShowApproveModal(true)}
-                className='bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105'
+                className='rounded border border-gray-900 bg-gray-900 px-6 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors'
               >
-                ✅ Approve Application
+                Approve Application
               </Button>
             </div>
           )}
 
-          {application.application_status !== 'pending' && (
-            <div className='text-center py-8'>
-              <p className='text-gray-600'>This application has already been processed.</p>
-              <button
-                onClick={() => setShowApproveModal(true)}
-                className='mt-4 rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors'
-              >
-                View Details
-              </button>
-            </div>
-          )}
+            {application.application_status !== 'pending' && (
+              <div className='text-center py-8'>
+                <p className='text-gray-600'>This application has already been processed.</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Approve Modal */}
         {showApproveModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm'>
-            <div className='mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl'>
-              <div className='mb-4 text-center'>
-                <div className='mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100'>
-                  <span className='text-3xl'>✅</span>
-                </div>
-                <h3 className='text-xl font-bold text-gray-900'>Approve Application</h3>
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
+            <div className='mx-4 w-full max-w-md rounded-lg bg-white p-6 border border-gray-200'>
+              <div className='mb-6'>
+                <h3 className='text-lg font-semibold text-gray-900'>Approve Application</h3>
                 <p className='mt-2 text-sm text-gray-600'>
                   Are you sure you want to approve this application?
                 </p>
                 {ibvKpis && (
-                  <div className='mt-4 rounded-lg bg-green-50 p-3 text-left text-xs text-gray-700'>
-                    <p className='font-semibold mb-1'>Based on IBV Analysis:</p>
+                  <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
+                    <p className='font-medium mb-1'>Based on IBV Analysis:</p>
                     <ul className='space-y-1'>
                       <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
                       <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
@@ -958,14 +867,14 @@ export default function ApplicationDetailsPage() {
                 <button
                   onClick={() => setShowApproveModal(false)}
                   disabled={processing}
-                  className='flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors'
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleApprove}
                   disabled={processing}
-                  className='flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 transition-colors'
                 >
                   {processing ? 'Processing...' : 'Confirm Approval'}
                 </button>
@@ -976,19 +885,16 @@ export default function ApplicationDetailsPage() {
 
         {/* Reject Modal */}
         {showRejectModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm'>
-            <div className='mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl'>
-              <div className='mb-4 text-center'>
-                <div className='mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100'>
-                  <span className='text-3xl'>❌</span>
-                </div>
-                <h3 className='text-xl font-bold text-gray-900'>Reject Application</h3>
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
+            <div className='mx-4 w-full max-w-md rounded-lg bg-white p-6 border border-gray-200'>
+              <div className='mb-6'>
+                <h3 className='text-lg font-semibold text-gray-900'>Reject Application</h3>
                 <p className='mt-2 text-sm text-gray-600'>
                   Please provide a reason for rejection:
                 </p>
                 {ibvKpis && (
-                  <div className='mt-4 rounded-lg bg-red-50 p-3 text-left text-xs text-gray-700'>
-                    <p className='font-semibold mb-1'>Based on IBV Analysis:</p>
+                  <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
+                    <p className='font-medium mb-1'>Based on IBV Analysis:</p>
                     <ul className='space-y-1'>
                       <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
                       <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
@@ -1001,14 +907,14 @@ export default function ApplicationDetailsPage() {
                 <button
                   onClick={() => setShowRejectModal(false)}
                   disabled={processing}
-                  className='flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors'
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleReject}
                   disabled={processing}
-                  className='flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors'
                 >
                   {processing ? 'Processing...' : 'Confirm Rejection'}
                 </button>
@@ -1019,27 +925,24 @@ export default function ApplicationDetailsPage() {
 
         {/* Transactions Modal */}
         {showTransactionsModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm' onClick={() => setShowTransactionsModal(false)}>
-            <div className='mx-4 w-full max-w-4xl h-[700px] rounded-2xl bg-white shadow-2xl flex flex-col' onClick={(e) => e.stopPropagation()}>
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50' onClick={() => setShowTransactionsModal(false)}>
+            <div className='mx-4 w-full max-w-4xl h-[700px] rounded-lg bg-white border border-gray-200 flex flex-col' onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className='border-b border-gray-200 px-6 py-4 flex-shrink-0'>
                 <div className='flex items-center justify-between'>
-                  <div className='flex items-center gap-3'>
-                    <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600'>
-                      <span className='text-3xl text-white'>🏦</span>
-                    </div>
-                    <div>
-                      <h3 className='text-xl font-bold text-gray-900'>Transaction History</h3>
-                      <p className='text-sm text-gray-600'>
-                        {loadingTransactions ? 'Loading transactions…' : `${getTransactions().length} transactions found`}
-                      </p>
-                    </div>
+                  <div>
+                    <h3 className='text-lg font-semibold text-gray-900'>Transaction History</h3>
+                    <p className='text-sm text-gray-500 mt-0.5'>
+                      {loadingTransactions ? 'Loading transactions…' : `${getTransactions().length} transactions found`}
+                    </p>
                   </div>
                   <button
                     onClick={() => setShowTransactionsModal(false)}
-                    className='flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors'
+                    className='flex h-8 w-8 items-center justify-center rounded hover:bg-gray-100 transition-colors'
                   >
-                    <span className='text-2xl'>×</span>
+                    <svg className='h-5 w-5 text-gray-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -1051,7 +954,7 @@ export default function ApplicationDetailsPage() {
                   placeholder='Search transactions...'
                   value={transactionSearch}
                   onChange={(e) => setTransactionSearch(e.target.value)}
-                  className='w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20'
+                  className='w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400'
                 />
               </div>
 
@@ -1059,12 +962,11 @@ export default function ApplicationDetailsPage() {
               <div className='flex-1 overflow-y-auto px-6 py-4'>
                 {loadingTransactions ? (
                   <div className='py-12 text-center'>
-                    <div className='mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-violet-600'></div>
-                    <p className='mt-4 text-gray-600'>Loading transactions…</p>
+                    <div className='mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900'></div>
+                    <p className='mt-4 text-sm text-gray-600'>Loading transactions…</p>
                   </div>
                 ) : getFilteredTransactions().length === 0 ? (
                   <div className='py-12 text-center'>
-                    <span className='mb-4 block text-5xl'>📭</span>
                     <p className='text-gray-600'>No transactions found</p>
                     {transactionSearch && (
                       <p className='mt-2 text-sm text-gray-500'>Try a different search term</p>
@@ -1080,54 +982,45 @@ export default function ApplicationDetailsPage() {
                       return (
                         <div 
                           key={index} 
-                          className='rounded-lg border border-gray-200 p-4 hover:border-violet-300 hover:bg-violet-50/50 transition-colors'
+                          className='rounded border border-gray-200 p-4 hover:bg-gray-50 transition-colors'
                         >
                           <div className='flex items-center justify-between'>
                             <div className='flex-1'>
-                              <div className='flex items-center gap-3'>
-                                <span className='text-2xl'>
-                                  {isCredit ? '⬇️' : '⬆️'}
-                                </span>
-                                <div className='flex-1'>
-                                  <p className='font-semibold text-gray-900'>{tx.description}</p>
-                                  <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600'>
-                                    <span>{tx.date}</span>
-                                    {tx.account_description && (
-                                      <>
-                                        <span className='text-gray-400'>•</span>
-                                        <span className='rounded-full bg-blue-100 px-2 py-0.5 text-blue-700'>
-                                          {tx.account_description}
-                                        </span>
-                                      </>
-                                    )}
-                                    {tx.category && (
-                                      <>
-                                        <span className='text-gray-400'>•</span>
-                                        <span className='text-gray-500 capitalize'>
-                                          {tx.category.split('/').pop()}
-                                        </span>
-                                      </>
-                                    )}
-                                  </div>
-                                  {tx.flags && tx.flags.length > 0 && (
-                                    <div className='mt-1 flex flex-wrap gap-1'>
-                                      {tx.flags.map((flag: string, flagIndex: number) => (
-                                        <span
-                                          key={flagIndex}
-                                          className='rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700'
-                                        >
-                                          {flag.replace(/_/g, ' ')}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+                              <p className='font-medium text-gray-900'>{tx.description}</p>
+                              <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500'>
+                                <span>{tx.date}</span>
+                                {tx.account_description && (
+                                  <>
+                                    <span className='text-gray-400'>•</span>
+                                    <span className='rounded px-1.5 py-0.5 bg-gray-100 text-gray-700'>
+                                      {tx.account_description}
+                                    </span>
+                                  </>
+                                )}
+                                {tx.category && (
+                                  <>
+                                    <span className='text-gray-400'>•</span>
+                                    <span className='text-gray-500 capitalize'>
+                                      {tx.category.split('/').pop()}
+                                    </span>
+                                  </>
+                                )}
                               </div>
+                              {tx.flags && tx.flags.length > 0 && (
+                                <div className='mt-1 flex flex-wrap gap-1'>
+                                  {tx.flags.map((flag: string, flagIndex: number) => (
+                                    <span
+                                      key={flagIndex}
+                                      className='rounded px-1.5 py-0.5 bg-gray-100 text-xs text-gray-700'
+                                    >
+                                      {flag.replace(/_/g, ' ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            <div className='text-right'>
-                              <p className={`text-lg font-bold ${
-                                isCredit ? 'text-green-600' : 'text-red-600'
-                              }`}>
+                            <div className='text-right ml-4'>
+                              <p className='text-lg font-semibold text-gray-900'>
                                 {formatCurrency(amount)}
                               </p>
                               {tx.balance !== null && tx.balance !== undefined && (
@@ -1148,7 +1041,7 @@ export default function ApplicationDetailsPage() {
               <div className='border-t border-gray-200 px-6 py-4 flex-shrink-0'>
                 <button
                   onClick={() => setShowTransactionsModal(false)}
-                  className='w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors'
+                  className='w-full rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
                 >
                   Close
                 </button>
