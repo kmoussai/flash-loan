@@ -2,9 +2,11 @@
 import { Link } from '@/src/navigation'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
-import { FC } from 'react'
+import { FC, useEffect, useState } from 'react'
 import LangSwitcher from './LangSwitcher'
 import Button from './Button'
+import { createClient } from '@/src/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
 interface Props {
   locale: string
@@ -12,6 +14,71 @@ interface Props {
 
 export const Header: FC<Props> = ({ locale }) => {
   const t = useTranslations('')
+  const router = useRouter()
+  const supabase = createClient()
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          // Check if user is a client (not staff) by querying directly
+          // Check staff table first
+          const { data: staffData } = await supabase
+            .from('staff')
+            .select('id')
+            .eq('id', user.id)
+            .single()
+          
+          if (staffData) {
+            // User is staff, not a client
+            setIsAuthenticated(false)
+            setIsClient(false)
+          } else {
+            // Check users table
+            const { data: userData } = await supabase
+              .from('users')
+              .select('id')
+              .eq('id', user.id)
+              .single()
+            
+            setIsAuthenticated(!!user)
+            setIsClient(!!userData)
+          }
+        } else {
+          setIsAuthenticated(false)
+          setIsClient(false)
+        }
+      } catch (error) {
+        setIsAuthenticated(false)
+        setIsClient(false)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkAuth()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        checkAuth()
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/')
+    router.refresh()
+  }
 
   return (
     <header className='border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur'>
@@ -69,10 +136,58 @@ export const Header: FC<Props> = ({ locale }) => {
           >
             {t('Contact')}
           </Link>
+          <Link
+            lang={locale}
+            href='/dashboard'
+            className='text-sm font-medium text-text-secondary transition-colors hover:text-primary'
+          >
+            {t('Dashboard') || 'Dashboard'}
+          </Link>
         </nav>
 
         {/* Right side actions */}
         <div className='flex items-center space-x-3'>
+          {/* Auth Buttons */}
+          {!loading && (
+            <>
+              {isAuthenticated && isClient ? (
+                <>
+                  {/* Dashboard Link - Show on mobile, hidden on larger screens (already in nav) */}
+                  <Link lang={locale} href='/dashboard' className='md:hidden'>
+                    <Button
+                      variant='secondary'
+                      size='small'
+                      className='text-xs'
+                    >
+                      {t('Dashboard') || 'Dashboard'}
+                    </Button>
+                  </Link>
+                  
+                  {/* Logout Button */}
+                  <Button
+                    variant='secondary'
+                    size='small'
+                    onClick={handleLogout}
+                    className='hidden sm:inline-flex'
+                  >
+                    {t('Sign_Out') || 'Sign Out'}
+                  </Button>
+                </>
+              ) : (
+                /* Login Button */
+                <Link lang={locale} href='/auth/signin'>
+                  <Button
+                    variant='secondary'
+                    size='small'
+                    className='hidden sm:inline-flex'
+                  >
+                    {t('Sign_In') || 'Sign In'}
+                  </Button>
+                </Link>
+              )}
+            </>
+          )}
+          
           {/* Apply Now Button - Links to apply page */}
           <Link lang={locale} href='/apply'>
             <Button

@@ -7,20 +7,47 @@ import Select from '@/src/app/[locale]/components/Select'
 import Button from '@/src/app/[locale]/components/Button'
 import type { LoanApplication, ApplicationStatus, InveriteIbvData } from '@/src/lib/supabase/types'
 
-// Mock IBV KPI data
-interface IBVKPIs {
-  bankVerificationScore: number
-  averageAccountBalance: number
-  monthlyIncomeVerified: number
-  accountAge: number // in days
-  transactionCount: number
-  overdraftOccurrences: number
-  kycRiskLevel: 'low' | 'medium' | 'high'
-  overallRiskScore: number
+// IBV Results structure from ibv_results column
+interface IbvResults {
+  extracted_at?: string
+  accounts_count?: number
+  accounts_summary?: Array<{
+    account_index?: number
+    account_type?: string | null
+    account_description?: string | null
+    institution?: string | null
+    quarter_all_time?: {
+      number_of_deposits?: number | null
+      amount_of_deposits?: number | null
+      average_amount_of_deposits?: number | null
+      number_of_withdrawals?: number | null
+      amount_of_withdrawals?: number | null
+      average_balance?: number | null
+      highest_balance?: number | null
+      lowest_balance?: number | null
+      ending_balance?: number | null
+      overdraft_count?: number | null
+      negative_balance_count?: number | null
+      negative_balance_days?: number | null
+      total_transactions?: number | null
+    } | null
+    current_balance?: {
+      available?: number | null
+      current?: number | null
+    } | null
+    transaction_count?: number
+  }>
+  aggregates?: {
+    total_deposits?: number | null
+    total_withdrawals?: number | null
+    total_accounts?: number
+    accounts_with_statistics?: number
+  }
 }
 
 // Extended type for application with client details
 interface ApplicationWithDetails extends LoanApplication {
+  ibv_results?: IbvResults | null
   users: {
     id: string
     first_name: string | null
@@ -64,22 +91,107 @@ export default function ApplicationDetailsPage() {
   const [application, setApplication] = useState<ApplicationWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [ibvKpis, setIbvKpis] = useState<IBVKPIs | null>(null)
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [transactionSearch, setTransactionSearch] = useState('')
+  const [fetchingInveriteData, setFetchingInveriteData] = useState(false)
+  const [fetchedTransactions, setFetchedTransactions] = useState<any[] | null>(null)
+  const [loadingTransactions, setLoadingTransactions] = useState(false)
 
   // Get transactions from Inverite data
+  // Transactions are nested inside accounts[].transactions array
   const getTransactions = () => {
+    // Prefer on-demand fetched transactions to avoid heavy JSONB in main payload
+    if (Array.isArray(fetchedTransactions)) return fetchedTransactions
     if (!application?.ibv_provider_data) return []
     if (application.ibv_provider !== 'inverite') return []
     
-    const inveriteData = application.ibv_provider_data as InveriteIbvData
-    if (!inveriteData || !inveriteData.account_statement) return []
+    const inveriteData = application.ibv_provider_data as any
     
-    return inveriteData.account_statement
+    // Primary path: Check accounts array for transactions
+    if (inveriteData?.accounts && Array.isArray(inveriteData.accounts)) {
+      const allTransactions: any[] = []
+      
+      inveriteData.accounts.forEach((account: any, accountIndex: number) => {
+        // Check if this account has transactions
+        if (account?.transactions && Array.isArray(account.transactions) && account.transactions.length > 0) {
+          account.transactions.forEach((tx: any) => {
+            if (!tx) return // Skip null/undefined transactions
+            
+            // Map Inverite transaction fields to our expected format
+            allTransactions.push({
+              description: tx.details || tx.description || 'No description',
+              date: tx.date || '',
+              // Convert string amounts to numbers (handle empty strings)
+              credit: tx.credit && tx.credit !== '' ? parseFloat(String(tx.credit)) : null,
+              debit: tx.debit && tx.debit !== '' ? parseFloat(String(tx.debit)) : null,
+              balance: tx.balance && tx.balance !== '' ? parseFloat(String(tx.balance)) : null,
+              // Include additional Inverite fields
+              category: tx.category || null,
+              flags: Array.isArray(tx.flags) ? tx.flags : [],
+              // Include account information for context
+              account_index: accountIndex,
+              account_type: account.type || null,
+              account_description: account.account_description || null,
+              account_number: account.account || null,
+              institution: account.institution || null,
+              // Keep original transaction for reference
+              _original: tx
+            })
+          })
+        }
+      })
+      
+      if (allTransactions.length > 0) {
+        // Sort by date (newest first), handle invalid dates
+        const sorted = allTransactions.sort((a, b) => {
+          try {
+            const dateA = a.date ? new Date(a.date).getTime() : 0
+            const dateB = b.date ? new Date(b.date).getTime() : 0
+            if (isNaN(dateA) || isNaN(dateB)) return 0
+            return dateB - dateA
+          } catch {
+            return 0
+          }
+        })
+        
+        return sorted
+      }
+    }
+    
+    // Fallback 1: Check account_info.transactions (if account_info is a single object)
+    if (inveriteData?.account_info?.transactions && Array.isArray(inveriteData.account_info.transactions)) {
+      const transactions = inveriteData.account_info.transactions.map((tx: any) => ({
+        description: tx.details || tx.description || 'No description',
+        date: tx.date || '',
+        credit: tx.credit && tx.credit !== '' ? parseFloat(String(tx.credit)) : null,
+        debit: tx.debit && tx.debit !== '' ? parseFloat(String(tx.debit)) : null,
+        balance: tx.balance && tx.balance !== '' ? parseFloat(String(tx.balance)) : null,
+        category: tx.category || null,
+        flags: Array.isArray(tx.flags) ? tx.flags : [],
+        _original: tx
+      }))
+      
+      return transactions.sort((a: any, b: any) => {
+        try {
+          const dateA = a.date ? new Date(a.date).getTime() : 0
+          const dateB = b.date ? new Date(b.date).getTime() : 0
+          if (isNaN(dateA) || isNaN(dateB)) return 0
+          return dateB - dateA
+        } catch {
+          return 0
+        }
+      })
+    }
+    
+    // Fallback 2: Legacy account_statement format
+    if (inveriteData?.account_statement && Array.isArray(inveriteData.account_statement) && inveriteData.account_statement.length > 0) {
+      return inveriteData.account_statement
+    }
+    
+    return []
   }
 
   // Filter transactions based on search
@@ -88,32 +200,100 @@ export default function ApplicationDetailsPage() {
     if (!transactionSearch) return transactions
     
     const searchLower = transactionSearch.toLowerCase()
-    return transactions.filter(tx =>
-      tx.description.toLowerCase().includes(searchLower) ||
-      tx.date.includes(searchLower)
+    return transactions.filter((tx: any) =>
+      (tx.description && tx.description.toLowerCase().includes(searchLower)) ||
+      (tx.date && tx.date.includes(searchLower)) ||
+      (tx.category && tx.category.toLowerCase().includes(searchLower)) ||
+      (tx.account_description && tx.account_description.toLowerCase().includes(searchLower))
     )
   }
 
-  // Generate mock IBV KPIs
-  const generateMockIBVKPIs = (): IBVKPIs => {
-    const riskLevels = ['low', 'medium', 'high'] as const
-    return {
-      bankVerificationScore: Math.random() * 40 + 60, // 60-100
-      averageAccountBalance: Math.random() * 5000 + 1000, // $1,000 - $6,000
-      monthlyIncomeVerified: Math.random() * 2000 + 1500, // $1,500 - $3,500
-      accountAge: Math.random() * 1800 + 365, // 1-5 years in days
-      transactionCount: Math.floor(Math.random() * 50 + 10), // 10-60 transactions
-      overdraftOccurrences: Math.floor(Math.random() * 5), // 0-5 overdrafts
-      kycRiskLevel: riskLevels[Math.floor(Math.random() * 3)],
-      overallRiskScore: Math.random() * 50 + 30 // 30-80
+  // Calculate risk score from IBV results data
+  const calculateRiskScore = (results: IbvResults | null | undefined): number => {
+    if (!results) return 0
+    const summary = results // Keep using 'summary' variable name for clarity in the function
+    if (!summary?.accounts_summary || summary.accounts_summary.length === 0) {
+      return 0 // Unknown risk if no data
     }
+
+    let riskScore = 50 // Start with neutral score
+
+    const accountsWithData = summary.accounts_summary.filter(acc => acc.quarter_all_time)
+    
+    if (accountsWithData.length === 0) return 0
+
+    // Calculate average metrics across all accounts
+    let totalOverdrafts = 0
+    let totalNegativeDays = 0
+    let totalNegativeCount = 0
+    let avgBalance = 0
+    let hasNegativeBalance = false
+    let totalDeposits = 0
+    let depositCount = 0
+
+    accountsWithData.forEach(acc => {
+      const qat = acc.quarter_all_time
+      if (qat) {
+        totalOverdrafts += qat.overdraft_count || 0
+        totalNegativeDays += qat.negative_balance_days || 0
+        totalNegativeCount += qat.negative_balance_count || 0
+        if (qat.average_balance !== null && qat.average_balance !== undefined) {
+          avgBalance += qat.average_balance
+        }
+        if (qat.lowest_balance !== null && qat.lowest_balance !== undefined && qat.lowest_balance < 0) {
+          hasNegativeBalance = true
+        }
+        if (qat.amount_of_deposits !== null && qat.amount_of_deposits !== undefined) {
+          totalDeposits += qat.amount_of_deposits
+          depositCount++
+        }
+      }
+    })
+
+    const avgOverdrafts = totalOverdrafts / accountsWithData.length
+    const avgNegativeDays = totalNegativeDays / accountsWithData.length
+    const avgNegativeCount = totalNegativeCount / accountsWithData.length
+    avgBalance = avgBalance / accountsWithData.length
+
+    // Adjust risk score based on factors
+    // Overdrafts: -10 per overdraft (max -30)
+    riskScore -= Math.min(avgOverdrafts * 10, 30)
+    
+    // Negative balance days: -5 per day (max -20)
+    riskScore -= Math.min(avgNegativeDays * 5, 20)
+    
+    // Negative balance occurrences: -3 per occurrence (max -15)
+    riskScore -= Math.min(avgNegativeCount * 3, 15)
+    
+    // Low average balance: -1 per $100 below $1000 (max -10)
+    if (avgBalance < 1000) {
+      riskScore -= Math.min((1000 - avgBalance) / 100, 10)
+    }
+    
+    // No deposits or very low deposits: -15
+    const avgDeposits = depositCount > 0 ? totalDeposits / depositCount : 0
+    if (avgDeposits < 500) {
+      riskScore -= 15
+    }
+
+    // Positive factors
+    // Good average balance: +10 if above $2000
+    if (avgBalance > 2000) {
+      riskScore += 10
+    }
+    
+    // High deposit amounts: +5 if average deposits > $2000
+    if (avgDeposits > 2000) {
+      riskScore += 5
+    }
+
+    // Clamp between 0 and 100
+    return Math.max(0, Math.min(100, Math.round(riskScore)))
   }
 
   useEffect(() => {
     if (applicationId) {
       fetchApplicationDetails()
-      // Generate mock IBV KPIs
-      setIbvKpis(generateMockIBVKPIs())
     }
   }, [applicationId])
 
@@ -141,17 +321,17 @@ export default function ApplicationDetailsPage() {
   const getStatusBadgeColor = (status: ApplicationStatus) => {
     switch (status) {
       case 'approved':
-        return 'bg-green-100 text-green-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'processing':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'rejected':
-        return 'bg-red-100 text-red-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'cancelled':
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-50 text-gray-900 border border-gray-200'
     }
   }
 
@@ -191,19 +371,11 @@ export default function ApplicationDetailsPage() {
   }
 
   const getRiskColor = (level: string) => {
-    switch(level) {
-      case 'low': return 'text-green-600 bg-green-50'
-      case 'medium': return 'text-yellow-600 bg-yellow-50'
-      case 'high': return 'text-red-600 bg-red-50'
-      default: return 'text-gray-600 bg-gray-50'
-    }
+    return 'text-gray-700 bg-gray-50 border border-gray-200'
   }
 
   const getScoreColor = (score: number, maxScore: number = 100) => {
-    const percentage = (score / maxScore) * 100
-    if (percentage >= 80) return 'text-green-600'
-    if (percentage >= 60) return 'text-yellow-600'
-    return 'text-red-600'
+    return 'text-gray-900'
   }
 
   const handleApprove = async () => {
@@ -226,6 +398,42 @@ export default function ApplicationDetailsPage() {
     router.push('/admin/applications')
   }
 
+  const handleFetchInveriteData = async () => {
+    if (!application) return
+
+    const inveriteData = application.ibv_provider_data as InveriteIbvData
+    const requestGuid = inveriteData?.request_guid
+
+    if (!requestGuid) {
+      alert('No request GUID found for this application')
+      return
+    }
+
+    try {
+      setFetchingInveriteData(true)
+      
+      // Pass application_id as query parameter for faster lookup
+      const response = await fetch(`/api/inverite/fetch/${requestGuid}?application_id=${applicationId}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch Inverite data')
+      }
+
+      const result = await response.json()
+      
+      // Refresh application details
+      await fetchApplicationDetails()
+      
+      // Show success message
+    } catch (error: any) {
+      console.error('Error fetching Inverite data:', error)
+      alert(`Error: ${error.message || 'Failed to fetch data from Inverite'}`)
+    } finally {
+      setFetchingInveriteData(false)
+    }
+  }
+
   const getAddressString = () => {
     if (!application?.addresses || application.addresses.length === 0) return 'N/A'
     const addr = application.addresses[0]
@@ -237,8 +445,8 @@ export default function ApplicationDetailsPage() {
       <AdminDashboardLayout>
         <div className='flex h-96 items-center justify-center'>
           <div className='text-center'>
-            <div className='mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600'></div>
-            <p className='mt-4 text-gray-600'>Loading application details...</p>
+            <div className='mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900'></div>
+            <p className='mt-4 text-sm text-gray-600'>Loading application details...</p>
           </div>
         </div>
       </AdminDashboardLayout>
@@ -250,11 +458,10 @@ export default function ApplicationDetailsPage() {
       <AdminDashboardLayout>
         <div className='flex h-96 items-center justify-center'>
           <div className='text-center'>
-            <span className='mb-4 block text-4xl'>⚠️</span>
-            <p className='text-red-600'>{error || 'Application not found'}</p>
+            <p className='text-gray-600'>{error || 'Application not found'}</p>
             <button
               onClick={() => router.push('/admin/applications')}
-              className='mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700'
+              className='mt-4 rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50'
             >
               Back to Applications
             </button>
@@ -268,277 +475,360 @@ export default function ApplicationDetailsPage() {
     <AdminDashboardLayout>
       <div className='space-y-6'>
         {/* Header */}
-        <div className='flex items-center justify-between'>
-          <div>
-            <div className='flex items-center gap-3'>
-              <button
-                onClick={() => router.push('/admin/applications')}
-                className='flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50'
-              >
-                ←
-              </button>
-              <div>
-                <h1 className='text-2xl font-bold text-gray-900'>
-                  Application Details
-                </h1>
-                <p className='text-xs text-gray-600'>
-                  Application #{application.id.slice(0, 8)}...
-                </p>
-              </div>
+        <div className='flex items-center justify-between border-b border-gray-200 pb-6'>
+          <div className='flex items-center gap-4'>
+            <button
+              onClick={() => router.push('/admin/applications')}
+              className='flex h-8 w-8 items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors'
+            >
+              <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 19l-7-7 7-7' />
+              </svg>
+            </button>
+            <div>
+              <h1 className='text-2xl font-semibold text-gray-900'>
+                Application Details
+              </h1>
+              <p className='text-sm text-gray-500 mt-1'>
+                ID: {application.id.slice(0, 8)}
+              </p>
             </div>
           </div>
           
           <div className='flex items-center gap-3'>
             <span
-              className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${getStatusBadgeColor(application.application_status)}`}
+              className={`inline-flex rounded px-3 py-1 text-xs font-medium uppercase tracking-wide ${getStatusBadgeColor(application.application_status)}`}
             >
-              {application.application_status.toUpperCase()}
+              {application.application_status}
             </span>
           </div>
         </div>
 
-        {/* Principal Client Information Row */}
-        <div className='rounded-xl bg-gradient-to-br from-[#333366] via-[#2a2d5a] to-[#1f2147] shadow-xl overflow-hidden border border-white/10'>
-          <div className='px-6 py-4'>
-            <div className='flex items-center justify-between'>
-              <div className='flex items-center gap-6'>
-                {/* Full Name */}
-                <div className='flex items-center gap-3'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
-                    <span className='text-2xl'>👤</span>
-                  </div>
-                  <div>
-                    <label className='text-xs font-bold text-white/60 uppercase'>Full Name</label>
-                    <p className='text-xl font-black text-white mt-0.5'>
-                      {application.users?.first_name} {application.users?.last_name}
-                    </p>
-                  </div>
-                </div>
+        {/* Client Information */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-blue-50 border-b border-gray-200 px-6 py-4'>
+            <h3 className='text-lg font-semibold text-gray-900'>Client Information</h3>
+          </div>
+          <div className='p-6'>
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+            <div>
+              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Full Name</label>
+              <p className='text-lg font-medium text-gray-900 mt-1'>
+                {application.users?.first_name} {application.users?.last_name}
+              </p>
+            </div>
 
-                {/* Age */}
-                <div className='flex items-center gap-3 pl-6 border-l border-white/10'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
-                    <span className='text-2xl'>🎂</span>
-                  </div>
-                  <div>
-                    <label className='text-xs font-bold text-white/60 uppercase'>Age</label>
-                    <p className='text-xl font-black text-white mt-0.5'>
-                      {application.users?.date_of_birth 
-                        ? new Date().getFullYear() - new Date(application.users.date_of_birth).getFullYear()
-                        : 'N/A'} years old
-                    </p>
-                  </div>
-                </div>
+            <div>
+              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Age</label>
+              <p className='text-lg font-medium text-gray-900 mt-1'>
+                {application.users?.date_of_birth 
+                  ? new Date().getFullYear() - new Date(application.users.date_of_birth).getFullYear()
+                  : 'N/A'} years
+              </p>
+            </div>
 
-                {/* KYC Status */}
-                <div className='flex items-center gap-3 pl-6 border-l border-white/10'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-[#097fa5] to-[#0a95c2] text-white shadow-lg'>
-                    <span className='text-2xl'>✅</span>
-                  </div>
-                  <div>
-                    <label className='text-xs font-bold text-white/60 uppercase'>KYC Status</label>
-                    <div className='mt-1'>
-                      <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-black uppercase ${
-                        application.users?.kyc_status === 'verified' 
-                          ? 'bg-[#097fa5] text-white shadow-lg' 
-                          : 'bg-yellow-500 text-white shadow-lg'
-                      }`}>
-                        {application.users?.kyc_status || 'PENDING'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+            <div>
+              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>KYC Status</label>
+              <div className='mt-1'>
+                <span className={`inline-flex rounded px-2 py-1 text-xs font-medium uppercase tracking-wide bg-gray-50 text-gray-700 border border-gray-200`}>
+                  {application.users?.kyc_status || 'PENDING'}
+                </span>
               </div>
             </div>
+          </div>
           </div>
         </div>
 
         {/* IBV Verification & Loan Details - Side by Side */}
         <div className='grid gap-6 lg:grid-cols-2'>
           {/* IBV Verification - Left Side */}
-          <div className='overflow-hidden rounded-xl bg-gradient-to-br from-[#333366] via-[#2a2d5a] to-[#1f2147] shadow-xl border border-white/10'>
-            <div className='bg-gradient-to-r from-[#097fa5]/20 to-transparent px-5 py-4'>
-              <div className='flex items-center gap-3'>
-                <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#097fa5] to-[#0a95c2] shadow-lg'>
-                  <span className='text-3xl text-white'>🏦</span>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-purple-50 border-b border-gray-200 px-6 py-4'>
+              <div className='flex items-center justify-between'>
+                <div>
+                  <h2 className='text-lg font-semibold text-gray-900'>IBV Verification</h2>
+                  <p className='text-sm text-gray-500 mt-0.5'>Risk Assessment</p>
                 </div>
-                <div className='flex-1'>
-                  <h2 className='text-xl font-black text-white'>IBV Verification</h2>
-                  <p className='text-xs text-white/60'>Risk Assessment</p>
-                </div>
+                {application.ibv_provider === 'inverite' && 
+                 (application.ibv_provider_data as any)?.request_guid && (
+                  <button
+                    onClick={handleFetchInveriteData}
+                    disabled={fetchingInveriteData}
+                    className='rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                  >
+                    {fetchingInveriteData ? (
+                      <span className='flex items-center gap-2'>
+                        <svg className='h-3 w-3 animate-spin' fill='none' viewBox='0 0 24 24'>
+                          <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4' />
+                          <path className='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z' />
+                        </svg>
+                        Fetching...
+                      </span>
+                    ) : (
+                      'Fetch Data'
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
-            {ibvKpis && (
-              <div className='bg-white p-5'>
-                <div className='grid gap-3 mb-4'>
-                  {/* Risk Score Header */}
-                  <div className='rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50 p-4 border-2 border-indigo-200'>
-                    <div className='flex items-center justify-between'>
-                      <div>
-                        <label className='text-xs font-bold text-gray-500 uppercase'>Overall Risk Score</label>
-                        <p className={`text-3xl font-black ${
-                          ibvKpis.overallRiskScore >= 70 ? 'text-green-600' : 
-                          ibvKpis.overallRiskScore >= 50 ? 'text-yellow-600' : 'text-red-600'
+            {application?.ibv_results ? (
+              <div className='p-6'>
+                <div className='space-y-4'>
+                  {(() => {
+                    const summary = application.ibv_results!
+                    const riskScore = calculateRiskScore(summary)
+                    const accountsWithData = summary.accounts_summary?.filter(acc => acc.quarter_all_time) || []
+                    
+                    // Aggregate key metrics
+                    let totalOverdrafts = 0
+                    let totalNegativeDays = 0
+                    let totalNegativeCount = 0
+                    let totalDeposits = 0
+                    let totalWithdrawals = 0
+                    let avgBalance = 0
+                    let lowestBalance = Infinity
+                    let highestBalance = -Infinity
+                    let endingBalance = 0
+
+                    accountsWithData.forEach(acc => {
+                      const qat = acc.quarter_all_time
+                      if (qat) {
+                        totalOverdrafts += qat.overdraft_count || 0
+                        totalNegativeDays += qat.negative_balance_days || 0
+                        totalNegativeCount += qat.negative_balance_count || 0
+                        totalDeposits += qat.amount_of_deposits || 0
+                        totalWithdrawals += qat.amount_of_withdrawals || 0
+                        if (qat.average_balance !== null && qat.average_balance !== undefined) {
+                          avgBalance += qat.average_balance
+                        }
+                        if (qat.lowest_balance !== null && qat.lowest_balance !== undefined) {
+                          lowestBalance = Math.min(lowestBalance, qat.lowest_balance)
+                        }
+                        if (qat.highest_balance !== null && qat.highest_balance !== undefined) {
+                          highestBalance = Math.max(highestBalance, qat.highest_balance)
+                        }
+                        if (qat.ending_balance !== null && qat.ending_balance !== undefined) {
+                          endingBalance += qat.ending_balance
+                        }
+                      }
+                    })
+
+                    avgBalance = accountsWithData.length > 0 ? avgBalance / accountsWithData.length : 0
+                    const avgMonthlyDeposits = summary.aggregates?.total_deposits || totalDeposits
+                    
+                    return (
+                      <>
+                        {/* Risk Score */}
+                        <div className={`rounded border p-4 ${
+                          riskScore >= 70 ? 'border-green-200 bg-green-50' :
+                          riskScore >= 50 ? 'border-yellow-200 bg-yellow-50' :
+                          'border-red-200 bg-red-50'
                         }`}>
-                          {Math.round(ibvKpis.overallRiskScore)}%
-                        </p>
-                      </div>
-                      <div className='text-center'>
-                        <div className='flex h-14 w-14 items-center justify-center rounded-xl bg-white shadow-lg border-2 border-indigo-200 text-3xl'>
-                          {ibvKpis.overallRiskScore >= 70 ? '✅' : ibvKpis.overallRiskScore >= 50 ? '⚠️' : '❌'}
+                          <div className='flex items-center justify-between'>
+                            <div>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Risk Assessment</label>
+                              <p className={`text-2xl font-semibold mt-1 ${
+                                riskScore >= 70 ? 'text-green-900' :
+                                riskScore >= 50 ? 'text-yellow-900' :
+                                'text-red-900'
+                              }`}>
+                                {riskScore}%
+                              </p>
+                            </div>
+                            <div className={`text-sm font-semibold ${
+                              riskScore >= 70 ? 'text-green-900' :
+                              riskScore >= 50 ? 'text-yellow-900' :
+                              'text-red-900'
+                            }`}>
+                              {riskScore >= 70 ? 'LOW RISK' : riskScore >= 50 ? 'MEDIUM RISK' : 'HIGH RISK'}
+                            </div>
+                          </div>
                         </div>
-                        <p className={`mt-1 text-xs font-black ${
-                          ibvKpis.overallRiskScore >= 70 ? 'text-green-600' : 
-                          ibvKpis.overallRiskScore >= 50 ? 'text-yellow-600' : 'text-red-600'
-                        }`}>
-                          {ibvKpis.overallRiskScore >= 70 ? 'APPROVE' : ibvKpis.overallRiskScore >= 50 ? 'REVIEW' : 'REJECT'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Compact Metrics */}
-                  <div className='grid grid-cols-2 gap-2'>
-                    <div className='rounded-lg bg-green-50 p-3 border border-green-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>📊</span>
-                        <label className='text-xs font-bold text-gray-600'>Verification</label>
-                      </div>
-                      <p className={`text-xl font-black ${getScoreColor(ibvKpis.bankVerificationScore)}`}>
-                        {Math.round(ibvKpis.bankVerificationScore)}%
-                      </p>
-                    </div>
+                        {/* Key Decision Metrics */}
+                        <div className='grid grid-cols-2 gap-3'>
+                          {/* NSF / Overdrafts - Critical */}
+                          <div className={`rounded border p-3 col-span-2 ${
+                            totalOverdrafts > 0 || totalNegativeCount > 0 
+                              ? 'border-red-200 bg-red-50' 
+                              : 'border-gray-200 bg-white'
+                          }`}>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>NSF / Overdraft Risk</label>
+                            <div className='mt-2 space-y-1'>
+                              <p className={`text-lg font-semibold ${totalOverdrafts > 0 ? 'text-red-900' : 'text-gray-900'}`}>
+                                {totalOverdrafts} Overdraft{totalOverdrafts !== 1 ? 's' : ''}
+                              </p>
+                              {totalNegativeCount > 0 && (
+                                <p className='text-sm text-red-700'>
+                                  {totalNegativeCount} Negative balance occurrence{totalNegativeCount !== 1 ? 's' : ''}
+                                </p>
+                              )}
+                              {totalNegativeDays > 0 && (
+                                <p className='text-xs text-red-600'>
+                                  {totalNegativeDays} day{totalNegativeDays !== 1 ? 's' : ''} in negative balance
+                                </p>
+                              )}
+                              {totalOverdrafts === 0 && totalNegativeCount === 0 && (
+                                <p className='text-xs text-green-700 font-medium'>✓ No NSF issues detected</p>
+                              )}
+                            </div>
+                          </div>
 
-                    <div className='rounded-lg bg-blue-50 p-3 border border-blue-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>💳</span>
-                        <label className='text-xs font-bold text-gray-600'>Balance</label>
-                      </div>
-                      <p className='text-lg font-black text-blue-600 truncate'>{formatCurrency(ibvKpis.averageAccountBalance)}</p>
-                    </div>
+                          {/* Average Balance */}
+                          <div className='rounded border border-gray-200 bg-white p-3'>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Avg Balance</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {avgBalance > 0 ? formatCurrency(avgBalance) : 'N/A'}
+                            </p>
+                          </div>
 
-                    <div className='rounded-lg bg-purple-50 p-3 border border-purple-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>💵</span>
-                        <label className='text-xs font-bold text-gray-600'>Income</label>
-                      </div>
-                      <p className='text-lg font-black text-purple-600 truncate'>{formatCurrency(ibvKpis.monthlyIncomeVerified)}</p>
-                    </div>
+                          {/* Current Balance */}
+                          {accountsWithData[0]?.current_balance && (
+                            <div className='rounded border border-gray-200 bg-white p-3'>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Current Balance</label>
+                              <p className='text-lg font-semibold text-gray-900 mt-1'>
+                                {formatCurrency(accountsWithData[0].current_balance.current || 0)}
+                              </p>
+                            </div>
+                          )}
 
-                    <div className='rounded-lg bg-orange-50 p-3 border border-orange-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>✅</span>
-                        <label className='text-xs font-bold text-gray-600'>KYC</label>
-                      </div>
-                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black uppercase ${getRiskColor(ibvKpis.kycRiskLevel)}`}>
-                        {ibvKpis.kycRiskLevel}
-                      </span>
-                    </div>
+                          {/* Total Deposits */}
+                          <div className='rounded border border-gray-200 bg-white p-3'>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Total Deposits</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {avgMonthlyDeposits > 0 ? formatCurrency(avgMonthlyDeposits) : 'N/A'}
+                            </p>
+                          </div>
 
-                    <div className='rounded-lg bg-teal-50 p-3 border border-teal-200'>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>⏰</span>
-                        <label className='text-xs font-bold text-gray-600'>Age</label>
-                      </div>
-                      <p className='text-xl font-black text-teal-600'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
-                    </div>
+                          {/* Monthly Income Estimate */}
+                          <div className='rounded border border-gray-200 bg-white p-3'>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Est. Monthly Income</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {avgMonthlyDeposits > 0 ? formatCurrency(avgMonthlyDeposits / 3) : 'N/A'}
+                              <span className='text-xs text-gray-500 ml-1'>(quarter avg)</span>
+                            </p>
+                          </div>
 
-                    <button 
-                      onClick={() => setShowTransactionsModal(true)}
-                      className='rounded-lg bg-violet-50 p-3 border border-violet-200 hover:bg-violet-100 transition-colors cursor-pointer text-left w-full'
-                    >
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>📈</span>
-                        <label className='text-xs font-bold text-gray-600'>Transactions</label>
-                      </div>
-                      <p className='text-xl font-black text-violet-600'>{ibvKpis.transactionCount}</p>
-                      <p className='text-xs text-violet-600 mt-1'>Click to view details →</p>
-                    </button>
+                          {/* Balance Range */}
+                          {(lowestBalance !== Infinity || highestBalance !== -Infinity) && (
+                            <div className='rounded border border-gray-200 bg-white p-3 col-span-2'>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Balance Range</label>
+                              <div className='mt-1 flex items-center gap-2 text-sm'>
+                                <span className='text-gray-600'>Low:</span>
+                                <span className={`font-semibold ${lowestBalance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                  {lowestBalance !== Infinity ? formatCurrency(lowestBalance) : 'N/A'}
+                                </span>
+                                <span className='text-gray-400'>•</span>
+                                <span className='text-gray-600'>High:</span>
+                                <span className='font-semibold text-gray-900'>
+                                  {highestBalance !== -Infinity ? formatCurrency(highestBalance) : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
 
-                    <div className={`rounded-lg p-3 border col-span-2 ${
-                      ibvKpis.overdraftOccurrences === 0 ? 'bg-green-50 border-green-200' : 
-                      ibvKpis.overdraftOccurrences <= 2 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
-                    }`}>
-                      <div className='flex items-center gap-2 mb-1'>
-                        <span className='text-sm'>⚠️</span>
-                        <label className='text-xs font-bold text-gray-600'>Overdrafts</label>
-                      </div>
-                      <p className={`text-2xl font-black ${
-                        ibvKpis.overdraftOccurrences === 0 ? 'text-green-600' : 
-                        ibvKpis.overdraftOccurrences <= 2 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {ibvKpis.overdraftOccurrences} in last 90 days
-                      </p>
-                    </div>
-                  </div>
+                          {/* Transactions Button */}
+                          <button 
+                            onClick={async () => {
+                              setShowTransactionsModal(true)
+                              try {
+                                setLoadingTransactions(true)
+                                const res = await fetch(`/api/admin/applications/${applicationId}/transactions`)
+                                if (!res.ok) {
+                                  const err = await res.json().catch(() => ({}))
+                                  throw new Error(err.error || 'Failed to load transactions')
+                                }
+                                const data = await res.json()
+                                setFetchedTransactions(Array.isArray(data.transactions) ? data.transactions : [])
+                              } catch (e: any) {
+                                console.error('Failed to fetch transactions:', e)
+                                setFetchedTransactions([])
+                              } finally {
+                                setLoadingTransactions(false)
+                              }
+                            }}
+                            className='rounded border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors text-left'
+                          >
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Transactions</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length || 0}
+                            </p>
+                            <p className='text-xs text-gray-500 mt-1'>
+                              {getTransactions().length > 0 ? 'Click to view' : 'No transactions'}
+                            </p>
+                          </button>
+
+                          {/* Accounts Summary */}
+                          {summary.accounts_count && summary.accounts_count > 0 && (
+                            <div className='rounded border border-gray-200 bg-white p-3'>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Accounts</label>
+                              <p className='text-lg font-semibold text-gray-900 mt-1'>{summary.accounts_count}</p>
+                              <p className='text-xs text-gray-500 mt-1'>
+                                {summary.aggregates?.accounts_with_statistics || accountsWithData.length} with data
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
+              </div>
+            ) : (
+              <div className='p-6'>
+                <p className='text-sm text-gray-500 text-center'>No IBV data available. Fetch data to see summary.</p>
               </div>
             )}
           </div>
 
           {/* Loan Information - Right Side */}
-          <div className='overflow-hidden rounded-xl bg-gradient-to-br from-[#097fa5] via-[#0a95c2] to-[#097fa5] shadow-xl border border-white/10'>
-            <div className='bg-gradient-to-r from-[#333366]/20 to-transparent px-5 py-4'>
-              <div className='flex items-center gap-3'>
-                <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#333366] to-[#2a2d5a] shadow-lg'>
-                  <span className='text-3xl text-white'>💰</span>
-                </div>
-                <div className='flex-1'>
-                  <h2 className='text-xl font-black text-white'>Loan Details</h2>
-                  <p className='text-xs text-white/60'>Application Information</p>
-                </div>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-teal-50 border-b border-gray-200 px-6 py-4'>
+              <div>
+                <h2 className='text-lg font-semibold text-gray-900'>Loan Details</h2>
+                <p className='text-sm text-gray-500 mt-0.5'>Application Information</p>
               </div>
             </div>
 
-            <div className='bg-gray-50 p-5'>
-              <div className='grid gap-4'>
-                {/* Loan Amount - Large */}
-                <div className='rounded-lg bg-gradient-to-br from-[#333366] to-[#097fa5] p-4 border-2 border-[#333366]/50 shadow-lg'>
-                  <label className='text-xs font-bold text-white uppercase mb-1 block'>Loan Amount</label>
-                  <p className='text-4xl font-black text-white drop-shadow-lg'>
+            <div className='p-6'>
+              <div className='space-y-4'>
+                {/* Loan Amount */}
+                <div className='rounded border border-gray-200 bg-gray-50 p-4'>
+                  <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Loan Amount</label>
+                  <p className='text-3xl font-semibold text-gray-900 mt-1'>
                     {formatCurrency(application.loan_amount)}
                   </p>
                 </div>
 
                 {/* Income Source */}
-                <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
-                  <div className='flex items-center justify-between'>
-                    <div>
-                      <label className='text-xs font-bold text-gray-500 uppercase'>Income Source</label>
-                      <p className='text-lg font-black text-gray-900 capitalize mt-1'>
-                        {application.income_source.replace(/-/g, ' ')}
-                      </p>
-                    </div>
-                    <span className='text-2xl'>💼</span>
-                  </div>
+                <div className='rounded border border-gray-200 bg-white p-3'>
+                  <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Income Source</label>
+                  <p className='text-base font-medium text-gray-900 capitalize mt-1'>
+                    {application.income_source.replace(/-/g, ' ')}
+                  </p>
                 </div>
 
                 {/* Bankruptcy Plan */}
-                <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
-                  <div className='flex items-center justify-between'>
-                    <div>
-                      <label className='text-xs font-bold text-gray-500 uppercase'>Bankruptcy Plan</label>
-                      <p className='text-lg font-black text-gray-900 mt-1'>
-                        {application.bankruptcy_plan ? 'Yes' : 'No'}
-                      </p>
-                    </div>
-                    <span className='text-2xl'>{application.bankruptcy_plan ? '⚠️' : '✅'}</span>
-                  </div>
+                <div className='rounded border border-gray-200 bg-white p-3'>
+                  <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Bankruptcy Plan</label>
+                  <p className='text-base font-medium text-gray-900 mt-1'>
+                    {application.bankruptcy_plan ? 'Yes' : 'No'}
+                  </p>
                 </div>
 
                 {/* Income Fields Summary */}
                 {application.income_fields && Object.keys(application.income_fields).length > 0 && (
-                  <div className='rounded-lg bg-white p-3 border border-gray-200 shadow-sm'>
-                    <label className='text-xs font-bold text-gray-500 uppercase mb-2 block'>Income Details</label>
-                    <div className='space-y-1 text-xs text-gray-700'>
+                  <div className='rounded border border-gray-200 bg-white p-3'>
+                    <label className='text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block'>Income Details</label>
+                    <div className='space-y-1 text-sm text-gray-700'>
                       {Object.entries(application.income_fields).slice(0, 3).map(([key, value]) => (
                         <p key={key}>
-                          <span className='font-semibold capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
+                          <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
                         </p>
                       ))}
                       {Object.keys(application.income_fields).length > 3 && (
-                        <p className='text-gray-500'>+{Object.keys(application.income_fields).length - 3} more</p>
+                        <p className='text-gray-500 text-xs'>+{Object.keys(application.income_fields).length - 3} more</p>
                       )}
                     </div>
                   </div>
@@ -548,11 +838,13 @@ export default function ApplicationDetailsPage() {
           </div>
         </div>
 
-        {/* Additional Client Information - Compact */}
-        <div className='rounded-xl bg-white p-5 shadow-sm border border-gray-200'>
-          <h3 className='mb-4 text-lg font-bold text-gray-900'>Additional Information</h3>
-          
-          <div className='grid gap-4 md:grid-cols-3'>
+        {/* Additional Client Information */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-gray-50 border-b border-gray-200 px-6 py-4'>
+            <h3 className='text-lg font-semibold text-gray-900'>Additional Information</h3>
+          </div>
+          <div className='p-6'>
+            <div className='grid gap-4 md:grid-cols-3'>
             {/* Email */}
             <div>
               <label className='text-xs font-medium text-gray-500'>Email</label>
@@ -611,57 +903,58 @@ export default function ApplicationDetailsPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Income Details */}
         {application.income_fields && Object.keys(application.income_fields).length > 0 && (
-          <div className='rounded-lg bg-white p-6 shadow-sm border border-gray-200'>
-            <h3 className='mb-4 text-lg font-bold text-gray-900'>Income Details</h3>
-            <div className='grid gap-2 text-sm'>
-              {Object.entries(application.income_fields).map(([key, value]) => (
-                <p key={key} className='text-gray-700'>
-                  <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
-                </p>
-              ))}
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-emerald-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>Income Details</h3>
+            </div>
+            <div className='p-6'>
+              <div className='grid gap-2 text-sm'>
+                {Object.entries(application.income_fields).map(([key, value]) => (
+                  <p key={key} className='text-gray-700'>
+                    <span className='font-medium capitalize'>{key.replace(/_/g, ' ')}:</span> {String(value)}
+                  </p>
+                ))}
+              </div>
             </div>
           </div>
         )}
      
-        {/* References Card */}
+        {/* References */}
         {application.references && application.references.length > 0 && (
-          <div className='rounded-lg bg-white p-6 shadow-sm'>
-            <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-              <span className='text-xl'>📋</span>
-              <h2 className='text-lg font-semibold text-gray-900'>References</h2>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-amber-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>References</h3>
             </div>
-            
-            <div className='space-y-4'>
+            <div className='p-6'>
+              <div className='space-y-4'>
               {application.references.map((ref, index) => (
-                <div key={ref.id} className='rounded-lg border border-gray-200 p-4'>
-                  <div className='mb-2 flex items-center gap-2'>
-                    <span className='flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-600'>
-                      {index + 1}
-                    </span>
-                    <h3 className='font-medium text-gray-900'>{ref.first_name} {ref.last_name}</h3>
+                <div key={ref.id} className='rounded border border-gray-200 p-4'>
+                  <div className='mb-3'>
+                    <h4 className='font-medium text-gray-900'>{ref.first_name} {ref.last_name}</h4>
                   </div>
-                  <div className='grid gap-2 text-sm'>
-                    <p className='text-gray-600'>Phone: {ref.phone}</p>
-                    <p className='text-gray-600'>Relationship: {ref.relationship}</p>
+                  <div className='space-y-1 text-sm text-gray-600'>
+                    <p>Phone: {ref.phone}</p>
+                    <p>Relationship: {ref.relationship}</p>
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Timeline Card */}
-        <div className='rounded-lg bg-white p-6 shadow-sm'>
-          <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-            <span className='text-xl'>📅</span>
-            <h2 className='text-lg font-semibold text-gray-900'>Timeline</h2>
+        {/* Timeline */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-indigo-50 border-b border-gray-200 px-6 py-4'>
+            <h3 className='text-lg font-semibold text-gray-900'>Timeline</h3>
           </div>
-          
-          <div className='space-y-3 text-sm'>
+          <div className='p-6'>
+            <div className='space-y-3 text-sm'>
             <div className='flex items-center gap-3'>
               <span className='text-gray-500'>Created:</span>
               <span className='font-medium text-gray-900'>{formatDateTime(application.created_at)}</span>
@@ -677,14 +970,14 @@ export default function ApplicationDetailsPage() {
             {application.approved_at && (
               <div className='flex items-center gap-3'>
                 <span className='text-gray-500'>Approved:</span>
-                <span className='font-medium text-green-600'>{formatDateTime(application.approved_at)}</span>
+                <span className='font-medium text-gray-900'>{formatDateTime(application.approved_at)}</span>
               </div>
             )}
             
             {application.rejected_at && (
               <div className='flex items-center gap-3'>
                 <span className='text-gray-500'>Rejected:</span>
-                <span className='font-medium text-red-600'>{formatDateTime(application.rejected_at)}</span>
+                <span className='font-medium text-gray-900'>{formatDateTime(application.rejected_at)}</span>
               </div>
             )}
             
@@ -693,94 +986,91 @@ export default function ApplicationDetailsPage() {
               <span className='font-medium text-gray-900'>{formatDateTime(application.updated_at)}</span>
             </div>
           </div>
+          </div>
         </div>
 
-        {/* Staff Notes (if any) */}
+        {/* Staff Notes */}
         {application.staff_notes && (
-          <div className='rounded-lg bg-white p-6 shadow-sm'>
-            <div className='mb-4 flex items-center gap-2 border-b border-gray-200 pb-3'>
-              <span className='text-xl'>📝</span>
-              <h2 className='text-lg font-semibold text-gray-900'>Staff Notes</h2>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-slate-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>Staff Notes</h3>
             </div>
-            <p className='text-sm text-gray-700'>{application.staff_notes}</p>
+            <div className='p-6'>
+              <p className='text-sm text-gray-700'>{application.staff_notes}</p>
+            </div>
           </div>
         )}
 
-        {/* Rejection Reason (if any) */}
+        {/* Rejection Reason */}
         {application.rejection_reason && (
-          <div className='rounded-lg bg-red-50 p-6 shadow-sm border border-red-200'>
-            <div className='mb-4 flex items-center gap-2 border-b border-red-200 pb-3'>
-              <span className='text-xl'>❌</span>
-              <h2 className='text-lg font-semibold text-red-900'>Rejection Reason</h2>
+          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+            <div className='bg-red-50 border-b border-gray-200 px-6 py-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>Rejection Reason</h3>
             </div>
-            <p className='text-sm text-red-700'>{application.rejection_reason}</p>
+            <div className='p-6'>
+              <p className='text-sm text-gray-700'>{application.rejection_reason}</p>
+            </div>
           </div>
         )}
 
-        {/* Action Buttons - Modern Decision Interface */}
-        <div className='rounded-xl bg-white p-6 shadow-sm border border-gray-200'>
-          <div className='mb-4 flex items-center justify-between border-b border-gray-200 pb-4'>
-            <div>
-              <h3 className='text-lg font-semibold text-gray-900'>Decision</h3>
-              <p className='text-sm text-gray-600'>Review all information and KPIs before making a decision</p>
+        {/* Action Buttons */}
+        <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
+          <div className='bg-green-50 border-b border-gray-200 px-6 py-4'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <h3 className='text-lg font-semibold text-gray-900'>Decision</h3>
+                <p className='text-sm text-gray-500 mt-0.5'>Review all information and KPIs before making a decision</p>
+              </div>
+              <button
+                onClick={() => router.push('/admin/applications')}
+                className='rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
+              >
+                Back to Applications
+              </button>
             </div>
-            <button
-              onClick={() => router.push('/admin/applications')}
-              className='rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
-            >
-              ← Back to Applications
-            </button>
           </div>
-
-          {application.application_status === 'pending' && (
+          <div className='p-6'>
+            {application.application_status === 'pending' && (
             <div className='flex items-center justify-center gap-4'>
               <Button
                 onClick={() => setShowRejectModal(true)}
-                className='bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105'
+                className='rounded border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
               >
-                ❌ Reject Application
+                Reject Application
               </Button>
               <Button
                 onClick={() => setShowApproveModal(true)}
-                className='bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105'
+                className='rounded border border-gray-900 bg-gray-900 px-6 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors'
               >
-                ✅ Approve Application
+                Approve Application
               </Button>
             </div>
           )}
 
-          {application.application_status !== 'pending' && (
-            <div className='text-center py-8'>
-              <p className='text-gray-600'>This application has already been processed.</p>
-              <button
-                onClick={() => setShowApproveModal(true)}
-                className='mt-4 rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors'
-              >
-                View Details
-              </button>
-            </div>
-          )}
+            {application.application_status !== 'pending' && (
+              <div className='text-center py-8'>
+                <p className='text-gray-600'>This application has already been processed.</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Approve Modal */}
         {showApproveModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm'>
-            <div className='mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl'>
-              <div className='mb-4 text-center'>
-                <div className='mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100'>
-                  <span className='text-3xl'>✅</span>
-                </div>
-                <h3 className='text-xl font-bold text-gray-900'>Approve Application</h3>
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
+            <div className='mx-4 w-full max-w-md rounded-lg bg-white p-6 border border-gray-200'>
+              <div className='mb-6'>
+                <h3 className='text-lg font-semibold text-gray-900'>Approve Application</h3>
                 <p className='mt-2 text-sm text-gray-600'>
                   Are you sure you want to approve this application?
                 </p>
-                {ibvKpis && (
-                  <div className='mt-4 rounded-lg bg-green-50 p-3 text-left text-xs text-gray-700'>
-                    <p className='font-semibold mb-1'>Based on IBV Analysis:</p>
+                {application?.ibv_results && (
+                  <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
+                    <p className='font-medium mb-1'>Based on IBV Analysis:</p>
                     <ul className='space-y-1'>
-                      <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
-                      <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
-                      <li>• KYC Level: {ibvKpis.kycRiskLevel.toUpperCase()}</li>
+                      <li>• Risk Score: {calculateRiskScore(application.ibv_results)}%</li>
+                      <li>• Accounts: {application.ibv_results.accounts_count || 0}</li>
+                      <li>• Total Deposits: {application.ibv_results.aggregates?.total_deposits ? formatCurrency(application.ibv_results.aggregates.total_deposits) : 'N/A'}</li>
                     </ul>
                   </div>
                 )}
@@ -789,14 +1079,14 @@ export default function ApplicationDetailsPage() {
                 <button
                   onClick={() => setShowApproveModal(false)}
                   disabled={processing}
-                  className='flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors'
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleApprove}
                   disabled={processing}
-                  className='flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 transition-colors'
                 >
                   {processing ? 'Processing...' : 'Confirm Approval'}
                 </button>
@@ -807,23 +1097,20 @@ export default function ApplicationDetailsPage() {
 
         {/* Reject Modal */}
         {showRejectModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm'>
-            <div className='mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl'>
-              <div className='mb-4 text-center'>
-                <div className='mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100'>
-                  <span className='text-3xl'>❌</span>
-                </div>
-                <h3 className='text-xl font-bold text-gray-900'>Reject Application</h3>
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
+            <div className='mx-4 w-full max-w-md rounded-lg bg-white p-6 border border-gray-200'>
+              <div className='mb-6'>
+                <h3 className='text-lg font-semibold text-gray-900'>Reject Application</h3>
                 <p className='mt-2 text-sm text-gray-600'>
                   Please provide a reason for rejection:
                 </p>
-                {ibvKpis && (
-                  <div className='mt-4 rounded-lg bg-red-50 p-3 text-left text-xs text-gray-700'>
-                    <p className='font-semibold mb-1'>Based on IBV Analysis:</p>
+                {application?.ibv_results && (
+                  <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
+                    <p className='font-medium mb-1'>Based on IBV Analysis:</p>
                     <ul className='space-y-1'>
-                      <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
-                      <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
-                      <li>• KYC Level: {ibvKpis.kycRiskLevel.toUpperCase()}</li>
+                      <li>• Risk Score: {calculateRiskScore(application.ibv_results)}%</li>
+                      <li>• Accounts: {application.ibv_results.accounts_count || 0}</li>
+                      <li>• Total Deposits: {application.ibv_results.aggregates?.total_deposits ? formatCurrency(application.ibv_results.aggregates.total_deposits) : 'N/A'}</li>
                     </ul>
                   </div>
                 )}
@@ -832,14 +1119,14 @@ export default function ApplicationDetailsPage() {
                 <button
                   onClick={() => setShowRejectModal(false)}
                   disabled={processing}
-                  className='flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors'
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleReject}
                   disabled={processing}
-                  className='flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50'
+                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors'
                 >
                   {processing ? 'Processing...' : 'Confirm Rejection'}
                 </button>
@@ -850,27 +1137,24 @@ export default function ApplicationDetailsPage() {
 
         {/* Transactions Modal */}
         {showTransactionsModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm' onClick={() => setShowTransactionsModal(false)}>
-            <div className='mx-4 w-full max-w-4xl h-[700px] rounded-2xl bg-white shadow-2xl flex flex-col' onClick={(e) => e.stopPropagation()}>
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50' onClick={() => setShowTransactionsModal(false)}>
+            <div className='mx-4 w-full max-w-4xl h-[700px] rounded-lg bg-white border border-gray-200 flex flex-col' onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className='border-b border-gray-200 px-6 py-4 flex-shrink-0'>
                 <div className='flex items-center justify-between'>
-                  <div className='flex items-center gap-3'>
-                    <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600'>
-                      <span className='text-3xl text-white'>🏦</span>
-                    </div>
-                    <div>
-                      <h3 className='text-xl font-bold text-gray-900'>Transaction History</h3>
-                      <p className='text-sm text-gray-600'>
-                        {getTransactions().length} transactions found
-                      </p>
-                    </div>
+                  <div>
+                    <h3 className='text-lg font-semibold text-gray-900'>Transaction History</h3>
+                    <p className='text-sm text-gray-500 mt-0.5'>
+                      {loadingTransactions ? 'Loading transactions…' : `${getTransactions().length} transactions found`}
+                    </p>
                   </div>
                   <button
                     onClick={() => setShowTransactionsModal(false)}
-                    className='flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors'
+                    className='flex h-8 w-8 items-center justify-center rounded hover:bg-gray-100 transition-colors'
                   >
-                    <span className='text-2xl'>×</span>
+                    <svg className='h-5 w-5 text-gray-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -882,15 +1166,19 @@ export default function ApplicationDetailsPage() {
                   placeholder='Search transactions...'
                   value={transactionSearch}
                   onChange={(e) => setTransactionSearch(e.target.value)}
-                  className='w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20'
+                  className='w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400'
                 />
               </div>
 
               {/* Transaction List */}
               <div className='flex-1 overflow-y-auto px-6 py-4'>
-                {getFilteredTransactions().length === 0 ? (
+                {loadingTransactions ? (
                   <div className='py-12 text-center'>
-                    <span className='mb-4 block text-5xl'>📭</span>
+                    <div className='mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900'></div>
+                    <p className='mt-4 text-sm text-gray-600'>Loading transactions…</p>
+                  </div>
+                ) : getFilteredTransactions().length === 0 ? (
+                  <div className='py-12 text-center'>
                     <p className='text-gray-600'>No transactions found</p>
                     {transactionSearch && (
                       <p className='mt-2 text-sm text-gray-500'>Try a different search term</p>
@@ -898,7 +1186,7 @@ export default function ApplicationDetailsPage() {
                   </div>
                 ) : (
                   <div className='space-y-3'>
-                    {getFilteredTransactions().map((tx, index) => {
+                    {getFilteredTransactions().map((tx: any, index: number) => {
                       // Calculate amount from debit/credit
                       const amount = tx.credit || -(tx.debit || 0)
                       const isCredit = amount > 0
@@ -906,27 +1194,48 @@ export default function ApplicationDetailsPage() {
                       return (
                         <div 
                           key={index} 
-                          className='rounded-lg border border-gray-200 p-4 hover:border-violet-300 hover:bg-violet-50/50 transition-colors'
+                          className='rounded border border-gray-200 p-4 hover:bg-gray-50 transition-colors'
                         >
                           <div className='flex items-center justify-between'>
                             <div className='flex-1'>
-                              <div className='flex items-center gap-3'>
-                                <span className='text-2xl'>
-                                  {isCredit ? '⬇️' : '⬆️'}
-                                </span>
-                                <div>
-                                  <p className='font-semibold text-gray-900'>{tx.description}</p>
-                                  <p className='text-sm text-gray-600'>{tx.date}</p>
-                                </div>
+                              <p className='font-medium text-gray-900'>{tx.description}</p>
+                              <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500'>
+                                <span>{tx.date}</span>
+                                {tx.account_description && (
+                                  <>
+                                    <span className='text-gray-400'>•</span>
+                                    <span className='rounded px-1.5 py-0.5 bg-gray-100 text-gray-700'>
+                                      {tx.account_description}
+                                    </span>
+                                  </>
+                                )}
+                                {tx.category && (
+                                  <>
+                                    <span className='text-gray-400'>•</span>
+                                    <span className='text-gray-500 capitalize'>
+                                      {tx.category.split('/').pop()}
+                                    </span>
+                                  </>
+                                )}
                               </div>
+                              {tx.flags && tx.flags.length > 0 && (
+                                <div className='mt-1 flex flex-wrap gap-1'>
+                                  {tx.flags.map((flag: string, flagIndex: number) => (
+                                    <span
+                                      key={flagIndex}
+                                      className='rounded px-1.5 py-0.5 bg-gray-100 text-xs text-gray-700'
+                                    >
+                                      {flag.replace(/_/g, ' ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            <div className='text-right'>
-                              <p className={`text-lg font-bold ${
-                                isCredit ? 'text-green-600' : 'text-red-600'
-                              }`}>
+                            <div className='text-right ml-4'>
+                              <p className='text-lg font-semibold text-gray-900'>
                                 {formatCurrency(amount)}
                               </p>
-                              {tx.balance !== undefined && (
+                              {tx.balance !== null && tx.balance !== undefined && (
                                 <p className='text-xs text-gray-500'>
                                   Balance: {formatCurrency(tx.balance)}
                                 </p>
@@ -944,7 +1253,7 @@ export default function ApplicationDetailsPage() {
               <div className='border-t border-gray-200 px-6 py-4 flex-shrink-0'>
                 <button
                   onClick={() => setShowTransactionsModal(false)}
-                  className='w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors'
+                  className='w-full rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
                 >
                   Close
                 </button>
