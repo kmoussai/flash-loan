@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
 
     // Add redirect URL in dev if available (helps with postMessage origin issues)
-    if (redirectUrl && process.env.NODE_ENV === 'development') {
+    if (redirectUrl) {
       payload.redirecturl = redirectUrl
       console.log('[Inverite] Setting redirect URL:', redirectUrl)
     }
