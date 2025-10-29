@@ -7,20 +7,47 @@ import Select from '@/src/app/[locale]/components/Select'
 import Button from '@/src/app/[locale]/components/Button'
 import type { LoanApplication, ApplicationStatus, InveriteIbvData } from '@/src/lib/supabase/types'
 
-// Mock IBV KPI data
-interface IBVKPIs {
-  bankVerificationScore: number
-  averageAccountBalance: number
-  monthlyIncomeVerified: number
-  accountAge: number // in days
-  transactionCount: number
-  overdraftOccurrences: number
-  kycRiskLevel: 'low' | 'medium' | 'high'
-  overallRiskScore: number
+// IBV Results structure from ibv_results column
+interface IbvResults {
+  extracted_at?: string
+  accounts_count?: number
+  accounts_summary?: Array<{
+    account_index?: number
+    account_type?: string | null
+    account_description?: string | null
+    institution?: string | null
+    quarter_all_time?: {
+      number_of_deposits?: number | null
+      amount_of_deposits?: number | null
+      average_amount_of_deposits?: number | null
+      number_of_withdrawals?: number | null
+      amount_of_withdrawals?: number | null
+      average_balance?: number | null
+      highest_balance?: number | null
+      lowest_balance?: number | null
+      ending_balance?: number | null
+      overdraft_count?: number | null
+      negative_balance_count?: number | null
+      negative_balance_days?: number | null
+      total_transactions?: number | null
+    } | null
+    current_balance?: {
+      available?: number | null
+      current?: number | null
+    } | null
+    transaction_count?: number
+  }>
+  aggregates?: {
+    total_deposits?: number | null
+    total_withdrawals?: number | null
+    total_accounts?: number
+    accounts_with_statistics?: number
+  }
 }
 
 // Extended type for application with client details
 interface ApplicationWithDetails extends LoanApplication {
+  ibv_results?: IbvResults | null
   users: {
     id: string
     first_name: string | null
@@ -64,7 +91,6 @@ export default function ApplicationDetailsPage() {
   const [application, setApplication] = useState<ApplicationWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [ibvKpis, setIbvKpis] = useState<IBVKPIs | null>(null)
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [processing, setProcessing] = useState(false)
@@ -182,26 +208,92 @@ export default function ApplicationDetailsPage() {
     )
   }
 
-  // Generate mock IBV KPIs
-  const generateMockIBVKPIs = (): IBVKPIs => {
-    const riskLevels = ['low', 'medium', 'high'] as const
-    return {
-      bankVerificationScore: Math.random() * 40 + 60, // 60-100
-      averageAccountBalance: Math.random() * 5000 + 1000, // $1,000 - $6,000
-      monthlyIncomeVerified: Math.random() * 2000 + 1500, // $1,500 - $3,500
-      accountAge: Math.random() * 1800 + 365, // 1-5 years in days
-      transactionCount: Math.floor(Math.random() * 50 + 10), // 10-60 transactions
-      overdraftOccurrences: Math.floor(Math.random() * 5), // 0-5 overdrafts
-      kycRiskLevel: riskLevels[Math.floor(Math.random() * 3)],
-      overallRiskScore: Math.random() * 50 + 30 // 30-80
+  // Calculate risk score from IBV results data
+  const calculateRiskScore = (results: IbvResults | null | undefined): number => {
+    if (!results) return 0
+    const summary = results // Keep using 'summary' variable name for clarity in the function
+    if (!summary?.accounts_summary || summary.accounts_summary.length === 0) {
+      return 0 // Unknown risk if no data
     }
+
+    let riskScore = 50 // Start with neutral score
+
+    const accountsWithData = summary.accounts_summary.filter(acc => acc.quarter_all_time)
+    
+    if (accountsWithData.length === 0) return 0
+
+    // Calculate average metrics across all accounts
+    let totalOverdrafts = 0
+    let totalNegativeDays = 0
+    let totalNegativeCount = 0
+    let avgBalance = 0
+    let hasNegativeBalance = false
+    let totalDeposits = 0
+    let depositCount = 0
+
+    accountsWithData.forEach(acc => {
+      const qat = acc.quarter_all_time
+      if (qat) {
+        totalOverdrafts += qat.overdraft_count || 0
+        totalNegativeDays += qat.negative_balance_days || 0
+        totalNegativeCount += qat.negative_balance_count || 0
+        if (qat.average_balance !== null && qat.average_balance !== undefined) {
+          avgBalance += qat.average_balance
+        }
+        if (qat.lowest_balance !== null && qat.lowest_balance !== undefined && qat.lowest_balance < 0) {
+          hasNegativeBalance = true
+        }
+        if (qat.amount_of_deposits !== null && qat.amount_of_deposits !== undefined) {
+          totalDeposits += qat.amount_of_deposits
+          depositCount++
+        }
+      }
+    })
+
+    const avgOverdrafts = totalOverdrafts / accountsWithData.length
+    const avgNegativeDays = totalNegativeDays / accountsWithData.length
+    const avgNegativeCount = totalNegativeCount / accountsWithData.length
+    avgBalance = avgBalance / accountsWithData.length
+
+    // Adjust risk score based on factors
+    // Overdrafts: -10 per overdraft (max -30)
+    riskScore -= Math.min(avgOverdrafts * 10, 30)
+    
+    // Negative balance days: -5 per day (max -20)
+    riskScore -= Math.min(avgNegativeDays * 5, 20)
+    
+    // Negative balance occurrences: -3 per occurrence (max -15)
+    riskScore -= Math.min(avgNegativeCount * 3, 15)
+    
+    // Low average balance: -1 per $100 below $1000 (max -10)
+    if (avgBalance < 1000) {
+      riskScore -= Math.min((1000 - avgBalance) / 100, 10)
+    }
+    
+    // No deposits or very low deposits: -15
+    const avgDeposits = depositCount > 0 ? totalDeposits / depositCount : 0
+    if (avgDeposits < 500) {
+      riskScore -= 15
+    }
+
+    // Positive factors
+    // Good average balance: +10 if above $2000
+    if (avgBalance > 2000) {
+      riskScore += 10
+    }
+    
+    // High deposit amounts: +5 if average deposits > $2000
+    if (avgDeposits > 2000) {
+      riskScore += 5
+    }
+
+    // Clamp between 0 and 100
+    return Math.max(0, Math.min(100, Math.round(riskScore)))
   }
 
   useEffect(() => {
     if (applicationId) {
       fetchApplicationDetails()
-      // Generate mock IBV KPIs
-      setIbvKpis(generateMockIBVKPIs())
     }
   }, [applicationId])
 
@@ -320,7 +412,8 @@ export default function ApplicationDetailsPage() {
     try {
       setFetchingInveriteData(true)
       
-      const response = await fetch(`/api/inverite/fetch/${requestGuid}`)
+      // Pass application_id as query parameter for faster lookup
+      const response = await fetch(`/api/inverite/fetch/${requestGuid}?application_id=${applicationId}`)
       
       if (!response.ok) {
         const errorData = await response.json()
@@ -479,93 +572,212 @@ export default function ApplicationDetailsPage() {
               </div>
             </div>
 
-            {ibvKpis && (
+            {application?.ibv_results ? (
               <div className='p-6'>
                 <div className='space-y-4'>
-                  {/* Risk Score */}
-                  <div className='rounded border border-gray-200 bg-gray-50 p-4'>
-                    <div className='flex items-center justify-between'>
-                      <div>
-                        <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Overall Risk Score</label>
-                        <p className={`text-2xl font-semibold text-gray-900 mt-1`}>
-                          {Math.round(ibvKpis.overallRiskScore)}%
-                        </p>
-                      </div>
-                      <div className='text-sm font-medium text-gray-600 capitalize'>
-                        {ibvKpis.overallRiskScore >= 70 ? 'Approve' : ibvKpis.overallRiskScore >= 50 ? 'Review' : 'Reject'}
-                      </div>
-                    </div>
-                  </div>
+                  {(() => {
+                    const summary = application.ibv_results!
+                    const riskScore = calculateRiskScore(summary)
+                    const accountsWithData = summary.accounts_summary?.filter(acc => acc.quarter_all_time) || []
+                    
+                    // Aggregate key metrics
+                    let totalOverdrafts = 0
+                    let totalNegativeDays = 0
+                    let totalNegativeCount = 0
+                    let totalDeposits = 0
+                    let totalWithdrawals = 0
+                    let avgBalance = 0
+                    let lowestBalance = Infinity
+                    let highestBalance = -Infinity
+                    let endingBalance = 0
 
-                  {/* Metrics Grid */}
-                  <div className='grid grid-cols-2 gap-3'>
-                    <div className='rounded border border-gray-200 bg-white p-3'>
-                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Verification</label>
-                      <p className={`text-lg font-semibold ${getScoreColor(ibvKpis.bankVerificationScore)} mt-1`}>
-                        {Math.round(ibvKpis.bankVerificationScore)}%
-                      </p>
-                    </div>
-
-                    <div className='rounded border border-gray-200 bg-white p-3'>
-                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Balance</label>
-                      <p className='text-lg font-semibold text-gray-900 truncate mt-1'>{formatCurrency(ibvKpis.averageAccountBalance)}</p>
-                    </div>
-
-                    <div className='rounded border border-gray-200 bg-white p-3'>
-                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Income</label>
-                      <p className='text-lg font-semibold text-gray-900 truncate mt-1'>{formatCurrency(ibvKpis.monthlyIncomeVerified)}</p>
-                    </div>
-
-                    <div className='rounded border border-gray-200 bg-white p-3'>
-                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>KYC</label>
-                      <span className={`inline-flex rounded px-2 py-1 text-xs font-medium uppercase tracking-wide mt-1 ${getRiskColor(ibvKpis.kycRiskLevel)}`}>
-                        {ibvKpis.kycRiskLevel}
-                      </span>
-                    </div>
-
-                    <div className='rounded border border-gray-200 bg-white p-3'>
-                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Account Age</label>
-                      <p className='text-lg font-semibold text-gray-900 mt-1'>{Math.round(ibvKpis.accountAge / 365)} yrs</p>
-                    </div>
-
-                    <button 
-                      onClick={async () => {
-                        setShowTransactionsModal(true)
-                        try {
-                          setLoadingTransactions(true)
-                          const res = await fetch(`/api/admin/applications/${applicationId}/transactions`)
-                          if (!res.ok) {
-                            const err = await res.json().catch(() => ({}))
-                            throw new Error(err.error || 'Failed to load transactions')
-                          }
-                          const data = await res.json()
-                          setFetchedTransactions(Array.isArray(data.transactions) ? data.transactions : [])
-                        } catch (e: any) {
-                          console.error('Failed to fetch transactions:', e)
-                          setFetchedTransactions([])
-                        } finally {
-                          setLoadingTransactions(false)
+                    accountsWithData.forEach(acc => {
+                      const qat = acc.quarter_all_time
+                      if (qat) {
+                        totalOverdrafts += qat.overdraft_count || 0
+                        totalNegativeDays += qat.negative_balance_days || 0
+                        totalNegativeCount += qat.negative_balance_count || 0
+                        totalDeposits += qat.amount_of_deposits || 0
+                        totalWithdrawals += qat.amount_of_withdrawals || 0
+                        if (qat.average_balance !== null && qat.average_balance !== undefined) {
+                          avgBalance += qat.average_balance
                         }
-                      }}
-                      className='rounded border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors text-left'
-                    >
-                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Transactions</label>
-                      <p className='text-lg font-semibold text-gray-900 mt-1'>
-                        {Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length || 0}
-                      </p>
-                      <p className='text-xs text-gray-500 mt-1'>
-                        {getTransactions().length > 0 ? 'Click to view' : 'No transactions'}
-                      </p>
-                    </button>
+                        if (qat.lowest_balance !== null && qat.lowest_balance !== undefined) {
+                          lowestBalance = Math.min(lowestBalance, qat.lowest_balance)
+                        }
+                        if (qat.highest_balance !== null && qat.highest_balance !== undefined) {
+                          highestBalance = Math.max(highestBalance, qat.highest_balance)
+                        }
+                        if (qat.ending_balance !== null && qat.ending_balance !== undefined) {
+                          endingBalance += qat.ending_balance
+                        }
+                      }
+                    })
 
-                    <div className={`rounded border border-gray-200 bg-white p-3 col-span-2`}>
-                      <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Overdrafts</label>
-                      <p className={`text-xl font-semibold mt-1 text-gray-900`}>
-                        {ibvKpis.overdraftOccurrences} in last 90 days
-                      </p>
-                    </div>
-                  </div>
+                    avgBalance = accountsWithData.length > 0 ? avgBalance / accountsWithData.length : 0
+                    const avgMonthlyDeposits = summary.aggregates?.total_deposits || totalDeposits
+                    
+                    return (
+                      <>
+                        {/* Risk Score */}
+                        <div className={`rounded border p-4 ${
+                          riskScore >= 70 ? 'border-green-200 bg-green-50' :
+                          riskScore >= 50 ? 'border-yellow-200 bg-yellow-50' :
+                          'border-red-200 bg-red-50'
+                        }`}>
+                          <div className='flex items-center justify-between'>
+                            <div>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Risk Assessment</label>
+                              <p className={`text-2xl font-semibold mt-1 ${
+                                riskScore >= 70 ? 'text-green-900' :
+                                riskScore >= 50 ? 'text-yellow-900' :
+                                'text-red-900'
+                              }`}>
+                                {riskScore}%
+                              </p>
+                            </div>
+                            <div className={`text-sm font-semibold ${
+                              riskScore >= 70 ? 'text-green-900' :
+                              riskScore >= 50 ? 'text-yellow-900' :
+                              'text-red-900'
+                            }`}>
+                              {riskScore >= 70 ? 'LOW RISK' : riskScore >= 50 ? 'MEDIUM RISK' : 'HIGH RISK'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Key Decision Metrics */}
+                        <div className='grid grid-cols-2 gap-3'>
+                          {/* NSF / Overdrafts - Critical */}
+                          <div className={`rounded border p-3 col-span-2 ${
+                            totalOverdrafts > 0 || totalNegativeCount > 0 
+                              ? 'border-red-200 bg-red-50' 
+                              : 'border-gray-200 bg-white'
+                          }`}>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>NSF / Overdraft Risk</label>
+                            <div className='mt-2 space-y-1'>
+                              <p className={`text-lg font-semibold ${totalOverdrafts > 0 ? 'text-red-900' : 'text-gray-900'}`}>
+                                {totalOverdrafts} Overdraft{totalOverdrafts !== 1 ? 's' : ''}
+                              </p>
+                              {totalNegativeCount > 0 && (
+                                <p className='text-sm text-red-700'>
+                                  {totalNegativeCount} Negative balance occurrence{totalNegativeCount !== 1 ? 's' : ''}
+                                </p>
+                              )}
+                              {totalNegativeDays > 0 && (
+                                <p className='text-xs text-red-600'>
+                                  {totalNegativeDays} day{totalNegativeDays !== 1 ? 's' : ''} in negative balance
+                                </p>
+                              )}
+                              {totalOverdrafts === 0 && totalNegativeCount === 0 && (
+                                <p className='text-xs text-green-700 font-medium'>✓ No NSF issues detected</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Average Balance */}
+                          <div className='rounded border border-gray-200 bg-white p-3'>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Avg Balance</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {avgBalance > 0 ? formatCurrency(avgBalance) : 'N/A'}
+                            </p>
+                          </div>
+
+                          {/* Current Balance */}
+                          {accountsWithData[0]?.current_balance && (
+                            <div className='rounded border border-gray-200 bg-white p-3'>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Current Balance</label>
+                              <p className='text-lg font-semibold text-gray-900 mt-1'>
+                                {formatCurrency(accountsWithData[0].current_balance.current || 0)}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Total Deposits */}
+                          <div className='rounded border border-gray-200 bg-white p-3'>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Total Deposits</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {avgMonthlyDeposits > 0 ? formatCurrency(avgMonthlyDeposits) : 'N/A'}
+                            </p>
+                          </div>
+
+                          {/* Monthly Income Estimate */}
+                          <div className='rounded border border-gray-200 bg-white p-3'>
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Est. Monthly Income</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {avgMonthlyDeposits > 0 ? formatCurrency(avgMonthlyDeposits / 3) : 'N/A'}
+                              <span className='text-xs text-gray-500 ml-1'>(quarter avg)</span>
+                            </p>
+                          </div>
+
+                          {/* Balance Range */}
+                          {(lowestBalance !== Infinity || highestBalance !== -Infinity) && (
+                            <div className='rounded border border-gray-200 bg-white p-3 col-span-2'>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Balance Range</label>
+                              <div className='mt-1 flex items-center gap-2 text-sm'>
+                                <span className='text-gray-600'>Low:</span>
+                                <span className={`font-semibold ${lowestBalance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                  {lowestBalance !== Infinity ? formatCurrency(lowestBalance) : 'N/A'}
+                                </span>
+                                <span className='text-gray-400'>•</span>
+                                <span className='text-gray-600'>High:</span>
+                                <span className='font-semibold text-gray-900'>
+                                  {highestBalance !== -Infinity ? formatCurrency(highestBalance) : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Transactions Button */}
+                          <button 
+                            onClick={async () => {
+                              setShowTransactionsModal(true)
+                              try {
+                                setLoadingTransactions(true)
+                                const res = await fetch(`/api/admin/applications/${applicationId}/transactions`)
+                                if (!res.ok) {
+                                  const err = await res.json().catch(() => ({}))
+                                  throw new Error(err.error || 'Failed to load transactions')
+                                }
+                                const data = await res.json()
+                                setFetchedTransactions(Array.isArray(data.transactions) ? data.transactions : [])
+                              } catch (e: any) {
+                                console.error('Failed to fetch transactions:', e)
+                                setFetchedTransactions([])
+                              } finally {
+                                setLoadingTransactions(false)
+                              }
+                            }}
+                            className='rounded border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors text-left'
+                          >
+                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Transactions</label>
+                            <p className='text-lg font-semibold text-gray-900 mt-1'>
+                              {Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length || 0}
+                            </p>
+                            <p className='text-xs text-gray-500 mt-1'>
+                              {getTransactions().length > 0 ? 'Click to view' : 'No transactions'}
+                            </p>
+                          </button>
+
+                          {/* Accounts Summary */}
+                          {summary.accounts_count && summary.accounts_count > 0 && (
+                            <div className='rounded border border-gray-200 bg-white p-3'>
+                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Accounts</label>
+                              <p className='text-lg font-semibold text-gray-900 mt-1'>{summary.accounts_count}</p>
+                              <p className='text-xs text-gray-500 mt-1'>
+                                {summary.aggregates?.accounts_with_statistics || accountsWithData.length} with data
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
+              </div>
+            ) : (
+              <div className='p-6'>
+                <p className='text-sm text-gray-500 text-center'>No IBV data available. Fetch data to see summary.</p>
               </div>
             )}
           </div>
@@ -852,13 +1064,13 @@ export default function ApplicationDetailsPage() {
                 <p className='mt-2 text-sm text-gray-600'>
                   Are you sure you want to approve this application?
                 </p>
-                {ibvKpis && (
+                {application?.ibv_results && (
                   <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
                     <p className='font-medium mb-1'>Based on IBV Analysis:</p>
                     <ul className='space-y-1'>
-                      <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
-                      <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
-                      <li>• KYC Level: {ibvKpis.kycRiskLevel.toUpperCase()}</li>
+                      <li>• Risk Score: {calculateRiskScore(application.ibv_results)}%</li>
+                      <li>• Accounts: {application.ibv_results.accounts_count || 0}</li>
+                      <li>• Total Deposits: {application.ibv_results.aggregates?.total_deposits ? formatCurrency(application.ibv_results.aggregates.total_deposits) : 'N/A'}</li>
                     </ul>
                   </div>
                 )}
@@ -892,13 +1104,13 @@ export default function ApplicationDetailsPage() {
                 <p className='mt-2 text-sm text-gray-600'>
                   Please provide a reason for rejection:
                 </p>
-                {ibvKpis && (
+                {application?.ibv_results && (
                   <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
                     <p className='font-medium mb-1'>Based on IBV Analysis:</p>
                     <ul className='space-y-1'>
-                      <li>• Risk Score: {Math.round(ibvKpis.overallRiskScore)}%</li>
-                      <li>• Bank Verification: {Math.round(ibvKpis.bankVerificationScore)}%</li>
-                      <li>• KYC Level: {ibvKpis.kycRiskLevel.toUpperCase()}</li>
+                      <li>• Risk Score: {calculateRiskScore(application.ibv_results)}%</li>
+                      <li>• Accounts: {application.ibv_results.accounts_count || 0}</li>
+                      <li>• Total Deposits: {application.ibv_results.aggregates?.total_deposits ? formatCurrency(application.ibv_results.aggregates.total_deposits) : 'N/A'}</li>
                     </ul>
                   </div>
                 )}

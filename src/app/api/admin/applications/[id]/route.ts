@@ -40,6 +40,7 @@ export async function GET(
         ibv_provider,
         ibv_status,
         ibv_provider_data,
+        ibv_results,
         ibv_verified_at,
         staff_notes,
         rejection_reason,
