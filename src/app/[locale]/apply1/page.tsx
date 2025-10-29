@@ -397,6 +397,8 @@ export default function MicroLoanApplicationPage() {
         : null
 
       // Create IBV provider data using helper function
+      // For now, only stores request_guid. Account information will be added later
+      // when we call the Inverite API to retrieve account details using the request_guid
       const ibvProviderData = enhancedInveriteData 
         ? createIbvProviderData('inverite', enhancedInveriteData)
         : null
