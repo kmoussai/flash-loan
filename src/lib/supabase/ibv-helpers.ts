@@ -1,4 +1,4 @@
-import type { IbvProvider, IbvStatus, IbvProviderData } from './types'
+import type { IbvProvider, IbvStatus, IbvProviderData, OtherIbvData } from './types'
 
 /**
  * Transform provider-specific connection data into normalized IBV provider data
@@ -19,11 +19,11 @@ export function createIbvProviderData(
       }
 
     case 'inverite':
+      // For now, only store request_guid and verified_at (connected time)
+      // Account information will be added later when we call the Inverite API
       return {
-        session_id: data.sessionId || data.session_id,
-        applicant_id: data.applicantId || data.applicant_id,
-        request_guid: data.requestGuid || data.request_guid,
-        verified_at: data.verifiedAt || new Date().toISOString()
+        request_guid: data.requestGuid || data.request_guid || data.request_GUID || data.guid,
+        verified_at: data.verifiedAt || data.verified_at || new Date().toISOString()
       }
 
     case 'plaid':
@@ -102,7 +102,9 @@ export function isIbvDataComplete(
 
     case 'inverite':
       const inveriteData = providerData as any
-      return !!inveriteData.session_id
+      // For now, only require request_guid
+      // Account information will be added later
+      return !!inveriteData.request_guid
 
     case 'plaid':
       const plaidData = providerData as any
@@ -112,6 +114,4 @@ export function isIbvDataComplete(
       return true // Assume complete for other providers
   }
 }
-
-import type { OtherIbvData } from './types'
 

@@ -591,6 +591,9 @@ export default function LoanApplicationForm() {
       localStorage.removeItem('loanFormPreQualification')
       localStorage.removeItem('loanFormBankruptcyPlan')
       localStorage.removeItem('loanFormPreviousBorrower')
+      // Clear Inverite session data
+      localStorage.removeItem('inveriteConnection')
+      sessionStorage.removeItem('inverite_init_session_id')
     }
   }
 

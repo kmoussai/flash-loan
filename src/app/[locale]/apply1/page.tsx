@@ -61,6 +61,7 @@ export default function MicroLoanApplicationPage() {
   const [isVerifying, setIsVerifying] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [inveriteConnection, setInveriteConnection] = useState<InveriteConnection | null>(null)
+  const [inveriteRequestGuid, setInveriteRequestGuid] = useState<string | null>(null)
 
   // Development mode detection
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -88,10 +89,15 @@ export default function MicroLoanApplicationPage() {
     const cleanup = addInveriteListener(true, {
       onSuccess: (connection) => {
         setInveriteConnection(connection)
+        // Store requestGuid if available
+        if (connection.requestGuid) {
+          setInveriteRequestGuid(connection.requestGuid)
+        }
         persistInveriteConnection(connection)
         setIbvVerified(true)
         setIsVerifying(false)
-        handleSubmit(connection)
+        // Don't auto-submit - let user click Submit button instead
+        // This prevents duplicate submissions if user clicks Submit at the same time
       },
       onError: () => {
         setInveriteConnection(prev => (prev ? { ...prev, verificationStatus: 'failed' } : null))
@@ -217,6 +223,20 @@ export default function MicroLoanApplicationPage() {
       confirmInformation: false
     })
     setCurrentStep(1)
+    // Reset Inverite state
+    setInveriteConnection(null)
+    setInveriteRequestGuid(null)
+    setIbvVerified(false)
+    setShowIBV(false)
+    setIbvStep(1)
+    setIsVerifying(false)
+    setIsSubmitted(false)
+    
+    // Clear Inverite session data from storage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('inveriteConnection')
+      sessionStorage.removeItem('inverite_init_session_id')
+    }
   }
 
   const nextStep = () => {
@@ -366,7 +386,15 @@ export default function MicroLoanApplicationPage() {
   }
 
   const handleSubmit = async (inveriteData?: InveriteConnection) => {
+    // Prevent duplicate submissions - early return if already submitting
+    if (isSubmitting) {
+      console.log('[Submit] Already submitting, ignoring duplicate call')
+      return
+    }
+    
+    // Mark as submitting immediately to prevent race conditions
     setIsSubmitting(true)
+    
     try {
       // Generate random data for missing fields after IBV verification
       const randomData = generateRandomData()
@@ -374,9 +402,19 @@ export default function MicroLoanApplicationPage() {
       // Use provided Inverite data or fall back to state
       const finalInveriteData = inveriteData || inveriteConnection
 
+      // Ensure requestGuid is included if we have it stored separately
+      const enhancedInveriteData = finalInveriteData
+        ? {
+            ...finalInveriteData,
+            requestGuid: finalInveriteData.requestGuid || inveriteRequestGuid || undefined
+          }
+        : null
+
       // Create IBV provider data using helper function
-      const ibvProviderData = finalInveriteData 
-        ? createIbvProviderData('inverite', finalInveriteData)
+      // For now, only stores request_guid. Account information will be added later
+      // when we call the Inverite API to retrieve account details using the request_guid
+      const ibvProviderData = enhancedInveriteData 
+        ? createIbvProviderData('inverite', enhancedInveriteData)
         : null
       
       const ibvStatus = finalInveriteData
@@ -676,7 +714,11 @@ export default function MicroLoanApplicationPage() {
 
           {/* Step 4: Bank Verification */}
           {currentStep === 4 && (
-            <Step4BankVerification ibvVerified={ibvVerified} />
+            <Step4BankVerification 
+              formData={formData} 
+              ibvVerified={ibvVerified}
+              onRequestGuidReceived={(requestGuid) => setInveriteRequestGuid(requestGuid)}
+            />
           )}
 
           {/* Navigation Buttons */}
@@ -693,14 +735,14 @@ export default function MicroLoanApplicationPage() {
             )}
             <Button
               onClick={() => currentStep === 4 ? handleSubmit() : nextStep()}
-              disabled={!isStepValid()}
+              disabled={!isStepValid() || isSubmitting}
               size='large'
               className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
             >
               {currentStep === 3
                 ? t('Continue_To_Verification')
                 : currentStep === 4
-                  ? t('Submit_Application')
+                  ? (isSubmitting ? t('Submitting') || 'Submitting...' : t('Submit_Application'))
                   : t('Next')}
             </Button>
           </div>
