@@ -436,6 +436,11 @@ export interface Database {
         Insert: ReferenceInsert
         Update: ReferenceUpdate
       }
+      id_documents: {
+        Row: IdDocument
+        Insert: IdDocumentInsert
+        Update: IdDocumentUpdate
+      }
     }
   }
 }

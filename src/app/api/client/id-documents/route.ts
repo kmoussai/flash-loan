@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { getUserType } from '@/src/lib/supabase/db-helpers'
-import type { IdDocumentInsert, DocumentType } from '@/src/lib/supabase/types'
+import type { IdDocumentInsert, DocumentType, IdDocument } from '@/src/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get client_id from users table
+    // Verify client exists in users table (user.id is the same as client_id)
     const { data: clientData, error: clientError } = await supabase
       .from('users')
       .select('id')
@@ -57,11 +57,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Fetch ID documents
+    // Fetch ID documents (user.id is the client_id)
     const { data: documents, error: documentsError } = await supabase
-      .from('id_documents')
+      .from('id_documents' as any)
       .select('*')
-      .eq('client_id', clientData.id)
+      .eq('client_id', user.id)
       .order('created_at', { ascending: false })
 
     if (documentsError) {
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     // Generate signed URLs for file access (valid for 1 hour)
     const documentsWithUrls = await Promise.all(
-      (documents || []).map(async (doc) => {
+      (documents || []).map(async (doc: any) => {
         const { data: urlData } = await supabase.storage
           .from('id-documents')
           .createSignedUrl(doc.file_path, 3600) // 1 hour expiry
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get client_id
+    // Verify client exists in users table
     const { data: clientData, error: clientError } = await supabase
       .from('users')
       .select('id')
@@ -195,9 +195,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create database record
+    // Create database record (user.id is the client_id)
     const documentData: IdDocumentInsert = {
-      client_id: clientData.id,
+      client_id: user.id,
       document_type: documentType,
       document_name: documentName,
       file_path: uploadData.path,
@@ -209,8 +209,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: document, error: insertError } = await supabase
-      .from('id_documents')
-      .insert(documentData)
+      .from('id_documents' as any)
+      .insert(documentData as any)
       .select()
       .single()
 
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
       // If insert fails, delete the uploaded file
       await supabase.storage
         .from('id-documents')
-        .remove([uploadData.path])
+        .remove([uploadData.path as string])
       
       console.error('Error creating document record:', insertError)
       return NextResponse.json(
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       document: {
-        ...document,
+        ...(document as any),
         signed_url: urlData?.signedUrl || null
       }
     }, { status: 201 })
@@ -286,19 +286,26 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Get client_id
+    // Verify client exists and document belongs to them
     const { data: clientData } = await supabase
       .from('users')
       .select('id')
       .eq('id', user.id)
       .single()
 
-    // Verify document belongs to client and is pending
+    if (!clientData) {
+      return NextResponse.json(
+        { error: 'Client profile not found' },
+        { status: 404 }
+      )
+    }
+
+    // Verify document belongs to client and is pending (user.id is the client_id)
     const { data: document, error: documentError } = await supabase
-      .from('id_documents')
+      .from('id_documents' as any)
       .select('file_path, status')
       .eq('id', documentId)
-      .eq('client_id', clientData?.id)
+      .eq('client_id', user.id)
       .eq('status', 'pending')
       .single()
 
@@ -310,9 +317,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete file from storage
+    const doc = document as any
     const { error: storageError } = await supabase.storage
       .from('id-documents')
-      .remove([document.file_path])
+      .remove([doc.file_path])
 
     if (storageError) {
       console.error('Error deleting file from storage:', storageError)
@@ -321,7 +329,7 @@ export async function DELETE(request: NextRequest) {
 
     // Delete database record
     const { error: deleteError } = await supabase
-      .from('id_documents')
+      .from('id_documents' as any)
       .delete()
       .eq('id', documentId)
 

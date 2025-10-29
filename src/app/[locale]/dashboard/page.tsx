@@ -50,24 +50,24 @@ export default function ClientDashboardPage() {
     fetchIdDocuments()
   }, [])
 
-  // Helper function to get document type label
-  const getDocumentTypeLabelForForm = (type: DocumentType): string => {
-    const labels: Record<DocumentType, string> = {
-      drivers_license: t('Drivers_License') || 'Driver\'s License',
-      passport: t('Passport') || 'Passport',
-      health_card: t('Health_Card') || 'Health Card',
-      social_insurance: t('Social_Insurance_Number') || 'Social Insurance Number',
-      permanent_resident_card: t('Permanent_Resident_Card') || 'Permanent Resident Card',
-      citizenship_card: t('Citizenship_Card') || 'Citizenship Card',
-      birth_certificate: t('Birth_Certificate') || 'Birth Certificate',
-      other: t('Other') || 'Other'
-    }
-    return labels[type] || type
-  }
-
   // Auto-fill document name based on document type (except for "other")
   useEffect(() => {
     if (uploadForm.document_type && uploadForm.document_type !== 'other') {
+      // Helper function to get document type label
+      const getDocumentTypeLabelForForm = (type: DocumentType): string => {
+        const labels: Record<DocumentType, string> = {
+          drivers_license: t('Drivers_License') || 'Driver\'s License',
+          passport: t('Passport') || 'Passport',
+          health_card: t('Health_Card') || 'Health Card',
+          social_insurance: t('Social_Insurance_Number') || 'Social Insurance Number',
+          permanent_resident_card: t('Permanent_Resident_Card') || 'Permanent Resident Card',
+          citizenship_card: t('Citizenship_Card') || 'Citizenship Card',
+          birth_certificate: t('Birth_Certificate') || 'Birth Certificate',
+          other: t('Other') || 'Other'
+        }
+        return labels[type] || type
+      }
+      
       const typeLabel = getDocumentTypeLabelForForm(uploadForm.document_type)
       setUploadForm(prev => ({
         ...prev,
@@ -80,7 +80,8 @@ export default function ClientDashboardPage() {
         document_name: ''
       }))
     }
-  }, [uploadForm.document_type, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadForm.document_type])
 
   const fetchDashboardData = async () => {
     try {
