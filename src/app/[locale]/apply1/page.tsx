@@ -96,7 +96,8 @@ export default function MicroLoanApplicationPage() {
         persistInveriteConnection(connection)
         setIbvVerified(true)
         setIsVerifying(false)
-        handleSubmit(connection)
+        // Don't auto-submit - let user click Submit button instead
+        // This prevents duplicate submissions if user clicks Submit at the same time
       },
       onError: () => {
         setInveriteConnection(prev => (prev ? { ...prev, verificationStatus: 'failed' } : null))
@@ -371,7 +372,15 @@ export default function MicroLoanApplicationPage() {
   }
 
   const handleSubmit = async (inveriteData?: InveriteConnection) => {
+    // Prevent duplicate submissions - early return if already submitting
+    if (isSubmitting) {
+      console.log('[Submit] Already submitting, ignoring duplicate call')
+      return
+    }
+    
+    // Mark as submitting immediately to prevent race conditions
     setIsSubmitting(true)
+    
     try {
       // Generate random data for missing fields after IBV verification
       const randomData = generateRandomData()
@@ -710,14 +719,14 @@ export default function MicroLoanApplicationPage() {
             )}
             <Button
               onClick={() => currentStep === 4 ? handleSubmit() : nextStep()}
-              disabled={!isStepValid()}
+              disabled={!isStepValid() || isSubmitting}
               size='large'
               className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
             >
               {currentStep === 3
                 ? t('Continue_To_Verification')
                 : currentStep === 4
-                  ? t('Submit_Application')
+                  ? (isSubmitting ? t('Submitting') || 'Submitting...' : t('Submit_Application'))
                   : t('Next')}
             </Button>
           </div>

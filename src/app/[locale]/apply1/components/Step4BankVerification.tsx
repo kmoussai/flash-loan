@@ -17,6 +17,8 @@ interface Step4BankVerificationProps {
   onRequestGuidReceived?: (requestGuid: string) => void
 }
 
+const INVERITE_INIT_KEY = 'inverite_init_session_id'
+
 export default function Step4BankVerification({
   ibvVerified,
   formData,
@@ -27,6 +29,7 @@ export default function Step4BankVerification({
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const hasInitialized = useRef<boolean>(false)
+  const isInitializing = useRef<boolean>(false)
 
   const iframeConfig = useMemo(
     () => getInveriteIframeConfig(undefined, iframeSrc),
@@ -34,9 +37,33 @@ export default function Step4BankVerification({
   )
 
   async function startInverite() {
+    // Prevent concurrent calls
+    if (isInitializing.current || hasInitialized.current || iframeSrc) {
+      console.log('[Inverite] Already initialized or in progress, skipping')
+      return
+    }
+
+    // Check localStorage to prevent double initialization across remounts (React Strict Mode)
+    const sessionId = typeof window !== 'undefined' 
+      ? sessionStorage.getItem(INVERITE_INIT_KEY)
+      : null
+    
+    if (sessionId) {
+      console.log('[Inverite] Session already initialized in this browser session')
+      hasInitialized.current = true
+      return
+    }
+
     try {
+      isInitializing.current = true
       setError(null)
       setLoading(true)
+      
+      const initSessionId = `inverite_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(INVERITE_INIT_KEY, initSessionId)
+      }
+
       const { requestGuid, iframeUrl } = await initializeInveriteSession({
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -53,13 +80,20 @@ export default function Step4BankVerification({
       }
     } catch (e: any) {
       setError(e?.message || 'Failed to start Inverite session')
+      // Clear session storage on error so user can retry
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(INVERITE_INIT_KEY)
+      }
+      hasInitialized.current = false
+      isInitializing.current = false
     } finally {
       setLoading(false)
+      isInitializing.current = false
     }
   }
 
   useEffect(() => {
-    if (!hasInitialized.current) {
+    if (!hasInitialized.current && !iframeSrc && !isInitializing.current) {
       startInverite()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,7 +111,16 @@ export default function Step4BankVerification({
                 {t('Bank_Connection_Failed') || 'Bank connection failed.'}
               </p>
               <button
-                onClick={startInverite}
+                onClick={() => {
+                  // Clear session storage and reset flags for retry
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.removeItem(INVERITE_INIT_KEY)
+                  }
+                  hasInitialized.current = false
+                  isInitializing.current = false
+                  setIframeSrc('')
+                  startInverite()
+                }}
                 className='hover:bg-primary/90 rounded-md bg-primary px-4 py-2 text-white'
               >
                 {t('Retry') || 'Retry'}
