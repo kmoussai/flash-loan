@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const referer = request.headers.get('referer') || request.headers.get('origin')
     let redirectUrl: string | null = null
     
-    if (referer && process.env.NODE_ENV !== 'production') {
+    if (referer) {
       try {
         const refererUrl = new URL(referer)
         // Extract locale from pathname (format: /en/... or /fr/...)
