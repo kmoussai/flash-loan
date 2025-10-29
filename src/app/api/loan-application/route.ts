@@ -300,18 +300,19 @@ export async function POST(request: NextRequest) {
       .eq('email', body.email)
       .maybeSingle()
     
-    let userId: string
+    let userId: string | null = null
+    let authUserIdToCleanup: string | null = null
     let isPreviousBorrower = false
     
     if (existingUser as any) {
       // User exists - they're a previous borrower
       userId = (existingUser as any).id
       isPreviousBorrower = true
-      
       console.log('Existing user found:', userId)
     } else {
-      // New user - create auth account and profile
-      console.log('Creating new user account for:', body.email)
+      // New user - create auth account first (required for foreign key)
+      // The transaction function will handle creating the public.users record
+      console.log('Creating new auth user for:', body.email)
       
       // Generate a random password for the user
       const tempPassword = `temp_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`
@@ -329,22 +330,36 @@ export async function POST(request: NextRequest) {
         }
       })
       
-      if (signUpError || !authData.user) {
-        console.error('Error creating user:', signUpError)
-        return NextResponse.json(
-          { 
-            error: 'Failed to create user account',
-            details: signUpError?.message || 'Unknown error'
-          },
-          { status: 500 }
-        )
+      if (signUpError || !authData?.user) {
+        console.error('Error creating auth user:', signUpError)
+        
+        // Check if user was actually created despite the error
+        const { data: checkUser } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('email', body.email)
+          .maybeSingle()
+        
+        if (checkUser) {
+          userId = (checkUser as any).id
+          console.log('User found despite error, using existing ID:', userId)
+        } else {
+          return NextResponse.json(
+            { 
+              error: 'Failed to create user account',
+              details: signUpError?.message || 'Unknown error'
+            },
+            { status: 500 }
+          )
+        }
+      } else {
+        userId = authData.user.id
+        authUserIdToCleanup = userId // Track for potential cleanup
+        console.log('New auth user created:', userId)
+        
+        // Wait for trigger to create public.users record
+        await new Promise(resolve => setTimeout(resolve, 500))
       }
-      
-      userId = authData.user.id
-      console.log('New user created:', userId)
-      
-      // Wait a bit for the trigger to create the users record
-      await new Promise(resolve => setTimeout(resolve, 500))
     }
     
     // Prepare references as JSONB array
@@ -367,6 +382,8 @@ export async function POST(request: NextRequest) {
     const incomeFields = buildIncomeFields(body.incomeSource, body)
     
     // Call the atomic transaction function
+    // Pass NULL for p_client_id if new user - transaction will find/create by email
+    // Transaction function handles all user/address/application/references atomically
     console.log('Calling submit_loan_application transaction...')
     const { data: result, error: submitError } = await (supabase.rpc as any)('submit_loan_application', {
       // Required parameters (in order)
@@ -390,7 +407,10 @@ export async function POST(request: NextRequest) {
       p_bankruptcy_plan: body.bankruptcyPlan,
       p_references: references,
       // Optional parameters (with defaults)
-      p_client_id: userId,
+      // For existing users: pass userId (transaction will use it)
+      // For new users: pass NULL to let transaction find/use trigger-created user by email
+      // This ensures transaction handles everything atomically
+      p_client_id: existingUser ? userId : null,
       p_residence_status: body.residenceStatus || null,
       p_gross_salary: body.grossSalary ? parseFloat(body.grossSalary) : null,
       p_rent_or_mortgage_cost: body.rentOrMortgageCost ? parseFloat(body.rentOrMortgageCost) : null,
@@ -405,6 +425,19 @@ export async function POST(request: NextRequest) {
     
     if (submitError) {
       console.error('Transaction error:', submitError)
+      
+      // Clean up auth user if transaction failed and we created a new one
+      if (authUserIdToCleanup) {
+        console.log('Cleaning up auth user due to transaction failure:', authUserIdToCleanup)
+        try {
+          await supabase.auth.admin.deleteUser(authUserIdToCleanup)
+          console.log('Auth user cleaned up successfully')
+        } catch (cleanupError) {
+          console.error('Failed to clean up auth user:', cleanupError)
+          // Continue anyway - error already occurred
+        }
+      }
+      
       throw new Error(submitError.message)
     }
     

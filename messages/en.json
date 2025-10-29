@@ -344,5 +344,18 @@
   "Start_Quick_Apply": "Start Quick Apply",
   "Full_Application": "Full Application",
   "Full_Application_Description": "Complete application with detailed information and instant bank verification",
-  "Start_Full_Application": "Start Full Application"
+  "Start_Full_Application": "Start Full Application",
+  "Message_Sent": "Success message sent. This window will close automatically.",
+  "Processing_Verification": "Processing Verification...",
+  "Bank_Connection_Failed": "Bank connection failed.",
+  "Retry": "Retry",
+  "Connecting_To_Bank": "Connecting to Inverite...",
+  "Completing_Bank_Verification": "Completing your bank verification. Please wait.",
+  "Inverite_Missing_Params": "Error: Missing required verification parameters. Please try the verification process again.",
+  "Verification_Error": "Verification Error",
+  "Inverite_Error_Help": "The verification process could not be completed due to missing information. Please try again from the beginning.",
+  "Debug_Info": "Debug Info",
+  "Close_Window": "Close Window",
+  "Request_ID": "Request ID",
+  "Loading": "Loading..."
 }

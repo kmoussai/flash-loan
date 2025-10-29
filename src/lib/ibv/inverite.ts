@@ -12,14 +12,13 @@ export const INVERITE_STORAGE_KEY = 'inveriteConnection'
 export const INVERITE_ORIGIN_REGEX = /https:\/\/(sandbox|live|www)\.inverite\.com/
 
 // Base URL for Inverite iframe
-export const INVERITE_IFRAME_BASE_URL = 'https://www.inverite.com/customer/v2/web/start'
+export const INVERITE_IFRAME_BASE_URL = 'https://sandbox.inverite.com/customer/v2/web/start'
 
 // Get iframe config with dynamic request_GUID
-export function getInveriteIframeConfig(requestGuid?: string) {
-  const guid = requestGuid || '445AF552-D436-4E67-AB58-DEE546FE35FA' // Fallback for testing
-  
+export function getInveriteIframeConfig(requestGuid?: string, iframeUrl?: string) {
+  const src = iframeUrl || (requestGuid ? `${INVERITE_IFRAME_BASE_URL}/${requestGuid}/0/modern` : '')
   return {
-    src: `${INVERITE_IFRAME_BASE_URL}/${guid}/0/modern&request_GUID=${guid}`,
+    src,
     title: 'Inverite Verification',
     allow: 'camera; microphone; geolocation',
     className: 'inverite h-[500px] w-full sm:h-[600px] md:h-[650px]'
@@ -35,10 +34,10 @@ export async function initializeInveriteSession(userData?: {
   lastName?: string
   email?: string
   phone?: string
-}): Promise<string> {
+  redirectParams?: Record<string, string> // Additional params for redirect URL
+}): Promise<{ requestGuid: string; iframeUrl?: string }> {
   try {
     console.log('[Inverite] Initializing session with user data:', userData)
-    console.log('[Inverite] TODO: Implement API call to get request_GUID from Inverite')
     
     // Try to fetch from backend API endpoint
     const response = await fetch('/api/inverite/initialize', {
@@ -49,23 +48,18 @@ export async function initializeInveriteSession(userData?: {
     
     if (response.ok) {
       const data = await response.json()
-      return data.requestGuid || data.guid
+      if (!data?.requestGuid) {
+        throw new Error('Missing requestGuid in response')
+      }
+      return { requestGuid: data.requestGuid, iframeUrl: data.iframeUrl }
     }
     
-    // Fallback: generate a random GUID
-    return generateGuid()
+    const text = await response.text().catch(() => '')
+    throw new Error(text || `HTTP ${response.status}`)
   } catch (error) {
     console.error('[Inverite] Error initializing session:', error)
-    return generateGuid()
+    throw error
   }
-}
-
-function generateGuid(): string {
-  return `${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}`
-}
-
-function randomHex(length: number): string {
-  return Array.from({ length }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join('')
 }
 
 export function restoreInveriteConnection(): InveriteConnection | null {
@@ -107,8 +101,11 @@ export function addInveriteListener(enabled: boolean, handlers: InveriteHandlers
   if (typeof window === 'undefined' || !enabled) return () => {}
 
   const listener = (event: MessageEvent) => {
-    // Check if message is from Inverite
-    if (event.origin.match(INVERITE_ORIGIN_REGEX)) {
+    // Check if message is from Inverite or our own callback page
+    const isInveriteOrigin = event.origin.match(INVERITE_ORIGIN_REGEX)
+    const isOwnOrigin = typeof window !== 'undefined' && event.origin === window.location.origin
+    
+    if (isInveriteOrigin || isOwnOrigin) {
       // Log raw event data for debugging/inspection
       try {
         // Avoid logging huge objects by extracting key parts
@@ -121,10 +118,31 @@ export function addInveriteListener(enabled: boolean, handlers: InveriteHandlers
         // eslint-disable-next-line no-console
         console.log('[Inverite] message received (unable to serialize data)')
       }
-      if (event.data === 'success') {
-        // Extract session ID and request GUID from URL if available
+      const data = event.data
+
+      // Handle new message format with success and data fields
+      const messageData = typeof data === 'object' && data?.data ? data.data : data
+      const isSuccess =
+        (typeof data === 'string' && data === 'success') ||
+        (typeof data === 'object' && data?.success === true) ||
+        (typeof messageData === 'object' && (messageData?.task_status === 'success' || messageData?.status === 'success'))
+
+      const isError =
+        (typeof data === 'string' && (data === 'error' || data === 'failed')) ||
+        (typeof data === 'object' && (data?.success === false)) ||
+        (typeof messageData === 'object' && (messageData?.task_status === 'failed' || messageData?.status === 'failed' || messageData?.status === 'error'))
+
+      const isCancelled =
+        (typeof data === 'string' && data === 'cancelled') ||
+        (typeof messageData === 'object' && (messageData?.task_status === 'cancelled' || messageData?.status === 'cancelled'))
+
+      if (isSuccess) {
+        // Extract session ID and request GUID from URL if available, or from message data
         const sessionId = `inverite-${Date.now()}`
-        const requestGuid = extractGuidFromIframe()
+        const requestGuid = 
+          (typeof messageData === 'object' && messageData?.request_guid) ||
+          (typeof data === 'object' && data?.request_guid) || 
+          extractGuidFromIframe()
         
         const connection: InveriteConnection = {
           sessionId,
@@ -133,9 +151,9 @@ export function addInveriteListener(enabled: boolean, handlers: InveriteHandlers
         }
         
         handlers.onSuccess(connection)
-      } else if (event.data === 'error' || event.data === 'failed') {
-        handlers.onError && handlers.onError(event.data)
-      } else if (event.data === 'cancelled') {
+      } else if (isError) {
+        handlers.onError && handlers.onError(messageData || event.data)
+      } else if (isCancelled) {
         handlers.onCancel && handlers.onCancel()
       }
       return
@@ -165,7 +183,7 @@ function extractGuidFromIframe(): string | undefined {
   if (typeof window === 'undefined') return undefined
   // The GUID is in the iframe src: 0DC61938-CB22-4235-A4CD-3AF0F3DD5252
   // Extract from INVERITE_IFRAME_CONFIG.src or from current page URL
-  const match = INVERITE_IFRAME_CONFIG.src.match(/GUID=([A-F0-9-]+)/)
+  const match = INVERITE_IFRAME_CONFIG.src.match(/[A-F0-9-]{36}/)
   return match ? match[1] : undefined
 }
 

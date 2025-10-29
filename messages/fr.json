@@ -343,5 +343,18 @@
   "Start_Quick_Apply": "Commencer la Demande Rapide",
   "Full_Application": "Demande Complète",
   "Full_Application_Description": "Demande complète avec informations détaillées et vérification bancaire instantanée",
-  "Start_Full_Application": "Commencer la Demande Complète"
+  "Start_Full_Application": "Commencer la Demande Complète",
+  "Message_Sent": "Message de succès envoyé. Cette fenêtre se fermera automatiquement.",
+  "Processing_Verification": "Traitement de la vérification...",
+  "Bank_Connection_Failed": "Échec de la connexion bancaire.",
+  "Retry": "Réessayer",
+  "Connecting_To_Bank": "Connexion à Inverite...",
+  "Completing_Bank_Verification": "Finalisation de votre vérification bancaire. Veuillez patienter.",
+  "Inverite_Missing_Params": "Erreur : Paramètres de vérification requis manquants. Veuillez réessayer le processus de vérification.",
+  "Verification_Error": "Erreur de Vérification",
+  "Inverite_Error_Help": "Le processus de vérification n'a pas pu être complété en raison d'informations manquantes. Veuillez réessayer depuis le début.",
+  "Debug_Info": "Informations de débogage",
+  "Close_Window": "Fermer la fenêtre",
+  "Request_ID": "ID de demande",
+  "Loading": "Chargement..."
 }

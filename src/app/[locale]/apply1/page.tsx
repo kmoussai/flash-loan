@@ -61,6 +61,7 @@ export default function MicroLoanApplicationPage() {
   const [isVerifying, setIsVerifying] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [inveriteConnection, setInveriteConnection] = useState<InveriteConnection | null>(null)
+  const [inveriteRequestGuid, setInveriteRequestGuid] = useState<string | null>(null)
 
   // Development mode detection
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -88,6 +89,10 @@ export default function MicroLoanApplicationPage() {
     const cleanup = addInveriteListener(true, {
       onSuccess: (connection) => {
         setInveriteConnection(connection)
+        // Store requestGuid if available
+        if (connection.requestGuid) {
+          setInveriteRequestGuid(connection.requestGuid)
+        }
         persistInveriteConnection(connection)
         setIbvVerified(true)
         setIsVerifying(false)
@@ -374,9 +379,17 @@ export default function MicroLoanApplicationPage() {
       // Use provided Inverite data or fall back to state
       const finalInveriteData = inveriteData || inveriteConnection
 
+      // Ensure requestGuid is included if we have it stored separately
+      const enhancedInveriteData = finalInveriteData
+        ? {
+            ...finalInveriteData,
+            requestGuid: finalInveriteData.requestGuid || inveriteRequestGuid || undefined
+          }
+        : null
+
       // Create IBV provider data using helper function
-      const ibvProviderData = finalInveriteData 
-        ? createIbvProviderData('inverite', finalInveriteData)
+      const ibvProviderData = enhancedInveriteData 
+        ? createIbvProviderData('inverite', enhancedInveriteData)
         : null
       
       const ibvStatus = finalInveriteData
@@ -676,7 +689,11 @@ export default function MicroLoanApplicationPage() {
 
           {/* Step 4: Bank Verification */}
           {currentStep === 4 && (
-            <Step4BankVerification ibvVerified={ibvVerified} />
+            <Step4BankVerification 
+              formData={formData} 
+              ibvVerified={ibvVerified}
+              onRequestGuidReceived={(requestGuid) => setInveriteRequestGuid(requestGuid)}
+            />
           )}
 
           {/* Navigation Buttons */}
