@@ -11,6 +11,8 @@ export type LoanType = 'without-documents' | 'with-documents'
 export type ApplicationStatus = 'pending' | 'processing' | 'approved' | 'rejected' | 'cancelled'
 export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'other'
 export type IbvStatus = 'pending' | 'processing' | 'verified' | 'failed' | 'cancelled' | 'expired'
+export type DocumentType = 'drivers_license' | 'passport' | 'health_card' | 'social_insurance' | 'permanent_resident_card' | 'citizenship_card' | 'birth_certificate' | 'other'
+export type DocumentStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'expired'
 export type IncomeSourceType = 
   | 'employed' 
   | 'employment-insurance' 
@@ -231,6 +233,25 @@ export interface Reference {
   created_at: string
 }
 
+export interface IdDocument {
+  id: string
+  client_id: string
+  document_type: DocumentType
+  document_name: string
+  file_path: string
+  file_name: string
+  file_size: number
+  mime_type: string
+  status: DocumentStatus
+  rejection_reason: string | null
+  verified_by: string | null
+  verified_at: string | null
+  expires_at: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ===========================
 // INSERT TYPES
 // ===========================
@@ -357,6 +378,30 @@ export interface ReferenceUpdate {
   last_name?: string
   phone?: string
   relationship?: string
+}
+
+export interface IdDocumentInsert {
+  client_id: string
+  document_type: DocumentType
+  document_name: string
+  file_path: string
+  file_name: string
+  file_size: number
+  mime_type: string
+  status?: DocumentStatus
+  expires_at?: string | null
+  notes?: string | null
+}
+
+export interface IdDocumentUpdate {
+  document_type?: DocumentType
+  document_name?: string
+  status?: DocumentStatus
+  rejection_reason?: string | null
+  verified_by?: string | null
+  verified_at?: string | null
+  expires_at?: string | null
+  notes?: string | null
 }
 
 // ===========================

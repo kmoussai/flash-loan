@@ -29,12 +29,40 @@ export default function AdminLoginPage() {
         return
       }
 
-      if (data.session) {
-        router.push('/admin/dashboard')
-        router.refresh()
+      if (data.session && data.user) {
+        // Check if user is staff using client-side Supabase client
+        const { data: staffData } = await supabase
+          .from('staff')
+          .select('id')
+          .eq('id', data.user.id)
+          .single()
+        
+        if (staffData) {
+          // User is staff - proceed to admin dashboard
+          router.push('/admin/dashboard')
+          router.refresh()
+        } else {
+          // Check if user is a client
+          const { data: userData } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', data.user.id)
+            .single()
+          
+          if (userData) {
+            // Client trying to access admin - redirect to client dashboard
+            const locale = window.location.pathname.split('/')[1] || 'en'
+            router.push(`/${locale}/dashboard`)
+            setError('Access denied: You do not have permission to access the admin panel.')
+          } else {
+            setError('Access denied: User account not found.')
+          }
+        }
       }
     } catch (err) {
       setError('An unexpected error occurred')
+      setLoading(false)
+    } finally {
       setLoading(false)
     }
   }

@@ -223,6 +223,20 @@ export default function MicroLoanApplicationPage() {
       confirmInformation: false
     })
     setCurrentStep(1)
+    // Reset Inverite state
+    setInveriteConnection(null)
+    setInveriteRequestGuid(null)
+    setIbvVerified(false)
+    setShowIBV(false)
+    setIbvStep(1)
+    setIsVerifying(false)
+    setIsSubmitted(false)
+    
+    // Clear Inverite session data from storage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('inveriteConnection')
+      sessionStorage.removeItem('inverite_init_session_id')
+    }
   }
 
   const nextStep = () => {

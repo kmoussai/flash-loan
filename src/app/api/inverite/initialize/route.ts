@@ -92,13 +92,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Build webhook URL
-    // In production, use your actual domain
-    const webhookUrl =
-      process.env.INVERITE_WEBHOOK_URL ||
-      (referer
-        ? `${new URL(referer).origin}/api/inverite/webhook`
-        : null)
 
     // Minimal payload; adapt fields as required by Inverite. Optional user info can help prefill.
     const payload: Record<string, any> = {
@@ -107,17 +100,11 @@ export async function POST(request: Request) {
       lastname: body.lastName,
       email: body.email,
       phone: body.phone,
-      ip: '0.0.0.0'
     }
 
-    // Add webhook URL if configured
-    if (webhookUrl) {
-      payload.webhookurl = webhookUrl
-      console.log('[Inverite] Setting webhook URL:', webhookUrl)
-    }
 
     // Add redirect URL in dev if available (helps with postMessage origin issues)
-    if (redirectUrl) {
+    if (redirectUrl && process.env.NODE_ENV === 'development') {
       payload.redirecturl = redirectUrl
       console.log('[Inverite] Setting redirect URL:', redirectUrl)
     }
