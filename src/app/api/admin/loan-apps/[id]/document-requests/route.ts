@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isStaff } from '@/src/lib/supabase/admin-helpers'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { signRequestToken } from '@/src/lib/security/token'
 
 // GET /api/admin/loan-apps/:id/document-requests
 export async function GET(
@@ -19,7 +20,25 @@ export async function GET(
       .eq('loan_application_id', appId)
       .order('created_at', { ascending: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ requests: data || [] })
+    const { getAppUrl } = await import('@/src/lib/config')
+    const { data: appRow } = await admin
+      .from('loan_applications' as any)
+      .select('id, users:client_id(preferred_language)')
+      .eq('id', appId)
+      .single()
+    const preferredLanguage: 'en' | 'fr' = ((appRow as any)?.users?.preferred_language === 'fr') ? 'fr' : 'en'
+    const enhanced = (data || []).map((r: any) => {
+      let link: string | null = null
+      if (r.expires_at) {
+        const exp = new Date(r.expires_at).getTime()
+        if (!isNaN(exp) && Date.now() < exp) {
+          const token = signRequestToken(r.id, exp)
+          link = `${getAppUrl()}/${preferredLanguage}/upload-documents?req=${encodeURIComponent(r.id)}&token=${encodeURIComponent(token)}`
+        }
+      }
+      return { ...r, request_link: link }
+    })
+    return NextResponse.json({ requests: enhanced })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }

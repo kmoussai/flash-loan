@@ -360,16 +360,17 @@ export async function sendDocumentRequestMagicLink(
 
     const expiresAt = Date.now() + 15 * 60 * 1000 // 15 minutes
     const token = signRequestToken(requestId, expiresAt)
+    const tokenHash = (await import('crypto')).createHash('sha256').update(token).digest('hex')
     const publicLink = `${getAppUrl()}/${preferredLanguage}/upload-documents?req=${encodeURIComponent(requestId)}&token=${encodeURIComponent(token)}`
 
     // Log the generated link (to be sent externally)
     console.log('[sendDocumentRequestLink] Link generated for:', email, 'URL:', publicLink)
 
-    // Update sent timestamp
+    // Save token hash and expiry; update sent timestamp
     await adminClient
       .from('document_requests' as any)
       // @ts-ignore - using admin client with loosely typed table
-      .update({ magic_link_sent_at: new Date().toISOString() } as any)
+      .update({ magic_link_sent_at: new Date().toISOString(), request_token_hash: tokenHash, expires_at: new Date(expiresAt).toISOString() } as any)
       .eq('id', requestId)
 
     return { success: true, email, redirectTo: publicLink }

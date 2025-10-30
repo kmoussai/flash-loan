@@ -30,7 +30,7 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 	const [selectedTypes, setSelectedTypes] = useState<Record<string, boolean>>({})
 	const [note, setNote] = useState('')
 	const [sending, setSending] = useState(false)
-	const [requests, setRequests] = useState<Array<{ id: string, status: string, document_type: { id: string, name: string, slug: string }, magic_link_sent_at?: string | null, uploaded_file_key?: string | null }>>([])
+	const [requests, setRequests] = useState<Array<{ id: string, status: string, document_type: { id: string, name: string, slug: string }, magic_link_sent_at?: string | null, uploaded_file_key?: string | null, request_link?: string | null }>>([])
 	const [loadingRequests, setLoadingRequests] = useState(false)
 	const [submittingRequest, setSubmittingRequest] = useState<Record<string, boolean>>({})
 
@@ -378,7 +378,8 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 									<tr>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Type</th>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Status</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Magic Link</th>
+										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Last Sent</th>
+										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Link</th>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>File</th>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Actions</th>
 									</tr>
@@ -393,6 +394,19 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 												</span>
 											</td>
 											<td className='px-4 py-2 text-xs text-gray-500'>{r.magic_link_sent_at ? new Date(r.magic_link_sent_at).toLocaleString() : '—'}</td>
+										<td className='px-4 py-2 text-xs text-gray-500 max-w-[280px] truncate'>
+											{r.request_link ? (
+												<button
+													onClick={async () => { try { await navigator.clipboard.writeText(r.request_link!) } catch {} }}
+													className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50'
+													title={r.request_link}
+												>
+													Copy Link
+												</button>
+											) : (
+												<span className='text-gray-400'>Expired/Not generated</span>
+											)}
+										</td>
 											<td className='px-4 py-2 text-xs text-gray-500 font-mono'>{r.uploaded_file_key || '—'}</td>
 											<td className='px-4 py-2 text-sm whitespace-nowrap'>
 												<div className='flex items-center gap-2'>

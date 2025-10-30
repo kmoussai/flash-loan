@@ -34,7 +34,7 @@ export const Header: FC<Props> = ({ locale }) => {
             .select('id')
             .eq('id', user.id)
             .single()
-
+          
           if (staffData) {
             // User is staff, not a client
             setIsAuthenticated(false)
@@ -46,7 +46,7 @@ export const Header: FC<Props> = ({ locale }) => {
               .select('id')
               .eq('id', user.id)
               .single()
-
+            
             setIsAuthenticated(!!user)
             setIsClient(!!userData)
           }
@@ -174,7 +174,7 @@ export const Header: FC<Props> = ({ locale }) => {
               )}
             </>
           )}
-
+          
           {/* Apply Now Button - Links to apply page */}
           <Link lang={locale} href='/apply'>
             <Button
