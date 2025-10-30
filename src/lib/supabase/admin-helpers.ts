@@ -316,10 +316,10 @@ interface SendDocumentRequestMagicLinkResult {
 }
 
 /**
- * Generate and send Supabase Auth Magic Link for a document request
+ * Generate and log a signed upload link for a document request (no auth magic link)
  * - Finds user email via document_requests -> loan_applications -> users
- * - Uses Supabase Admin API to generate a magic link
- * - Updates document_requests.magic_link_sent_at
+ * - Builds signed token URL to upload-documents page
+ * - Updates document_requests.magic_link_sent_at as a send timestamp
  */
 export async function sendDocumentRequestMagicLink(
   requestId: string
@@ -327,6 +327,7 @@ export async function sendDocumentRequestMagicLink(
   try {
     const { createServerSupabaseAdminClient } = await import('./server')
     const { getAppUrl } = await import('../config')
+    const { signRequestToken } = await import('../security/token')
     const adminClient = createServerSupabaseAdminClient()
 
     // Resolve email for the request
@@ -343,7 +344,7 @@ export async function sendDocumentRequestMagicLink(
     // Join to users via loan_applications
     const { data: appJoin, error: joinErr } = await adminClient
       .from('loan_applications' as any)
-      .select('id, client_id, users:client_id(email)')
+      .select('id, client_id, users:client_id(email, preferred_language)')
       .eq('id', (reqRow as any).loan_application_id)
       .single()
 
@@ -352,34 +353,26 @@ export async function sendDocumentRequestMagicLink(
     }
 
     const email: string | null = (appJoin as any)?.users?.email || null
+    const preferredLanguage: 'en' | 'fr' = ((appJoin as any)?.users?.preferred_language === 'fr') ? 'fr' : 'en'
     if (!email) {
       return { success: false, error: 'Client email not available' }
     }
 
-    const redirectTo = `${getAppUrl()}/upload-documents?req=${encodeURIComponent(requestId)}`
+    const expiresAt = Date.now() + 15 * 60 * 1000 // 15 minutes
+    const token = signRequestToken(requestId, expiresAt)
+    const publicLink = `${getAppUrl()}/${preferredLanguage}/upload-documents?req=${encodeURIComponent(requestId)}&token=${encodeURIComponent(token)}`
 
-    // Generate magic link via Admin API
-    const { data, error } = await adminClient.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-      options: { redirectTo }
-    } as any)
+    // Log the generated link (to be sent externally)
+    console.log('[sendDocumentRequestLink] Link generated for:', email, 'URL:', publicLink)
 
-    if (error) {
-      console.error('[sendDocumentRequestMagicLink] Magic link generation failed:', error.message)
-      return { success: false, error: error.message }
-    }
-
-    console.log('[sendDocumentRequestMagicLink] Magic link generated for:', email, 'Redirect:', redirectTo)
-
-    // Update magic_link_sent_at
+    // Update sent timestamp
     await adminClient
       .from('document_requests' as any)
       // @ts-ignore - using admin client with loosely typed table
       .update({ magic_link_sent_at: new Date().toISOString() } as any)
       .eq('id', requestId)
 
-    return { success: true, email, redirectTo }
+    return { success: true, email, redirectTo: publicLink }
   } catch (e: any) {
     console.error('[sendDocumentRequestMagicLink] Unexpected error:', e?.message)
     return { success: false, error: e?.message || 'Unexpected error' }

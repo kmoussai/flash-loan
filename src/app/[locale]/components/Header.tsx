@@ -23,7 +23,9 @@ export const Header: FC<Props> = ({ locale }) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const {
+          data: { user }
+        } = await supabase.auth.getUser()
         if (user) {
           // Check if user is a client (not staff) by querying directly
           // Check staff table first
@@ -32,7 +34,7 @@ export const Header: FC<Props> = ({ locale }) => {
             .select('id')
             .eq('id', user.id)
             .single()
-          
+
           if (staffData) {
             // User is staff, not a client
             setIsAuthenticated(false)
@@ -44,7 +46,7 @@ export const Header: FC<Props> = ({ locale }) => {
               .select('id')
               .eq('id', user.id)
               .single()
-            
+
             setIsAuthenticated(!!user)
             setIsClient(!!userData)
           }
@@ -61,10 +63,15 @@ export const Header: FC<Props> = ({ locale }) => {
     }
 
     checkAuth()
-
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        event === 'SIGNED_IN' ||
+        event === 'SIGNED_OUT' ||
+        event === 'TOKEN_REFRESHED'
+      ) {
         checkAuth()
       }
     })
@@ -136,7 +143,6 @@ export const Header: FC<Props> = ({ locale }) => {
           >
             {t('Contact')}
           </Link>
-          
         </nav>
 
         {/* Right side actions */}
@@ -168,7 +174,7 @@ export const Header: FC<Props> = ({ locale }) => {
               )}
             </>
           )}
-          
+
           {/* Apply Now Button - Links to apply page */}
           <Link lang={locale} href='/apply'>
             <Button

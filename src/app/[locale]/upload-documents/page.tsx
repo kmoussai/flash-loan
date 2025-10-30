@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { uploadRequestedDocument } from '@/src/lib/supabase/document-helpers'
 import Button from '../components/Button'
+import { createClient } from '@/src/lib/supabase/client'
 
 type RequestItem = {
   id: string
@@ -15,23 +16,39 @@ type RequestItem = {
 
 export default function UploadDocumentsPage() {
   const t = useTranslations('')
+  const supabase = useMemo(() => createClient(), [])
   const [requests, setRequests] = useState<RequestItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [files, setFiles] = useState<Record<string, File | null>>({})
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({})
   const [success, setSuccess] = useState<Record<string, boolean>>({})
+  const [ready, setReady] = useState(false)
 
-  const reqParam = useMemo(() => {
-    if (typeof window === 'undefined') return null
+  const { reqParam, tokenParam } = useMemo(() => {
+    if (typeof window === 'undefined') return { reqParam: null, tokenParam: null }
     const u = new URL(window.location.href)
-    return u.searchParams.get('req')
-  }, [])
+    return {
+      reqParam: u.searchParams.get('req'),
+      tokenParam: u.searchParams.get('token')
+    }
+  }, []) as { reqParam: string | null; tokenParam: string | null }
 
   const loadRequests = async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/user/document-requests')
+      let res: Response
+      if (tokenParam && reqParam) {
+        res = await fetch(`/api/public/document-requests/${reqParam}?token=${encodeURIComponent(tokenParam)}`)
+        if (res.ok) {
+          const j = await res.json()
+          setRequests(j.request ? [j.request] : [])
+          setError(null)
+          setLoading(false)
+          return
+        }
+      }
+      res = await fetch('/api/user/document-requests')
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || 'Failed to load requests')
@@ -47,8 +64,81 @@ export default function UploadDocumentsPage() {
   }
 
   useEffect(() => {
-    loadRequests()
-  }, [])
+    let cancelled = false
+    let unsub: { unsubscribe: () => void } | null = null
+
+    const waitForSessionAndLoad = async () => {
+      // If public token mode, skip auth wait and load immediately
+      if (tokenParam && reqParam) {
+        if (!cancelled) {
+          setReady(true)
+          await loadRequests()
+        }
+        return
+      }
+
+      // If session exists, proceed immediately
+      const { data: initial } = await supabase.auth.getSession()
+      if (initial.session) {
+        if (!cancelled) {
+          setReady(true)
+          await loadRequests()
+        }
+        return
+      }
+
+      // Listen for session restoration via auth changes
+      const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session && !cancelled) {
+          setReady(true)
+          loadRequests()
+        }
+      })
+      unsub = listener.subscription
+
+      // Also listen for the bootstrap event dispatched from layout
+      const onRestored = () => {
+        if (!cancelled) {
+          setReady(true)
+          loadRequests()
+        }
+      }
+      window.addEventListener('supabase:session-restored', onRestored, { once: true })
+
+      // Fallback: short polling window
+      const start = Date.now()
+      while (!cancelled && Date.now() - start < 5000) {
+        const { data } = await supabase.auth.getSession()
+        if (data.session) {
+          if (!cancelled) {
+            setReady(true)
+            await loadRequests()
+          }
+          break
+        }
+        await new Promise(r => setTimeout(r, 150))
+      }
+
+      // If still no session (and not in token mode), surface an auth error but stop spinner
+      if (!cancelled) {
+        const { data } = await supabase.auth.getSession()
+        if (!data.session && !(tokenParam && reqParam)) {
+          setLoading(false)
+          setError(t('Authentication_Required') || 'Authentication required. Please use a valid magic link.')
+        }
+      }
+
+      return () => {
+        window.removeEventListener('supabase:session-restored', onRestored)
+      }
+    }
+
+    waitForSessionAndLoad()
+    return () => {
+      cancelled = true
+      if (unsub) unsub.unsubscribe()
+    }
+  }, [supabase, t, tokenParam, reqParam])
 
   const onFileChange = (requestId: string, file: File | null) => {
     setFiles(prev => ({ ...prev, [requestId]: file }))
@@ -60,21 +150,32 @@ export default function UploadDocumentsPage() {
     try {
       setSubmitting(prev => ({ ...prev, [requestId]: true }))
       setSuccess(prev => ({ ...prev, [requestId]: false }))
-
-      const uploaded = await uploadRequestedDocument(requestId, file)
-      if (!uploaded.success || !uploaded.path) {
-        throw new Error(uploaded.error || 'Upload failed')
-      }
-
-      // Mark upload completed
-      const res = await fetch(`/api/user/document-requests/${requestId}/upload-complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_key: uploaded.path, meta: { name: file.name, size: file.size, type: file.type } })
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error || 'Failed to finalize upload')
+      if (tokenParam && reqParam) {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await fetch(`/api/public/document-requests/${requestId}/upload?token=${encodeURIComponent(tokenParam)}`, {
+          method: 'POST',
+          body: form
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error || 'Upload failed')
+        }
+      } else {
+        const uploaded = await uploadRequestedDocument(requestId, file)
+        if (!uploaded.success || !uploaded.path) {
+          throw new Error(uploaded.error || 'Upload failed')
+        }
+        // Mark upload completed
+        const res = await fetch(`/api/user/document-requests/${requestId}/upload-complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_key: uploaded.path, meta: { name: file.name, size: file.size, type: file.type } })
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error || 'Failed to finalize upload')
+        }
       }
 
       setSuccess(prev => ({ ...prev, [requestId]: true }))
