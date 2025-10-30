@@ -304,6 +304,82 @@ export async function deleteStaffMember(staffId: string, isServer = true) {
   return { success: true }
 }
 
+// ===========================
+// DOCUMENT REQUESTS - MAGIC LINKS
+// ===========================
+
+interface SendDocumentRequestMagicLinkResult {
+  success: boolean
+  error?: string
+  email?: string
+  redirectTo?: string
+}
+
+/**
+ * Generate and log a signed upload link for a document request (no auth magic link)
+ * - Finds user email via document_requests -> loan_applications -> users
+ * - Builds signed token URL to upload-documents page
+ * - Updates document_requests.magic_link_sent_at as a send timestamp
+ */
+export async function sendDocumentRequestMagicLink(
+  requestId: string
+): Promise<SendDocumentRequestMagicLinkResult> {
+  try {
+    const { createServerSupabaseAdminClient } = await import('./server')
+    const { getAppUrl } = await import('../config')
+    const { signRequestToken } = await import('../security/token')
+    const adminClient = createServerSupabaseAdminClient()
+
+    // Resolve email for the request
+    const { data: reqRow, error: reqErr } = await adminClient
+      .from('document_requests' as any)
+      .select('id, loan_application_id, document_type_id')
+      .eq('id', requestId)
+      .single()
+
+    if (reqErr || !reqRow) {
+      return { success: false, error: reqErr?.message || 'Request not found' }
+    }
+
+    // Join to users via loan_applications
+    const { data: appJoin, error: joinErr } = await adminClient
+      .from('loan_applications' as any)
+      .select('id, client_id, users:client_id(email, preferred_language)')
+      .eq('id', (reqRow as any).loan_application_id)
+      .single()
+
+    if (joinErr || !appJoin) {
+      return { success: false, error: joinErr?.message || 'Loan application not found' }
+    }
+
+    const email: string | null = (appJoin as any)?.users?.email || null
+    const preferredLanguage: 'en' | 'fr' = ((appJoin as any)?.users?.preferred_language === 'fr') ? 'fr' : 'en'
+    if (!email) {
+      return { success: false, error: 'Client email not available' }
+    }
+
+    const expiresAt = Date.now() + 15 * 60 * 1000 // 15 minutes
+    const token = signRequestToken(requestId, expiresAt)
+    const tokenHash = (await import('crypto')).createHash('sha256').update(token).digest('hex')
+    const publicLink = `${getAppUrl()}/${preferredLanguage}/upload-documents?req=${encodeURIComponent(requestId)}&token=${encodeURIComponent(token)}`
+
+    // Log the generated link (to be sent externally)
+    console.log('[sendDocumentRequestLink] Link generated for:', email, 'URL:', publicLink)
+
+    // Save token hash and expiry; update sent timestamp
+    await adminClient
+      .from('document_requests' as any)
+      // @ts-ignore - using admin client with loosely typed table
+      .update({ magic_link_sent_at: new Date().toISOString(), request_token_hash: tokenHash, expires_at: new Date(expiresAt).toISOString() } as any)
+      .eq('id', requestId)
+
+    return { success: true, email, redirectTo: publicLink }
+  } catch (e: any) {
+    console.error('[sendDocumentRequestMagicLink] Unexpected error:', e?.message)
+    return { success: false, error: e?.message || 'Unexpected error' }
+  }
+}
+
 /**
  * Promote existing client user to staff (admin only)
  */

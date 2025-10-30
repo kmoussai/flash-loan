@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { sendDocumentRequestMagicLink } from '@/src/lib/supabase/admin-helpers'
 
 type ListFile = { 
     name: string, 
@@ -97,6 +98,32 @@ export async function GET(request: NextRequest) {
 	} catch (error: any) {
 		return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
 	}
+}
+
+
+// Send magic link for a document request
+// Body: { request_id: string }
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json()
+        const requestId: string | undefined = body?.request_id
+        if (!requestId) {
+            return NextResponse.json({ error: 'request_id is required' }, { status: 400 })
+        }
+
+        const result = await sendDocumentRequestMagicLink(requestId)
+        if (!result.success) {
+            return NextResponse.json({ error: result.error || 'Failed to send magic link' }, { status: 400 })
+        }
+
+        return NextResponse.json({
+            ok: true,
+            email: result.email,
+            redirectTo: result.redirectTo
+        })
+    } catch (error: any) {
+        return NextResponse.json({ error: error?.message || 'Internal server error' }, { status: 500 })
+    }
 }
 
 

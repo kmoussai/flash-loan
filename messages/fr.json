@@ -452,5 +452,19 @@
   "Status_Expired": "Expiré",
   "Please_Fill_All_Fields": "Veuillez remplir tous les champs requis",
   "File_Size_Exceeds_10MB": "La taille du fichier dépasse la limite de 10 MB",
-  "Document_Name_Auto_Filled": "Nom du document rempli automatiquement selon le type"
+  "Document_Name_Auto_Filled": "Nom du document rempli automatiquement selon le type",
+  "Upload_Requested_Documents": "Téléverser les documents demandés",
+  "Upload_Requested_Documents_Subtitle": "Veuillez téléverser les fichiers demandés pour continuer votre demande",
+  "Loading_Requests": "Chargement des demandes...",
+  "No_Requests": "Aucune demande de document pour le moment",
+  "Requested": "Demandé",
+  "Uploaded": "Téléversé",
+  "Verified": "Vérifié",
+  "Rejected": "Rejeté",
+  "Expired": "Expiré",
+  "File_Received": "Fichier reçu. En attente de vérification.",
+  "Rejected_Message": "Rejeté. Veuillez téléverser un document plus clair ou correct.",
+  "Uploading_Dots": "Téléversement...",
+  "Upload": "Téléverser",
+  "Uploaded_Exclamation": "Téléversé !"
 }

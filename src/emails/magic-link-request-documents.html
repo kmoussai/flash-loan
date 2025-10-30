@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload your requested documents</title>
+    <style>
+      body { margin:0; padding:0; background:#f6f7fb; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,'Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol',sans-serif; color:#111827; }
+      .wrapper { width:100%; background:#f6f7fb; padding:24px 0; }
+      .container { max-width: 560px; margin: 0 auto; background:#ffffff; border:1px solid #e5e7eb; border-radius: 10px; overflow:hidden; }
+      .header { background: linear-gradient(90deg, #333366, #097fa5); padding:20px; color:#ffffff; }
+      .brand { font-size:18px; font-weight:700; letter-spacing:0.2px; }
+      .content { padding:24px; }
+      .h1 { font-size:20px; font-weight:700; margin:0 0 8px; }
+      .p { font-size:14px; line-height:1.6; margin:0 0 12px; color:#374151; }
+      .list { margin:12px 0 16px; padding-left:20px; color:#111827; }
+      .button-wrap { margin: 20px 0 4px; }
+      .button { display:inline-block; background:#333366; color:#ffffff !important; text-decoration:none; padding:12px 18px; border-radius:8px; font-weight:600; font-size:14px; }
+      .muted { color:#6b7280; font-size:12px; }
+      .footer { padding:16px 24px 22px; border-top:1px solid #f3f4f6; background:#fafafa; color:#6b7280; font-size:12px; }
+      .code { font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace; background:#f3f4f6; padding:2px 6px; border-radius:4px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="container">
+        <div class="header">
+          <div class="brand">Flash-Loan</div>
+        </div>
+        <div class="content">
+          <p class="h1">Hi {{ApplicantName}},</p>
+          <p class="p">We need a few documents to continue processing your application. Please upload the following items:</p>
+          <ul class="list">
+            {{#each RequestedDocuments}}
+              <li>{{this}}</li>
+            {{/each}}
+          </ul>
+          <div class="button-wrap">
+            <a class="button" href="{{ .SiteURL }}/auth/v1/verify?token_hash={{ .TokenHash }}&type=magiclink&redirect_to={{ .RedirectTo }}">Upload documents</a>
+          </div>
+          <p class="muted">This secure sign-in link will log you in and take you to the upload page.</p>
+          <p class="p" style="margin-top:16px;">If the button doesn’t work, copy and paste this URL into your browser:</p>
+          <p class="p"><span class="code">{{ .SiteURL }}/auth/v1/verify?token_hash={{ .TokenHash }}&type=magiclink&redirect_to={{ .RedirectTo }}</span></p>
+        </div>
+        <div class="footer">
+          <div>© {{Year}} Flash-Loan. All rights reserved.</div>
+          <div class="muted">You received this email because you requested to sign in to Flash-Loan.</div>
+        </div>
+      </div>
+    </div>
+  </body>
+  </html>
+
+

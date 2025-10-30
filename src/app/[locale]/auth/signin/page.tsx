@@ -1,10 +1,9 @@
 'use client'
 
 import { createClient } from '@/src/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { Link } from '@/src/navigation'
+import { Link, useRouter } from '@/src/navigation'
 import Button from '../../components/Button'
 import Image from 'next/image'
 

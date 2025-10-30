@@ -453,5 +453,19 @@
   "Status_Expired": "Expired",
   "Please_Fill_All_Fields": "Please fill all required fields",
   "File_Size_Exceeds_10MB": "File size exceeds 10MB limit",
-  "Document_Name_Auto_Filled": "Document name auto-filled based on type"
+  "Document_Name_Auto_Filled": "Document name auto-filled based on type",
+  "Upload_Requested_Documents": "Upload Requested Documents",
+  "Upload_Requested_Documents_Subtitle": "Please upload the requested files to continue your application",
+  "Loading_Requests": "Loading requests...",
+  "No_Requests": "No document requests at this time",
+  "Requested": "Requested",
+  "Uploaded": "Uploaded",
+  "Verified": "Verified",
+  "Rejected": "Rejected",
+  "Expired": "Expired",
+  "File_Received": "File received. Pending verification.",
+  "Rejected_Message": "Rejected. Please upload a clearer or correct document.",
+  "Uploading_Dots": "Uploading...",
+  "Upload": "Upload",
+  "Uploaded_Exclamation": "Uploaded!"
 }

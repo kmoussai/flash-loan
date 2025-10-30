@@ -23,7 +23,9 @@ export const Header: FC<Props> = ({ locale }) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const {
+          data: { user }
+        } = await supabase.auth.getUser()
         if (user) {
           // Check if user is a client (not staff) by querying directly
           // Check staff table first
@@ -61,10 +63,15 @@ export const Header: FC<Props> = ({ locale }) => {
     }
 
     checkAuth()
-
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        event === 'SIGNED_IN' ||
+        event === 'SIGNED_OUT' ||
+        event === 'TOKEN_REFRESHED'
+      ) {
         checkAuth()
       }
     })
@@ -136,13 +143,6 @@ export const Header: FC<Props> = ({ locale }) => {
           >
             {t('Contact')}
           </Link>
-          <Link
-            lang={locale}
-            href='/dashboard'
-            className='text-sm font-medium text-text-secondary transition-colors hover:text-primary'
-          >
-            {t('Dashboard') || 'Dashboard'}
-          </Link>
         </nav>
 
         {/* Right side actions */}
@@ -151,28 +151,15 @@ export const Header: FC<Props> = ({ locale }) => {
           {!loading && (
             <>
               {isAuthenticated && isClient ? (
-                <>
-                  {/* Dashboard Link - Show on mobile, hidden on larger screens (already in nav) */}
-                  <Link lang={locale} href='/dashboard' className='md:hidden'>
-                    <Button
-                      variant='secondary'
-                      size='small'
-                      className='text-xs'
-                    >
-                      {t('Dashboard') || 'Dashboard'}
-                    </Button>
-                  </Link>
-                  
-                  {/* Logout Button */}
+                <Link lang={locale} href='/dashboard'>
                   <Button
                     variant='secondary'
                     size='small'
-                    onClick={handleLogout}
-                    className='hidden sm:inline-flex'
+                    className='inline-flex'
                   >
-                    {t('Sign_Out') || 'Sign Out'}
+                    {t('Dashboard') || 'Dashboard'}
                   </Button>
-                </>
+                </Link>
               ) : (
                 /* Login Button */
                 <Link lang={locale} href='/auth/signin'>
