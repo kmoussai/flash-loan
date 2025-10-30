@@ -29,8 +29,9 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     // Optionally delete uploaded file from storage if it exists
-    if (reqData?.uploaded_file_key) {
-      const fileKey = reqData.uploaded_file_key as string
+    const uploadedKey = (reqData as any)?.uploaded_file_key as string | undefined
+    if (uploadedKey) {
+      const fileKey = uploadedKey
       // Extract user_id from path: documents/{user_id}/{request_id}/filename
       const parts = fileKey.split('/')
       if (parts.length >= 2 && parts[0] === 'documents') {
