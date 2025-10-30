@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
+import IbvCard from '../../components/IbvCard'
+import DocumentsSection from '../../components/DocumentsSection'
 import Select from '@/src/app/[locale]/components/Select'
 import Button from '@/src/app/[locale]/components/Button'
 import type { LoanApplication, ApplicationStatus, InveriteIbvData } from '@/src/lib/supabase/types'
@@ -516,6 +518,14 @@ export default function ApplicationDetailsPage() {
               <p className='text-lg font-medium text-gray-900 mt-1'>
                 {application.users?.first_name} {application.users?.last_name}
               </p>
+              {application.users?.id && (
+                <button
+                  onClick={() => router.push(`/admin/clients/${application.users?.id}`)}
+                  className='mt-2 text-sm text-blue-600 hover:text-blue-800'
+                >
+                  View Client Profile →
+                </button>
+              )}
             </div>
 
             <div>
@@ -542,245 +552,7 @@ export default function ApplicationDetailsPage() {
         {/* IBV Verification & Loan Details - Side by Side */}
         <div className='grid gap-6 lg:grid-cols-2'>
           {/* IBV Verification - Left Side */}
-          <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
-            <div className='bg-purple-50 border-b border-gray-200 px-6 py-4'>
-              <div className='flex items-center justify-between'>
-                <div>
-                  <h2 className='text-lg font-semibold text-gray-900'>IBV Verification</h2>
-                  <p className='text-sm text-gray-500 mt-0.5'>Risk Assessment</p>
-                </div>
-                {application.ibv_provider === 'inverite' && 
-                 (application.ibv_provider_data as any)?.request_guid && (
-                  <button
-                    onClick={handleFetchInveriteData}
-                    disabled={fetchingInveriteData}
-                    className='rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
-                  >
-                    {fetchingInveriteData ? (
-                      <span className='flex items-center gap-2'>
-                        <svg className='h-3 w-3 animate-spin' fill='none' viewBox='0 0 24 24'>
-                          <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4' />
-                          <path className='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z' />
-                        </svg>
-                        Fetching...
-                      </span>
-                    ) : (
-                      'Fetch Data'
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {application?.ibv_results ? (
-              <div className='p-6'>
-                <div className='space-y-4'>
-                  {(() => {
-                    const summary = application.ibv_results!
-                    const riskScore = calculateRiskScore(summary)
-                    const accountsWithData = summary.accounts_summary?.filter(acc => acc.quarter_all_time) || []
-                    
-                    // Aggregate key metrics
-                    let totalOverdrafts = 0
-                    let totalNegativeDays = 0
-                    let totalNegativeCount = 0
-                    let totalDeposits = 0
-                    let totalWithdrawals = 0
-                    let avgBalance = 0
-                    let lowestBalance = Infinity
-                    let highestBalance = -Infinity
-                    let endingBalance = 0
-
-                    accountsWithData.forEach(acc => {
-                      const qat = acc.quarter_all_time
-                      if (qat) {
-                        totalOverdrafts += qat.overdraft_count || 0
-                        totalNegativeDays += qat.negative_balance_days || 0
-                        totalNegativeCount += qat.negative_balance_count || 0
-                        totalDeposits += qat.amount_of_deposits || 0
-                        totalWithdrawals += qat.amount_of_withdrawals || 0
-                        if (qat.average_balance !== null && qat.average_balance !== undefined) {
-                          avgBalance += qat.average_balance
-                        }
-                        if (qat.lowest_balance !== null && qat.lowest_balance !== undefined) {
-                          lowestBalance = Math.min(lowestBalance, qat.lowest_balance)
-                        }
-                        if (qat.highest_balance !== null && qat.highest_balance !== undefined) {
-                          highestBalance = Math.max(highestBalance, qat.highest_balance)
-                        }
-                        if (qat.ending_balance !== null && qat.ending_balance !== undefined) {
-                          endingBalance += qat.ending_balance
-                        }
-                      }
-                    })
-
-                    avgBalance = accountsWithData.length > 0 ? avgBalance / accountsWithData.length : 0
-                    const avgMonthlyDeposits = summary.aggregates?.total_deposits || totalDeposits
-                    
-                    return (
-                      <>
-                        {/* Risk Score */}
-                        <div className={`rounded border p-4 ${
-                          riskScore >= 70 ? 'border-green-200 bg-green-50' :
-                          riskScore >= 50 ? 'border-yellow-200 bg-yellow-50' :
-                          'border-red-200 bg-red-50'
-                        }`}>
-                          <div className='flex items-center justify-between'>
-                            <div>
-                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Risk Assessment</label>
-                              <p className={`text-2xl font-semibold mt-1 ${
-                                riskScore >= 70 ? 'text-green-900' :
-                                riskScore >= 50 ? 'text-yellow-900' :
-                                'text-red-900'
-                              }`}>
-                                {riskScore}%
-                              </p>
-                            </div>
-                            <div className={`text-sm font-semibold ${
-                              riskScore >= 70 ? 'text-green-900' :
-                              riskScore >= 50 ? 'text-yellow-900' :
-                              'text-red-900'
-                            }`}>
-                              {riskScore >= 70 ? 'LOW RISK' : riskScore >= 50 ? 'MEDIUM RISK' : 'HIGH RISK'}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Key Decision Metrics */}
-                        <div className='grid grid-cols-2 gap-3'>
-                          {/* NSF / Overdrafts - Critical */}
-                          <div className={`rounded border p-3 col-span-2 ${
-                            totalOverdrafts > 0 || totalNegativeCount > 0 
-                              ? 'border-red-200 bg-red-50' 
-                              : 'border-gray-200 bg-white'
-                          }`}>
-                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>NSF / Overdraft Risk</label>
-                            <div className='mt-2 space-y-1'>
-                              <p className={`text-lg font-semibold ${totalOverdrafts > 0 ? 'text-red-900' : 'text-gray-900'}`}>
-                                {totalOverdrafts} Overdraft{totalOverdrafts !== 1 ? 's' : ''}
-                              </p>
-                              {totalNegativeCount > 0 && (
-                                <p className='text-sm text-red-700'>
-                                  {totalNegativeCount} Negative balance occurrence{totalNegativeCount !== 1 ? 's' : ''}
-                                </p>
-                              )}
-                              {totalNegativeDays > 0 && (
-                                <p className='text-xs text-red-600'>
-                                  {totalNegativeDays} day{totalNegativeDays !== 1 ? 's' : ''} in negative balance
-                                </p>
-                              )}
-                              {totalOverdrafts === 0 && totalNegativeCount === 0 && (
-                                <p className='text-xs text-green-700 font-medium'>✓ No NSF issues detected</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Average Balance */}
-                          <div className='rounded border border-gray-200 bg-white p-3'>
-                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Avg Balance</label>
-                            <p className='text-lg font-semibold text-gray-900 mt-1'>
-                              {avgBalance > 0 ? formatCurrency(avgBalance) : 'N/A'}
-                            </p>
-                          </div>
-
-                          {/* Current Balance */}
-                          {accountsWithData[0]?.current_balance && (
-                            <div className='rounded border border-gray-200 bg-white p-3'>
-                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Current Balance</label>
-                              <p className='text-lg font-semibold text-gray-900 mt-1'>
-                                {formatCurrency(accountsWithData[0].current_balance.current || 0)}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Total Deposits */}
-                          <div className='rounded border border-gray-200 bg-white p-3'>
-                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Total Deposits</label>
-                            <p className='text-lg font-semibold text-gray-900 mt-1'>
-                              {avgMonthlyDeposits > 0 ? formatCurrency(avgMonthlyDeposits) : 'N/A'}
-                            </p>
-                          </div>
-
-                          {/* Monthly Income Estimate */}
-                          <div className='rounded border border-gray-200 bg-white p-3'>
-                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Est. Monthly Income</label>
-                            <p className='text-lg font-semibold text-gray-900 mt-1'>
-                              {avgMonthlyDeposits > 0 ? formatCurrency(avgMonthlyDeposits / 3) : 'N/A'}
-                              <span className='text-xs text-gray-500 ml-1'>(quarter avg)</span>
-                            </p>
-                          </div>
-
-                          {/* Balance Range */}
-                          {(lowestBalance !== Infinity || highestBalance !== -Infinity) && (
-                            <div className='rounded border border-gray-200 bg-white p-3 col-span-2'>
-                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Balance Range</label>
-                              <div className='mt-1 flex items-center gap-2 text-sm'>
-                                <span className='text-gray-600'>Low:</span>
-                                <span className={`font-semibold ${lowestBalance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                                  {lowestBalance !== Infinity ? formatCurrency(lowestBalance) : 'N/A'}
-                                </span>
-                                <span className='text-gray-400'>•</span>
-                                <span className='text-gray-600'>High:</span>
-                                <span className='font-semibold text-gray-900'>
-                                  {highestBalance !== -Infinity ? formatCurrency(highestBalance) : 'N/A'}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Transactions Button */}
-                          <button 
-                            onClick={async () => {
-                              setShowTransactionsModal(true)
-                              try {
-                                setLoadingTransactions(true)
-                                const res = await fetch(`/api/admin/applications/${applicationId}/transactions`)
-                                if (!res.ok) {
-                                  const err = await res.json().catch(() => ({}))
-                                  throw new Error(err.error || 'Failed to load transactions')
-                                }
-                                const data = await res.json()
-                                setFetchedTransactions(Array.isArray(data.transactions) ? data.transactions : [])
-                              } catch (e: any) {
-                                console.error('Failed to fetch transactions:', e)
-                                setFetchedTransactions([])
-                              } finally {
-                                setLoadingTransactions(false)
-                              }
-                            }}
-                            className='rounded border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors text-left'
-                          >
-                            <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Transactions</label>
-                            <p className='text-lg font-semibold text-gray-900 mt-1'>
-                              {Array.isArray(fetchedTransactions) ? fetchedTransactions.length : getTransactions().length || 0}
-                            </p>
-                            <p className='text-xs text-gray-500 mt-1'>
-                              {getTransactions().length > 0 ? 'Click to view' : 'No transactions'}
-                            </p>
-                          </button>
-
-                          {/* Accounts Summary */}
-                          {summary.accounts_count && summary.accounts_count > 0 && (
-                            <div className='rounded border border-gray-200 bg-white p-3'>
-                              <label className='text-xs font-medium text-gray-500 uppercase tracking-wide'>Accounts</label>
-                              <p className='text-lg font-semibold text-gray-900 mt-1'>{summary.accounts_count}</p>
-                              <p className='text-xs text-gray-500 mt-1'>
-                                {summary.aggregates?.accounts_with_statistics || accountsWithData.length} with data
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )
-                  })()}
-                </div>
-              </div>
-            ) : (
-              <div className='p-6'>
-                <p className='text-sm text-gray-500 text-center'>No IBV data available. Fetch data to see summary.</p>
-              </div>
-            )}
-          </div>
+          <IbvCard applicationId={applicationId} />
 
           {/* Loan Information - Right Side */}
           <div className='rounded-lg bg-white border border-gray-200 overflow-hidden'>
@@ -905,6 +677,9 @@ export default function ApplicationDetailsPage() {
           )}
           </div>
         </div>
+
+        {/* Documents */}
+        <DocumentsSection clientId={application.users?.id || ''} applicationId={applicationId} />
 
         {/* Income Details */}
         {application.income_fields && Object.keys(application.income_fields).length > 0 && (

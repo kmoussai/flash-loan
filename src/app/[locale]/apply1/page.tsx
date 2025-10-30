@@ -73,6 +73,37 @@ export default function MicroLoanApplicationPage() {
     }
   }, [locale, formData.preferredLanguage])
 
+  // On page load: reset form and clear any Inverite session from storage
+  useEffect(() => {
+    // Clear persisted storage
+    try {
+      localStorage.removeItem('microLoanFormData')
+      localStorage.removeItem('inveriteConnection')
+      sessionStorage.removeItem('inverite_init_session_id')
+    } catch {}
+
+    // Reset local state
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      dateOfBirth: '',
+      preferredLanguage: locale || 'en',
+      province: '',
+      loanAmount: '',
+      confirmInformation: false
+    })
+    setCurrentStep(1)
+    setInveriteConnection(null)
+    setInveriteRequestGuid(null)
+    setIbvVerified(false)
+    setShowIBV(false)
+    setIbvStep(1)
+    setIsVerifying(false)
+    setIsSubmitted(false)
+  }, [])
+
   // Restore Inverite connection from storage on mount
   useEffect(() => {
     const restored = restoreInveriteConnection()

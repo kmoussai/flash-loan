@@ -444,6 +444,23 @@ export async function POST(request: NextRequest) {
     console.log('Transaction successful:', result)
     
     const txResult = result as any
+
+    // If Inverite request GUID is present in provider data, persist it in ibv_results for easier access
+    try {
+      const requestGuidFromBody = (body.ibvProviderData as any)?.request_guid || null
+      if (requestGuidFromBody && txResult?.application_id) {
+        const supabaseForUpdate = createServerSupabaseAdminClient()
+        await (supabaseForUpdate as any)
+          .from('loan_applications')
+          .update({
+            ibv_results: { request_guid: requestGuidFromBody }
+          })
+          .eq('id', txResult.application_id)
+      }
+    } catch (e) {
+      // Non-fatal: continue even if this convenience write fails
+      console.warn('[Loan Application] Failed to set initial ibv_results.request_guid')
+    }
     
     // Return success response
     return NextResponse.json({
