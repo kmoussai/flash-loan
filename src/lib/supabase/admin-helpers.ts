@@ -304,6 +304,88 @@ export async function deleteStaffMember(staffId: string, isServer = true) {
   return { success: true }
 }
 
+// ===========================
+// DOCUMENT REQUESTS - MAGIC LINKS
+// ===========================
+
+interface SendDocumentRequestMagicLinkResult {
+  success: boolean
+  error?: string
+  email?: string
+  redirectTo?: string
+}
+
+/**
+ * Generate and send Supabase Auth Magic Link for a document request
+ * - Finds user email via document_requests -> loan_applications -> users
+ * - Uses Supabase Admin API to generate a magic link
+ * - Updates document_requests.magic_link_sent_at
+ */
+export async function sendDocumentRequestMagicLink(
+  requestId: string
+): Promise<SendDocumentRequestMagicLinkResult> {
+  try {
+    const { createServerSupabaseAdminClient } = await import('./server')
+    const { getAppUrl } = await import('../config')
+    const adminClient = createServerSupabaseAdminClient()
+
+    // Resolve email for the request
+    const { data: reqRow, error: reqErr } = await adminClient
+      .from('document_requests' as any)
+      .select('id, loan_application_id, document_type_id')
+      .eq('id', requestId)
+      .single()
+
+    if (reqErr || !reqRow) {
+      return { success: false, error: reqErr?.message || 'Request not found' }
+    }
+
+    // Join to users via loan_applications
+    const { data: appJoin, error: joinErr } = await adminClient
+      .from('loan_applications' as any)
+      .select('id, client_id, users:client_id(email)')
+      .eq('id', (reqRow as any).loan_application_id)
+      .single()
+
+    if (joinErr || !appJoin) {
+      return { success: false, error: joinErr?.message || 'Loan application not found' }
+    }
+
+    const email: string | null = (appJoin as any)?.users?.email || null
+    if (!email) {
+      return { success: false, error: 'Client email not available' }
+    }
+
+    const redirectTo = `${getAppUrl()}/upload-documents?req=${encodeURIComponent(requestId)}`
+
+    // Generate magic link via Admin API
+    const { data, error } = await adminClient.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: { redirectTo }
+    } as any)
+
+    if (error) {
+      console.error('[sendDocumentRequestMagicLink] Magic link generation failed:', error.message)
+      return { success: false, error: error.message }
+    }
+
+    console.log('[sendDocumentRequestMagicLink] Magic link generated for:', email, 'Redirect:', redirectTo)
+
+    // Update magic_link_sent_at
+    await adminClient
+      .from('document_requests' as any)
+      // @ts-ignore - using admin client with loosely typed table
+      .update({ magic_link_sent_at: new Date().toISOString() } as any)
+      .eq('id', requestId)
+
+    return { success: true, email, redirectTo }
+  } catch (e: any) {
+    console.error('[sendDocumentRequestMagicLink] Unexpected error:', e?.message)
+    return { success: false, error: e?.message || 'Unexpected error' }
+  }
+}
+
 /**
  * Promote existing client user to staff (admin only)
  */
