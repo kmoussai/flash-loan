@@ -34,11 +34,7 @@ export default function HomePage() {
                     {t('Apply_Now')}
                   </Button>
                 </Link>
-                <Link href='/dashboard'>
-                  <Button variant='secondary' size='large' className='bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'>
-                    {t('My_Dashboard') || 'My Dashboard'}
-                  </Button>
-                </Link>
+                
                 <Link href='/how-it-works'>
                   <Button variant='secondary' size='large' className='bg-white text-gray-700 hover:bg-gray-50'>
                     {t('Learn_More')}
