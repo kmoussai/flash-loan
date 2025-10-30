@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import IbvCard from '../../components/IbvCard'
+import DocumentsSection from '../../components/DocumentsSection'
 import Select from '@/src/app/[locale]/components/Select'
 import Button from '@/src/app/[locale]/components/Button'
 import type { LoanApplication, ApplicationStatus, InveriteIbvData } from '@/src/lib/supabase/types'
@@ -517,6 +518,14 @@ export default function ApplicationDetailsPage() {
               <p className='text-lg font-medium text-gray-900 mt-1'>
                 {application.users?.first_name} {application.users?.last_name}
               </p>
+              {application.users?.id && (
+                <button
+                  onClick={() => router.push(`/admin/clients/${application.users?.id}`)}
+                  className='mt-2 text-sm text-blue-600 hover:text-blue-800'
+                >
+                  View Client Profile →
+                </button>
+              )}
             </div>
 
             <div>
@@ -668,6 +677,9 @@ export default function ApplicationDetailsPage() {
           )}
           </div>
         </div>
+
+        {/* Documents */}
+        <DocumentsSection clientId={application.users?.id || ''} applicationId={applicationId} />
 
         {/* Income Details */}
         {application.income_fields && Object.keys(application.income_fields).length > 0 && (
