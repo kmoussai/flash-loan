@@ -132,11 +132,30 @@ export async function GET(
         }
       }
     }
+
+    // Fetch ibv_results separately as well to avoid truncation/omission in joined selects
+    let fullIbvResults: any = app.ibv_results || null
+    {
+      const { data: ibvResultsOnly, error: ibvResultsError } = await supabase
+        .from('loan_applications')
+        .select('ibv_results')
+        .eq('id', applicationId)
+        .single()
+
+      if (!ibvResultsError && ibvResultsOnly) {
+        const rec = ibvResultsOnly as any
+        if (rec.ibv_results !== undefined) {
+          fullIbvResults = rec.ibv_results
+        }
+      }
+    }
     
     const applicationData = {
       ...app,
       // Use the separately fetched ibv_provider_data to ensure it's complete
       ibv_provider_data: fullIbvData,
+      // Ensure ibv_results is present if stored in DB
+      ibv_results: fullIbvResults,
       users: Array.isArray(app.users) ? app.users[0] : app.users,
       addresses: Array.isArray(app.addresses) ? app.addresses : (app.addresses ? [app.addresses] : []),
       references: Array.isArray(app.references) ? app.references : []

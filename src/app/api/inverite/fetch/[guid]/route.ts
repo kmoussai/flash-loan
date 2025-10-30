@@ -190,8 +190,11 @@ export async function GET(
 
     console.log('[Inverite Fetch] Successfully fetched data for GUID:', requestGuid)
 
-    // Extract IBV summary
-    const ibvSummary = extractIbvSummary(inveriteData)
+    // Extract IBV summary and include request_guid for downstream consumers
+    const ibvSummary = {
+      ...extractIbvSummary(inveriteData),
+      request_guid: requestGuid
+    }
 
     // Find the loan application - prefer application_id if provided
     const supabase = createServerSupabaseAdminClient()
