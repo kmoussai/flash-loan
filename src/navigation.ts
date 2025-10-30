@@ -16,6 +16,7 @@ export const pathnames = {
   '/apply': '/apply',
   '/apply1': '/apply1',
   '/dashboard': '/dashboard',
+  '/upload-documents': '/upload-documents',
   '/auth/signin': '/auth/signin',
   '/auth/forgot-password': '/auth/forgot-password',
   '/auth/reset-password': '/auth/reset-password'
