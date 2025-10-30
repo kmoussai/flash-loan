@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
 import type { User } from '@/src/lib/supabase/types'
 
 export default function ClientsPage() {
+  const router = useRouter()
   const [clients, setClients] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -352,7 +354,10 @@ export default function ClientsPage() {
                         {formatDate(client.created_at)}
                       </td>
                       <td className='whitespace-nowrap px-4 py-2 text-sm'>
-                        <button className='mr-2 text-blue-600 hover:text-blue-800'>
+                        <button 
+                          className='mr-2 text-blue-600 hover:text-blue-800'
+                          onClick={() => router.push(`/admin/clients/${client.id}`)}
+                        >
                           View
                         </button>
                         <button className='text-green-600 hover:text-green-800'>
