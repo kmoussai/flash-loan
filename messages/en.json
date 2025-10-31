@@ -467,5 +467,13 @@
   "Rejected_Message": "Rejected. Please upload a clearer or correct document.",
   "Uploading_Dots": "Uploading...",
   "Upload": "Upload",
-  "Uploaded_Exclamation": "Uploaded!"
+  "Uploaded_Exclamation": "Uploaded!",
+  "Action_Required": "Action Required",
+  "Select_File": "Select File",
+  "View": "View",
+  "Document_Viewer": "Document Viewer",
+  "Failed_To_Load_Image": "Failed to load image",
+  "Preview_Not_Available": "Preview not available for this file type",
+  "Download": "Download",
+  "Loading_Dots": "Loading..."
 }

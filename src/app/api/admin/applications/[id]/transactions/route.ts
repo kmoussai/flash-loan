@@ -63,6 +63,8 @@ export async function GET(
     // Transform the results to match expected format
     // The function returns some fields as JSONB that need to be parsed
     const transactionsArray = Array.isArray(transactions) ? transactions : []
+    console.log('[Transactions API] Transactions:', transactionsArray.length)
+
     const transformedTransactions = transactionsArray.map((tx: any) => ({
       description: tx.description || 'No description',
       date: tx.date || '',
