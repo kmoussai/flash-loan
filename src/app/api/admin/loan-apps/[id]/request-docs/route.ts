@@ -5,6 +5,8 @@ import {
   createServerSupabaseClient
 } from '@/src/lib/supabase/server'
 import { signRequestToken } from '@/src/lib/security/token'
+import { sendEmail } from '@/src/lib/email/smtp'
+import { generateDocumentRequestEmail } from '@/src/lib/email/templates/document-request'
 
 // POST /api/admin/loan-apps/:id/request-docs
 // Body: { document_type_ids: string[], expires_at?: string, requested_by?: string }
@@ -140,25 +142,72 @@ export async function POST(
       return NextResponse.json({ error: insErr.message }, { status: 400 })
     }
 
+    // Get client information for email
+    const { data: appWithUser, error: userErr } = await admin
+      .from('loan_applications' as any)
+      .select('users:client_id(id, first_name, last_name, email, preferred_language)')
+      .eq('id', loanApplicationId)
+      .single()
+
     // Build a single group link instead of sending per-request links
     const createdIds = (inserted || []).map((r: any) => r.id)
     const { getAppUrl } = await import('@/src/lib/config')
     // Determine expiry for token
     const expMs = expiresAt ? new Date(expiresAt).getTime() : null
     let group_link: string | null = null
+    let preferredLanguage: 'en' | 'fr' = 'en'
+    
     if (expMs && !isNaN(expMs) && Date.now() < expMs) {
-      const { data: appPref } = await admin
-        .from('loan_applications' as any)
-        .select('users:client_id(preferred_language)')
-        .eq('id', loanApplicationId)
-        .single()
-      const preferredLanguage: 'en' | 'fr' =
-        (appPref as any)?.users?.preferred_language === 'fr' ? 'fr' : 'en'
+      preferredLanguage =
+        (appWithUser as any)?.users?.preferred_language === 'fr' ? 'fr' : 'en'
       const token = signRequestToken(groupId, expMs)
       group_link = `${getAppUrl()}/${preferredLanguage}/upload-documents?group=${encodeURIComponent(groupId)}&token=${encodeURIComponent(token)}`
-      console.log('group_link', group_link)
-    } else {
-      console.log('no group link')
+    }
+
+    // Get document type names for email
+    const { data: docTypes, error: docTypesErr } = await admin
+      .from('document_types' as any)
+      .select('id, name')
+      .in('id', newDocumentTypeIds)
+
+    // Send email if we have client email and group link
+    let emailSent = false
+    let emailError: string | null = null
+    
+    if (group_link && appWithUser && (appWithUser as any)?.users?.email) {
+      const clientEmail = (appWithUser as any).users.email
+      const clientFirstName = (appWithUser as any).users.first_name || ''
+      const clientLastName = (appWithUser as any).users.last_name || ''
+      const applicantName = `${clientFirstName} ${clientLastName}`.trim() || 'Valued Customer'
+      const documentNames = (docTypes || []).map((dt: any) => dt.name)
+
+      if (documentNames.length > 0) {
+        const emailContent = generateDocumentRequestEmail({
+          applicantName,
+          documentNames,
+          uploadLink: group_link,
+          preferredLanguage,
+          expiresAt: expiresAt || null
+        })
+
+        const emailResult = await sendEmail({
+          to: clientEmail,
+          subject: emailContent.subject,
+          html: emailContent.html
+        })
+
+        emailSent = emailResult.success
+        emailError = emailResult.error || null
+
+        if (emailSent) {
+          // Update all requests in the group with magic_link_sent_at
+          await admin
+            .from('document_requests' as any)
+            // @ts-ignore
+            .update({ magic_link_sent_at: nowIso })
+            .eq('group_id', groupId)
+        }
+      }
     }
 
     // Include information about which types were skipped
@@ -171,7 +220,9 @@ export async function POST(
       group_id: groupId,
       group_link,
       request_ids: createdIds,
-      skipped: skipped.length > 0 ? skipped : undefined
+      skipped: skipped.length > 0 ? skipped : undefined,
+      email_sent: emailSent,
+      email_error: emailError || undefined
     })
   } catch (e: any) {
     return NextResponse.json(
