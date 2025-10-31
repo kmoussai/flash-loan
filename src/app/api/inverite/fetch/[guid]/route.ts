@@ -4,114 +4,33 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import type { IBVSummary } from './types'
 
-/**
- * Extract IBV summary from Inverite accounts statistics
- * Extracts quarter_all_time statistics from each account for fast access
- */
-function extractIbvSummary(inveriteData: any): any {
-  const accounts = inveriteData.accounts || []
-  const summary: any = {
-    extracted_at: new Date().toISOString(),
-    accounts_count: accounts.length,
-    accounts_summary: []
+// Build a compact summary from Inverite raw data with safe fallbacks
+export function extractSummary(rawData: any, requestGuid: string): IBVSummary {
+  return {
+    request_guid: requestGuid,
+    accounts: rawData.accounts.map((account: any) => ({
+      bank_name: account.bank,
+      type: account.type,
+      number: account.account,
+      transit: account.transit,
+      institution: account.institution,
+      routing_code: account.routing_code,
+      statistics: {
+        income_net: account.statistics.income_net,
+        nsf: {
+          all_time: account.statistics.quarter_all_time.number_of_nsf,
+          quarter_3_months: account.statistics.quarter_3_months.number_of_nsf,
+          quarter_6_months: account.statistics.quarter_6_months.number_of_nsf,
+          quarter_9_months: account.statistics.quarter_9_months.number_of_nsf,
+          quarter_12_months: account.statistics.quarter_12_months.number_of_nsf
+        }
+      },
+      bank_pdf_statements: account.bank_pdf_statements,
+      total_transactions: (account.transactions ?? []).length
+    }))
   }
-
-  // Extract statistics from each account
-  accounts.forEach((account: any, index: number) => {
-    const accountSummary: any = {
-      account_index: index,
-      account_type: account.type || null,
-      account_description: account.account_description || account.account || null,
-      institution: account.institution || null
-    }
-
-    // Extract quarter_all_time statistics
-    if (account.statistics?.quarter_all_time) {
-      const qat = account.statistics.quarter_all_time
-      accountSummary.quarter_all_time = {
-        // Income/Debit metrics
-        number_of_nsf: qat.number_of_nsf || null,
-        number_of_deposits: qat.number_of_deposits || null,
-        amount_of_deposits: qat.amount_of_deposits || null,
-        average_amount_of_deposits: qat.average_amount_of_deposits || null,
-        avg_number_of_deposits: qat.avg_number_of_deposits || null,
-        highest_deposit: qat.highest_deposit || null,
-        lowest_deposit: qat.lowest_deposit || null,
-        
-        // Expense/Credit metrics
-        number_of_withdrawals: qat.number_of_withdrawals || null,
-        amount_of_withdrawals: qat.amount_of_withdrawals || null,
-        average_amount_of_withdrawals: qat.average_amount_of_withdrawals || null,
-        avg_number_of_withdrawals: qat.avg_number_of_withdrawals || null,
-        highest_withdrawal: qat.highest_withdrawal || null,
-        lowest_withdrawal: qat.lowest_withdrawal || null,
-        
-        // Balance metrics
-        average_balance: qat.average_balance || null,
-        highest_balance: qat.highest_balance || null,
-        lowest_balance: qat.lowest_balance || null,
-        ending_balance: qat.ending_balance || null,
-        
-        // Transaction counts
-        total_transactions: qat.total_transactions || null,
-        transaction_count: qat.transaction_count || null,
-        
-        // Overdraft and negative balance metrics
-        overdraft_count: qat.overdraft_count || null,
-        negative_balance_count: qat.negative_balance_count || null,
-        negative_balance_days: qat.negative_balance_days || null,
-        
-        // Period information
-        period_start: qat.period_start || null,
-        period_end: qat.period_end || null,
-        period_type: qat.period_type || 'quarter_all_time'
-      }
-    }
-
-    // Also extract current balance if available
-    if (account.balance) {
-      accountSummary.current_balance = {
-        available: account.balance.available || null,
-        current: account.balance.current || null
-      }
-    }
-
-    // Add transaction count if available
-    if (account.transactions) {
-      accountSummary.transaction_count = Array.isArray(account.transactions) 
-        ? account.transactions.length 
-        : 0
-    }
-
-    summary.accounts_summary.push(accountSummary)
-  })
-
-  // Calculate aggregate metrics across all accounts
-  if (summary.accounts_summary.length > 0) {
-    const allDeposits = summary.accounts_summary
-      .map((acc: any) => acc.quarter_all_time?.amount_of_deposits)
-      .filter((val: any) => val !== null && val !== undefined)
-    
-    const allWithdrawals = summary.accounts_summary
-      .map((acc: any) => acc.quarter_all_time?.amount_of_withdrawals)
-      .filter((val: any) => val !== null && val !== undefined)
-
-    summary.aggregates = {
-      total_deposits: allDeposits.length > 0 
-        ? allDeposits.reduce((sum: number, val: number) => sum + (val || 0), 0) 
-        : null,
-      total_withdrawals: allWithdrawals.length > 0
-        ? allWithdrawals.reduce((sum: number, val: number) => sum + (val || 0), 0)
-        : null,
-      total_accounts: summary.accounts_count,
-      accounts_with_statistics: summary.accounts_summary.filter(
-        (acc: any) => acc.quarter_all_time !== undefined
-      ).length
-    }
-  }
-
-  return summary
 }
 
 export async function GET(
@@ -156,7 +75,7 @@ export async function GET(
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Auth': apiKey
+        Auth: apiKey
       }
     })
 
@@ -183,19 +102,24 @@ export async function GET(
     } catch (error) {
       console.error('[Inverite Fetch] Failed to parse response:', error)
       return NextResponse.json(
-        { error: 'MALFORMED_RESPONSE', message: 'Failed to parse Inverite response' },
+        {
+          error: 'MALFORMED_RESPONSE',
+          message: 'Failed to parse Inverite response'
+        },
         { status: 502 }
       )
     }
 
-    console.log('[Inverite Fetch] Successfully fetched data for GUID:', requestGuid)
+    console.log(
+      '[Inverite Fetch] Successfully fetched data for GUID:',
+      requestGuid
+    )
 
     // Extract IBV summary and include request_guid for downstream consumers
-    const ibvSummary = {
-      ...extractIbvSummary(inveriteData),
+    const ibvSummary: IBVSummary = {
+      ...extractSummary(inveriteData, requestGuid),
       request_guid: requestGuid
     }
-
     // Find the loan application - prefer application_id if provided
     const supabase = createServerSupabaseAdminClient()
     let matchingApplication: any = null
@@ -210,11 +134,14 @@ export async function GET(
         .single()
 
       if (fetchError || !application) {
-        console.error('[Inverite Fetch] Error fetching application:', fetchError)
+        console.error(
+          '[Inverite Fetch] Error fetching application:',
+          fetchError
+        )
         return NextResponse.json(
-          { 
-            error: 'APPLICATION_NOT_FOUND', 
-            message: 'No application found with the provided ID' 
+          {
+            error: 'APPLICATION_NOT_FOUND',
+            message: 'No application found with the provided ID'
           },
           { status: 404 }
         )
@@ -242,7 +169,10 @@ export async function GET(
         .not('ibv_provider_data', 'is', null)
 
       if (fetchError) {
-        console.error('[Inverite Fetch] Error fetching applications:', fetchError)
+        console.error(
+          '[Inverite Fetch] Error fetching applications:',
+          fetchError
+        )
         return NextResponse.json(
           { error: 'DATABASE_ERROR', message: 'Failed to find application' },
           { status: 500 }
@@ -270,53 +200,44 @@ export async function GET(
     }
 
     // Merge new account data into existing provider data
-    const currentProviderData = (matchingApplication.ibv_provider_data as any) || {}
-    
+    const currentProviderData =
+      (matchingApplication.ibv_provider_data as any) || {}
+
     // Extract request_guid from Inverite response (using 'request' field)
-    const responseRequestGuid = inveriteData.request || inveriteData.request_guid || inveriteData.request_GUID || requestGuid
+    const responseRequestGuid =
+      inveriteData.request ||
+      inveriteData.request_guid ||
+      inveriteData.request_GUID ||
+      requestGuid
 
     // Store all Inverite data in structured format
     const updatedProviderData = {
       // Keep existing request_guid and verified_at
       request_guid: currentProviderData.request_guid || responseRequestGuid,
-      verified_at: currentProviderData.verified_at || inveriteData.complete_datetime || new Date().toISOString(),
-      
+      verified_at:
+        currentProviderData.verified_at ||
+        inveriteData.complete_datetime ||
+        new Date().toISOString(),
+
       // Store raw Inverite response for reference
-      raw_data: inveriteData,
-      
-      // Store all Inverite response fields
-      name: inveriteData.name || null,
-      complete_datetime: inveriteData.complete_datetime || null,
-      referenceid: inveriteData.referenceid || null,
-      status: inveriteData.status || null,
-      type: inveriteData.type || null,
-      accounts: inveriteData.accounts || [],
-      all_bank_pdf_statements: inveriteData.all_bank_pdf_statements || [],
-      address: inveriteData.address || null,
-      contacts: inveriteData.contacts || [],
-      account_validations: inveriteData.account_validations || [],
-      
-      // Legacy fields for backward compatibility (extracted from accounts if available)
-      account_info: inveriteData.accounts?.[0] || inveriteData.account_info || inveriteData.account || null,
-      account_stats: inveriteData.accounts?.[0]?.statistics || inveriteData.account_stats || inveriteData.stats || null,
-      account_statement: inveriteData.accounts?.[0]?.transactions || inveriteData.account_statement || inveriteData.transactions || [],
-      
+      ...inveriteData,
+
       // Timestamps
       account_data_fetched_at: new Date().toISOString(),
-      account_data_received_at: currentProviderData.account_data_received_at || new Date().toISOString()
+      account_data_received_at:
+        currentProviderData.account_data_received_at || new Date().toISOString()
     }
 
     // Update the application in database
-    const supabaseAny = supabase as any
-    const { error: updateError } = await supabaseAny
+    // Persist recomputed summary
+    const { error: updateError } = await (supabase as any)
       .from('loan_applications')
       .update({
-        ibv_provider_data: updatedProviderData,
         ibv_results: ibvSummary,
-        ibv_status: 'verified',
+        ibv_provider_data: updatedProviderData,
         updated_at: new Date().toISOString()
       })
-      .eq('id', matchingApplication.id)
+      .eq('id', applicationId)
 
     if (updateError) {
       console.error('[Inverite Fetch] Error updating application:', updateError)
@@ -329,7 +250,11 @@ export async function GET(
       )
     }
 
-    console.log('[Inverite Fetch] Successfully updated application:', matchingApplication.id)
+    console.log(
+      '[Inverite Fetch] Successfully updated application:',
+      applicationId,
+      matchingApplication.id
+    )
 
     // Return success with fetched data summary
     return NextResponse.json({
@@ -341,7 +266,8 @@ export async function GET(
         name: inveriteData.name,
         status: inveriteData.status,
         accounts_count: inveriteData.accounts?.length || 0,
-        transactions_count: inveriteData.accounts?.[0]?.transactions?.length || 0,
+        transactions_count:
+          inveriteData.accounts?.[0]?.transactions?.length || 0,
         complete_datetime: inveriteData.complete_datetime
       },
       ibv_results: ibvSummary
@@ -357,4 +283,3 @@ export async function GET(
     )
   }
 }
-

@@ -374,102 +374,103 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 					) : requests.length === 0 ? (
 						<p className='text-sm text-gray-600'>No requests yet</p>
 					) : (
-						<div className='overflow-x-auto rounded border border-gray-200'>
-							<table className='min-w-full divide-y divide-gray-200'>
-								<thead className='bg-gray-50'>
-									<tr>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Type</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Group</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Status</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Last Sent</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Link</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>File/Submission</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Actions</th>
-									</tr>
-								</thead>
-								<tbody className='divide-y divide-gray-200 bg-white'>
-									{requests.map((r) => (
-										<tr key={r.id}>
-											<td className='px-4 py-2 text-sm text-gray-900'>{r.document_type?.name || '—'}</td>
-											<td className='px-4 py-2 text-xs text-gray-500'>
-												<div className='flex items-center gap-2'>
-													<span className='font-mono'>{r.document_type?.id ? String(r.document_type.id).slice(0, 4) : '—'}/{r.id.slice(0,4)}</span>
-													{(r as any).group_link ? (
-														<button
-															onClick={async () => { try { await navigator.clipboard.writeText((r as any).group_link!) } catch {} }}
-															className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50'
-															title={(r as any).group_link}
-														>
-															Copy Group Link
-														</button>
-													) : (
-														<span className='text-gray-400'>No group link</span>
-													)}
-												</div>
-											</td>
-											<td className='px-4 py-2 text-sm'>
-												<span className='inline-flex items-center rounded px-2 py-0.5 text-xs font-medium border' data-status={r.status}>
-													{r.status}
-												</span>
-											</td>
-											<td className='px-4 py-2 text-xs text-gray-500'>{r.magic_link_sent_at ? new Date(r.magic_link_sent_at).toLocaleString() : '—'}</td>
-										<td className='px-4 py-2 text-xs text-gray-500 max-w-[280px] truncate'>
-											{r.request_link ? (
-												<button
-													onClick={async () => { try { await navigator.clipboard.writeText(r.request_link!) } catch {} }}
-													className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50'
-													title={r.request_link}
-												>
-													Copy Link
-												</button>
-											) : (
-												<span className='text-gray-400'>Expired/Not generated</span>
-											)}
-										</td>
-											<td className='px-4 py-2 text-xs text-gray-500 font-mono'>{r.uploaded_file_key || '—'}</td>
-											<td className='px-4 py-2 text-sm whitespace-nowrap'>
-												<div className='flex items-center gap-2'>
-													{r.status === 'uploaded' && (
-														<>
-															<button
-																onClick={() => handleVerify(r.id)}
-																disabled={!!submittingRequest[r.id]}
-																className='rounded border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50'
-															>
-																Verify
-															</button>
-															<button
-																onClick={() => handleReject(r.id)}
-																disabled={!!submittingRequest[r.id]}
-																className='rounded border border-red-300 bg-white px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50'
-															>
-																Reject
-															</button>
-														</>
-													)}
-													{(r.status === 'verified' || r.status === 'rejected') && (
-														<button
-															onClick={() => handleRequestAgain(r.id)}
-															disabled={!!submittingRequest[r.id]}
-															className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50'
-														>
-															Request again
-														</button>
-													)}
+						<div className='space-y-6'>
+							{Object.entries(requests.reduce((acc: Record<string, any[]>, r: any) => {
+								const key = r.group_id || 'ungrouped'
+								if (!acc[key]) acc[key] = []
+								acc[key].push(r)
+								return acc
+							}, {})).map(([groupId, groupRequests]) => {
+								const anyWithGroupLink = (groupRequests as any[]).find((gr: any) => gr.group_link)
+								return (
+									<div key={groupId} className='rounded border border-gray-200'>
+										<div className='flex items-center justify-between bg-gray-50 px-4 py-2'>
+											<div className='text-sm text-gray-700'>
+												<span className='font-semibold'>Group:</span> {groupId === 'ungrouped' ? 'Ungrouped' : groupId}
+											</div>
+											<div>
+												{anyWithGroupLink?.group_link ? (
 													<button
-														onClick={() => handleDeleteRequest(r.id)}
-														disabled={!!submittingRequest[r.id]}
-														className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 disabled:opacity-50'
-														title='Delete request'
+														onClick={async () => { try { await navigator.clipboard.writeText(anyWithGroupLink.group_link!) } catch {} }}
+														className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50'
+														title={anyWithGroupLink.group_link}
 													>
-														Delete
+														Copy Group Link
 													</button>
-												</div>
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
+												) : (
+													<span className='text-xs text-gray-400'>No group link</span>
+												)}
+											</div>
+										</div>
+										<div className='overflow-x-auto'>
+											<table className='min-w-full divide-y divide-gray-200'>
+												<thead className='bg-white'>
+													<tr>
+														<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Type</th>
+														<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Status</th>
+														<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Last Sent</th>
+														<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>File/Submission</th>
+														<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Actions</th>
+													</tr>
+												</thead>
+												<tbody className='divide-y divide-gray-200 bg-white'>
+													{(groupRequests as any[]).map((r: any) => (
+														<tr key={r.id}>
+															<td className='px-4 py-2 text-sm text-gray-900'>{r.document_type?.name || '—'}</td>
+															<td className='px-4 py-2 text-sm'>
+																<span className='inline-flex items-center rounded px-2 py-0.5 text-xs font-medium border' data-status={r.status}>
+																	{r.status}
+																</span>
+															</td>
+															<td className='px-4 py-2 text-xs text-gray-500'>{r.magic_link_sent_at ? new Date(r.magic_link_sent_at).toLocaleString() : '—'}</td>
+															<td className='px-4 py-2 text-xs text-gray-500 font-mono'>{r.uploaded_file_key || '—'}</td>
+															<td className='px-4 py-2 text-sm whitespace-nowrap'>
+																<div className='flex items-center gap-2'>
+																	{r.status === 'uploaded' && (
+																		<>
+																			<button
+																				onClick={() => handleVerify(r.id)}
+																				disabled={!!submittingRequest[r.id]}
+																				className='rounded border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50'
+																			>
+																				Verify
+																			</button>
+																			<button
+																				onClick={() => handleReject(r.id)}
+																				disabled={!!submittingRequest[r.id]}
+																				className='rounded border border-red-300 bg-white px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50'
+																			>
+																				Reject
+																			</button>
+																		</>
+																	)}
+																	{(r.status === 'verified' || r.status === 'rejected') && (
+																		<button
+																			onClick={() => handleRequestAgain(r.id)}
+																			disabled={!!submittingRequest[r.id]}
+																			className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+																		>
+																			Request again
+																		</button>
+																	)}
+																	<button
+																		onClick={() => handleDeleteRequest(r.id)}
+																		disabled={!!submittingRequest[r.id]}
+																		className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 disabled:opacity-50'
+																		title='Delete request'
+																	>
+																		Delete
+																	</button>
+																</div>
+															</td>
+														</tr>
+													))}
+												</tbody>
+											</table>
+										</div>
+									</div>
+								)
+							})}
 						</div>
 					)}
 				</div>
