@@ -466,5 +466,13 @@
   "Rejected_Message": "Rejeté. Veuillez téléverser un document plus clair ou correct.",
   "Uploading_Dots": "Téléversement...",
   "Upload": "Téléverser",
-  "Uploaded_Exclamation": "Téléversé !"
+  "Uploaded_Exclamation": "Téléversé !",
+  "Action_Required": "Action requise",
+  "Select_File": "Sélectionner un fichier",
+  "View": "Voir",
+  "Document_Viewer": "Visualiseur de documents",
+  "Failed_To_Load_Image": "Échec du chargement de l'image",
+  "Preview_Not_Available": "Aperçu non disponible pour ce type de fichier",
+  "Download": "Télécharger",
+  "Loading_Dots": "Chargement..."
 }
