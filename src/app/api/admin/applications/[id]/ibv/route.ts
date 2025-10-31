@@ -10,7 +10,10 @@ export async function GET(
   try {
     const applicationId = params.id
     if (!applicationId) {
-      return NextResponse.json({ error: 'Application ID is required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Application ID is required' },
+        { status: 400 }
+      )
     }
 
     const supabase = await createServerSupabaseAdminClient()
@@ -18,7 +21,9 @@ export async function GET(
     // Select minimal fields used by the IBV card
     const { data, error } = await supabase
       .from('loan_applications')
-      .select('id, ibv_provider, ibv_status, ibv_results, ibv_verified_at')
+      .select(
+        'id, ibv_provider, ibv_status, ibv_results, ibv_verified_at'
+      )
       .eq('id', applicationId)
       .single()
 
@@ -29,8 +34,11 @@ export async function GET(
       )
     }
 
-    // Derive request_guid from ibv_results if present (populated by fetch endpoint)
-    const requestGuid = (data as any).ibv_results?.request_guid || null
+    const appData = data as any
+
+    // Derive request_guid from ibv_results first (populated by fetch endpoint),
+    const requestGuid = appData.ibv_results?.request_guid
+    
 
     return NextResponse.json({
       application_id: (data as any).id,
@@ -47,5 +55,3 @@ export async function GET(
     )
   }
 }
-
-

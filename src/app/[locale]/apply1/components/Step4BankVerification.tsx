@@ -67,7 +67,7 @@ export default function Step4BankVerification({
       const { requestGuid, iframeUrl } = await initializeInveriteSession({
         firstName: formData.firstName,
         lastName: formData.lastName,
-        email: formData.email,
+        // email: formData.email,
         phone: formData.phone
       })
       const src = iframeUrl || getInveriteIframeConfig(requestGuid).src
