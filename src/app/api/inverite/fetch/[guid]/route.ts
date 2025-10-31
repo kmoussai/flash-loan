@@ -7,7 +7,7 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import type { IBVSummary } from './types'
 
 // Build a compact summary from Inverite raw data with safe fallbacks
-export function extractSummary(rawData: any, requestGuid: string): IBVSummary {
+function extractSummary(rawData: any, requestGuid: string): IBVSummary {
   return {
     request_guid: requestGuid,
     accounts: rawData.accounts.map((account: any) => ({
