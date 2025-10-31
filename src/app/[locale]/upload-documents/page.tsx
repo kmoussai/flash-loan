@@ -25,14 +25,15 @@ export default function UploadDocumentsPage() {
   const [success, setSuccess] = useState<Record<string, boolean>>({})
   const [ready, setReady] = useState(false)
 
-  const { reqParam, tokenParam } = useMemo(() => {
+  const { reqParam, groupParam, tokenParam } = useMemo(() => {
     if (typeof window === 'undefined') return { reqParam: null, tokenParam: null }
     const u = new URL(window.location.href)
     return {
       reqParam: u.searchParams.get('req'),
+      groupParam: u.searchParams.get('group'),
       tokenParam: u.searchParams.get('token')
     }
-  }, []) as { reqParam: string | null; tokenParam: string | null }
+  }, []) as { reqParam: string | null; groupParam: string | null; tokenParam: string | null }
 
   const loadRequests = async () => {
     try {
@@ -43,6 +44,16 @@ export default function UploadDocumentsPage() {
         if (res.ok) {
           const j = await res.json()
           setRequests(j.request ? [j.request] : [])
+          setError(null)
+          setLoading(false)
+          return
+        }
+      }
+      if (tokenParam && groupParam) {
+        res = await fetch(`/api/public/document-request-groups/${groupParam}?token=${encodeURIComponent(tokenParam)}`)
+        if (res.ok) {
+          const j = await res.json()
+          setRequests(j.requests || [])
           setError(null)
           setLoading(false)
           return
@@ -68,8 +79,8 @@ export default function UploadDocumentsPage() {
     let unsub: { unsubscribe: () => void } | null = null
 
     const waitForSessionAndLoad = async () => {
-      // If public token mode, skip auth wait and load immediately
-      if (tokenParam && reqParam) {
+      // If public token mode (single request or group), skip auth wait and load immediately
+      if (tokenParam && (reqParam || groupParam)) {
         if (!cancelled) {
           setReady(true)
           await loadRequests()
@@ -138,7 +149,7 @@ export default function UploadDocumentsPage() {
       cancelled = true
       if (unsub) unsub.unsubscribe()
     }
-  }, [supabase, t, tokenParam, reqParam])
+  }, [supabase, t, tokenParam, reqParam, groupParam])
 
   const onFileChange = (requestId: string, file: File | null) => {
     setFiles(prev => ({ ...prev, [requestId]: file }))

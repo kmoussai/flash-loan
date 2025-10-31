@@ -16,7 +16,7 @@ export async function GET(
     const admin = createServerSupabaseAdminClient()
     const { data, error } = await admin
       .from('document_requests' as any)
-      .select('id, status, expires_at, magic_link_sent_at, uploaded_file_key, created_at, updated_at, document_type:document_type_id(id, name, slug)')
+      .select('id, status, expires_at, magic_link_sent_at, uploaded_file_key, created_at, updated_at, group_id, document_type:document_type_id(id, name, slug), group:group_id(id, expires_at)')
       .eq('loan_application_id', appId)
       .order('created_at', { ascending: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -36,7 +36,14 @@ export async function GET(
           link = `${getAppUrl()}/${preferredLanguage}/upload-documents?req=${encodeURIComponent(r.id)}&token=${encodeURIComponent(token)}`
         }
       }
-      return { ...r, request_link: link }
+      let group_link: string | null = null
+      const effectiveGroupExpiresAt = r?.group?.expires_at || r.expires_at || null
+      const groupExp = effectiveGroupExpiresAt ? new Date(effectiveGroupExpiresAt).getTime() : null
+      if (r.group_id && groupExp && !isNaN(groupExp) && Date.now() < groupExp) {
+        const token = signRequestToken(r.group_id, groupExp)
+        group_link = `${getAppUrl()}/${preferredLanguage}/upload-documents?group=${encodeURIComponent(r.group_id)}&token=${encodeURIComponent(token)}`
+      }
+      return { ...r, request_link: link, group_link }
     })
     return NextResponse.json({ requests: enhanced })
   } catch (e: any) {

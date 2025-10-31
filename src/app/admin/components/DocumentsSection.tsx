@@ -26,7 +26,8 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 	const [previewMime, setPreviewMime] = useState<string | null>(null)
 	const [requestModalOpen, setRequestModalOpen] = useState(false)
-	const [docTypes, setDocTypes] = useState<Array<{ id: string, name: string, slug: string }>>([])
+	// Forward-compatible with future non-file (form) requests
+	const [requestTypes, setRequestTypes] = useState<Array<{ id: string, name: string, slug: string, kind?: 'document' | 'form', requires_upload?: boolean }>>([])
 	const [selectedTypes, setSelectedTypes] = useState<Record<string, boolean>>({})
 	const [note, setNote] = useState('')
 	const [sending, setSending] = useState(false)
@@ -72,7 +73,8 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 			const res = await fetch('/api/admin/document-types')
 			if (!res.ok) throw new Error('Failed to load document types')
 			const json = await res.json()
-			setDocTypes((json.document_types || []).map((d: any) => ({ id: d.id, name: d.name, slug: d.slug })))
+			// Accept additional fields if backend later adds them (kind/requires_upload)
+			setRequestTypes((json.document_types || []).map((d: any) => ({ id: d.id, name: d.name, slug: d.slug, kind: d.kind, requires_upload: d.requires_upload })))
 		} catch {}
 	}
 
@@ -244,7 +246,7 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 						onClick={() => setRequestModalOpen(true)}
 						className='rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700'
 					>
-						Request documents
+						Request items
 					</button>
 				)}
 				<button
@@ -360,11 +362,11 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 			</div>
 		</div>
 
-		{/* Requested Documents Status */}
+		{/* Requested Items Status */}
 		{typeof applicationId !== 'undefined' && (
 			<div className='rounded-lg bg-white border border-gray-200 overflow-hidden mt-6'>
 				<div className='bg-slate-50 border-b border-gray-200 px-6 py-3'>
-					<h3 className='text-sm font-semibold text-gray-900'>Requested Documents</h3>
+					<h3 className='text-sm font-semibold text-gray-900'>Requested Items</h3>
 				</div>
 				<div className='p-6'>
 					{loadingRequests ? (
@@ -377,10 +379,11 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 								<thead className='bg-gray-50'>
 									<tr>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Type</th>
+										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Group</th>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Status</th>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Last Sent</th>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Link</th>
-										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>File</th>
+										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>File/Submission</th>
 										<th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>Actions</th>
 									</tr>
 								</thead>
@@ -388,6 +391,22 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 									{requests.map((r) => (
 										<tr key={r.id}>
 											<td className='px-4 py-2 text-sm text-gray-900'>{r.document_type?.name || '—'}</td>
+											<td className='px-4 py-2 text-xs text-gray-500'>
+												<div className='flex items-center gap-2'>
+													<span className='font-mono'>{r.document_type?.id ? String(r.document_type.id).slice(0, 4) : '—'}/{r.id.slice(0,4)}</span>
+													{(r as any).group_link ? (
+														<button
+															onClick={async () => { try { await navigator.clipboard.writeText((r as any).group_link!) } catch {} }}
+															className='rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50'
+															title={(r as any).group_link}
+														>
+															Copy Group Link
+														</button>
+													) : (
+														<span className='text-gray-400'>No group link</span>
+													)}
+												</div>
+											</td>
 											<td className='px-4 py-2 text-sm'>
 												<span className='inline-flex items-center rounded px-2 py-0.5 text-xs font-medium border' data-status={r.status}>
 													{r.status}
@@ -487,12 +506,12 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 			</div>
 		)}
 
-		{/* Request Documents Modal */}
+		{/* Request Items Modal (documents and future forms) */}
 		{requestModalOpen && typeof applicationId !== 'undefined' && (
 			<div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50' onClick={() => setRequestModalOpen(false)}>
 				<div className='mx-4 w-full max-w-lg rounded-lg bg-white border border-gray-200 overflow-hidden' onClick={(e) => e.stopPropagation()}>
 					<div className='border-b border-gray-200 px-4 py-3 flex items-center justify-between'>
-						<h4 className='text-sm font-semibold text-gray-900'>Request Documents</h4>
+						<h4 className='text-sm font-semibold text-gray-900'>Request Items</h4>
 						<button onClick={() => setRequestModalOpen(false)} className='rounded hover:bg-gray-100 p-1'>
 							<svg className='h-5 w-5 text-gray-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
 								<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
@@ -501,14 +520,18 @@ export default function DocumentsSection({ clientId, applicationId }: { clientId
 					</div>
 					<div className='p-4 space-y-4'>
 						<div>
-							<p className='text-sm text-gray-700 mb-2'>Select document types to request:</p>
+							<p className='text-sm text-gray-700 mb-2'>Select items to request:</p>
 							<div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
-								{docTypes.map((dt) => {
+								{requestTypes.map((dt) => {
 									const isRequested = requests.some(r => r.document_type?.id === dt.id && (r.status === 'requested' || r.status === 'uploaded'))
 									return (
 										<label key={dt.id} className={`flex items-center gap-2 text-sm ${isRequested ? 'text-gray-400' : 'text-gray-800'}`}>
 											<input type='checkbox' className='h-4 w-4' checked={!!selectedTypes[dt.id]} onChange={() => toggleType(dt.id)} disabled={isRequested} />
-											<span>{dt.name}{isRequested && <span className='ml-1 text-xs text-orange-600'> (already requested)</span>}</span>
+											<span>
+												{dt.name}
+												{dt.kind && <span className='ml-1 text-xs text-gray-500'>[{dt.kind}]</span>}
+												{isRequested && <span className='ml-1 text-xs text-orange-600'> (already requested)</span>}
+											</span>
 										</label>
 									)
 								})}
