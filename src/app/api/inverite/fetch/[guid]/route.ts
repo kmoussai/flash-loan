@@ -28,7 +28,13 @@ function extractSummary(rawData: any, requestGuid: string): IBVSummary {
         }
       },
       bank_pdf_statements: account.bank_pdf_statements,
-      total_transactions: (account.transactions ?? []).length
+      total_transactions: (account.transactions ?? []).length,
+      income: account.payschedules.map((pay: any) => ({
+        frequency: pay.frequency,
+        details: pay.details,
+        monthly_income: pay.monthly_income,
+        future_payments: pay.future_payments
+      }))
     }))
   }
 }
