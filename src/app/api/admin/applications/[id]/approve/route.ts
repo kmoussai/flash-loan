@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import type { LoanInsert, LoanApplicationUpdate } from '@/src/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +39,13 @@ export async function POST(
       )
     }
 
-    const app = application as any
+    // Type assertion for selected fields
+    const app = application as {
+      id: string
+      loan_amount: number
+      client_id: string
+      application_status: string
+    }
 
     // Check if application is already approved
     if (app.application_status === 'approved') {
@@ -70,17 +77,19 @@ export async function POST(
     const termMonths = 6 // Default 6 months
 
     // Create the loan record
-    const { data: loan, error: loanError } = await supabase
-      .from('loans')
-      .insert({
-        application_id: applicationId,
-        user_id: app.client_id,
-        principal_amount: app.loan_amount,
-        interest_rate: interestRate,
-        term_months: termMonths,
-        remaining_balance: app.loan_amount,
-        status: 'pending_disbursement'
-      } as any)
+    const loanData: LoanInsert = {
+      application_id: applicationId,
+      user_id: app.client_id,
+      principal_amount: app.loan_amount,
+      interest_rate: interestRate,
+      term_months: termMonths,
+      remaining_balance: app.loan_amount,
+      status: 'pending_disbursement'
+    }
+    
+    const { data: loan, error: loanError } = await (supabase
+      .from('loans') as any)
+      .insert(loanData)
       .select()
       .single()
 
@@ -92,15 +101,22 @@ export async function POST(
       )
     }
 
-    const loanData = loan as any
+    if (!loan) {
+      return NextResponse.json(
+        { error: 'Failed to create loan - no data returned' },
+        { status: 500 }
+      )
+    }
 
     // Update application status to approved and set approved_at timestamp
-    const { error: updateError } = await supabase
-      .from('loan_applications')
-      .update({
-        application_status: 'approved',
-        approved_at: new Date().toISOString()
-      } as any)
+    const updateData: LoanApplicationUpdate = {
+      application_status: 'approved',
+      approved_at: new Date().toISOString()
+    }
+    
+    const { error: updateError } = await (supabase
+      .from('loan_applications') as any)
+      .update(updateData)
       .eq('id', applicationId)
 
     if (updateError) {
@@ -109,7 +125,7 @@ export async function POST(
       // Note: In production, use a database transaction to ensure atomicity
       // For now, we return an error and log the issue
       // The loan record exists but application status wasn't updated
-      console.error('CRITICAL: Loan created but application status update failed. Loan ID:', loanData?.id)
+      console.error('CRITICAL: Loan created but application status update failed. Loan ID:', loan.id)
 
       return NextResponse.json(
         { error: 'Failed to update application status', details: updateError.message },
@@ -120,7 +136,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: 'Application approved and loan created successfully',
-      loan: loanData,
+      loan: loan,
       application: {
         id: applicationId,
         status: 'approved'

@@ -13,6 +13,8 @@ export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'other'
 export type IbvStatus = 'pending' | 'processing' | 'verified' | 'failed' | 'cancelled' | 'expired'
 export type DocumentType = 'drivers_license' | 'passport' | 'health_card' | 'social_insurance' | 'permanent_resident_card' | 'citizenship_card' | 'birth_certificate' | 'other'
 export type DocumentStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'expired'
+export type LoanStatus = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
+export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
 export type IncomeSourceType = 
   | 'employed' 
   | 'employment-insurance' 
@@ -252,6 +254,31 @@ export interface IdDocument {
   updated_at: string
 }
 
+export interface Loan {
+  id: string
+  application_id: string
+  user_id: string
+  principal_amount: number
+  interest_rate: number
+  term_months: number
+  disbursement_date: string | null
+  due_date: string | null
+  remaining_balance: number
+  status: LoanStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface LoanPayment {
+  id: string
+  loan_id: string
+  amount: number
+  payment_date: string
+  method: string | null
+  status: PaymentStatus
+  created_at: string
+}
+
 // ===========================
 // INSERT TYPES
 // ===========================
@@ -404,6 +431,43 @@ export interface IdDocumentUpdate {
   notes?: string | null
 }
 
+export interface LoanInsert {
+  application_id: string
+  user_id: string
+  principal_amount: number
+  interest_rate: number
+  term_months: number
+  disbursement_date?: string | null
+  due_date?: string | null
+  remaining_balance?: number
+  status?: LoanStatus
+}
+
+export interface LoanPaymentInsert {
+  loan_id: string
+  amount: number
+  payment_date?: string
+  method?: string | null
+  status?: PaymentStatus
+}
+
+export interface LoanUpdate {
+  principal_amount?: number
+  interest_rate?: number
+  term_months?: number
+  disbursement_date?: string | null
+  due_date?: string | null
+  remaining_balance?: number
+  status?: LoanStatus
+}
+
+export interface LoanPaymentUpdate {
+  amount?: number
+  payment_date?: string
+  method?: string | null
+  status?: PaymentStatus
+}
+
 // ===========================
 // COMBINED DATABASE TYPE
 // ===========================
@@ -440,6 +504,16 @@ export interface Database {
         Row: IdDocument
         Insert: IdDocumentInsert
         Update: IdDocumentUpdate
+      }
+      loans: {
+        Row: Loan
+        Insert: LoanInsert
+        Update: LoanUpdate
+      }
+      loan_payments: {
+        Row: LoanPayment
+        Insert: LoanPaymentInsert
+        Update: LoanPaymentUpdate
       }
     }
   }
