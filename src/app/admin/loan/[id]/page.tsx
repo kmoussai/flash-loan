@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import Button from '@/src/app/[locale]/components/Button'
 
-type LoanStatus = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
+type LoanStatusDB = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
+type LoanStatusUI = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
 
 interface Payment {
   id: string
@@ -32,10 +33,68 @@ interface LoanDetail {
   payment_frequency: 'weekly' | 'biweekly' | 'monthly'
   payment_amount: number
   origination_date: string
-  status: LoanStatus
+  status: LoanStatusUI
   next_payment_date: string | null
   last_payment_date: string | null
   schedule: Payment[]
+}
+
+// API Response interfaces
+interface LoanFromAPI {
+  id: string
+  application_id: string
+  user_id: string
+  principal_amount: number
+  interest_rate: number
+  term_months: number
+  disbursement_date: string | null
+  due_date: string | null
+  remaining_balance: number
+  status: LoanStatusDB
+  created_at: string
+  updated_at: string
+  loan_applications: {
+    id: string
+    loan_amount: number
+    loan_type: string
+    application_status: string
+    income_source?: string
+    created_at?: string
+    submitted_at?: string | null
+    approved_at?: string | null
+  } | null
+  users?: {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    email: string | null
+    phone: string | null
+    preferred_language: string | null
+  } | null
+}
+
+interface PaymentFromAPI {
+  id: string
+  loan_id: string
+  amount: number
+  payment_date: string
+  method: string | null
+  status: 'pending' | 'confirmed' | 'failed'
+  created_at: string
+}
+
+interface LoanDetailsResponse {
+  loan: LoanFromAPI
+  payments: PaymentFromAPI[]
+  statistics: {
+    totalPaid: number
+    totalPending: number
+    totalFailed: number
+    totalPayments: number
+    confirmedPayments: number
+    remainingBalance: number
+    principalAmount: number
+  }
 }
 
 const currency = (n: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(n)
@@ -48,56 +107,75 @@ function addDays(date: Date, days: number): Date {
   return copy
 }
 
-// Mock loan details generator
-function generateMockLoan(id: string): LoanDetail {
-  const principal = 12000
-  const interestRate = 12.99
-  const termMonths = 18
-  const paymentFrequency: LoanDetail['payment_frequency'] = 'biweekly'
-  const paymentIntervalDays = paymentFrequency === 'weekly' ? 7 : paymentFrequency === 'biweekly' ? 14 : 30
+// Map database status to UI status
+const mapStatusToUI = (status: LoanStatusDB): LoanStatusUI => {
+  switch (status) {
+    case 'pending_disbursement':
+      return 'pending'
+    case 'completed':
+      return 'paid'
+    default:
+      return status as LoanStatusUI
+  }
+}
 
-  // Simple mock payment amount (not exact amortization)
-  const paymentAmount = 780
-  const start = addDays(new Date(), -60)
-
-  const schedule: Payment[] = Array.from({ length: 12 }, (_, i) => {
-    const due = addDays(start, paymentIntervalDays * (i + 1))
-    const paid = i < 3 // first 3 payments paid
-    const late = i === 4 // mark one as late
+// Transform API response to UI format
+const transformLoanDetails = (apiData: LoanDetailsResponse): LoanDetail => {
+  const loan = apiData.loan
+  const firstName = loan.users?.first_name || ''
+  const lastName = loan.users?.last_name || ''
+  const borrowerName = `${firstName} ${lastName}`.trim() || 'N/A'
+  
+  // Calculate payment amount (simple estimate: principal + interest / term_months)
+  const monthlyInterest = (loan.principal_amount * loan.interest_rate / 100) / 12
+  const monthlyPayment = (loan.principal_amount / loan.term_months) + monthlyInterest
+  
+  // Transform payments to schedule format
+  const schedule: Payment[] = apiData.payments.map((p: PaymentFromAPI) => {
+    const dueDate = new Date(p.payment_date)
+    const isPaid = p.status === 'confirmed'
+    const isLate = p.status === 'pending' && dueDate < new Date()
+    
     return {
-      id: `pmt-${i + 1}`,
-      due_date: due.toISOString(),
-      amount_due: paymentAmount,
-      amount_paid: paid ? paymentAmount : 0,
-      status: paid ? 'paid' : (late && due < new Date() ? 'late' : 'upcoming')
+      id: p.id,
+      due_date: p.payment_date,
+      amount_due: monthlyPayment, // Using estimated payment amount
+      amount_paid: isPaid ? parseFloat(p.amount.toString()) : 0,
+      status: isPaid ? 'paid' : (isLate ? 'late' : 'upcoming')
     }
   })
 
-  const paidSoFar = schedule.filter(s => s.status === 'paid').reduce((sum, p) => sum + p.amount_paid, 0)
-  const remaining = Math.max(0, principal - Math.round(paidSoFar * 0.7)) // fake remaining balance
-  const nextPayment = schedule.find(s => s.status !== 'paid') || null
-  const lastPayment = schedule.filter(s => s.status === 'paid').slice(-1)[0] || null
+  // Find next and last payment dates
+  const confirmedPayments = apiData.payments.filter(p => p.status === 'confirmed')
+  const lastPayment = confirmedPayments.length > 0 
+    ? confirmedPayments.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())[0]
+    : null
+  
+  const pendingPayments = apiData.payments.filter(p => p.status === 'pending')
+  const nextPayment = pendingPayments.length > 0
+    ? pendingPayments.sort((a, b) => new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime())[0]
+    : null
 
   return {
-    id,
-    loan_number: `LN-${id.replace(/[^0-9]/g, '').padStart(6, '0').slice(0, 6)}`,
+    id: loan.id,
+    loan_number: `LN-${loan.id.replace(/[^0-9]/g, '').padStart(6, '0').slice(0, 6)}`,
     borrower: {
-      id: 'user_mock_1',
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      phone: '+1 (514) 555-1234',
-      province: 'Quebec'
+      id: loan.users?.id || loan.user_id,
+      name: borrowerName,
+      email: loan.users?.email || 'N/A',
+      phone: loan.users?.phone || 'N/A',
+      province: 'N/A' // Not available in API response
     },
-    principal,
-    remaining_balance: remaining,
-    interest_rate: interestRate,
-    term_months: termMonths,
-    payment_frequency: paymentFrequency,
-    payment_amount: paymentAmount,
-    origination_date: addDays(new Date(), -120).toISOString(),
-    status: 'active',
-    next_payment_date: nextPayment ? nextPayment.due_date : null,
-    last_payment_date: lastPayment ? lastPayment.due_date : null,
+    principal: parseFloat(loan.principal_amount.toString()),
+    remaining_balance: parseFloat(loan.remaining_balance.toString()),
+    interest_rate: parseFloat(loan.interest_rate.toString()),
+    term_months: loan.term_months,
+    payment_frequency: 'monthly', // Default, could be enhanced to use actual frequency
+    payment_amount: Math.round(monthlyPayment * 100) / 100,
+    origination_date: loan.created_at,
+    status: mapStatusToUI(loan.status),
+    next_payment_date: nextPayment?.payment_date || loan.due_date || null,
+    last_payment_date: lastPayment?.payment_date || null,
     schedule
   }
 }
@@ -108,21 +186,39 @@ export default function LoanDetailsPage() {
   const loanId = params.id as string
 
   const [loan, setLoan] = useState<LoanDetail | null>(null)
+  const [statistics, setStatistics] = useState<LoanDetailsResponse['statistics'] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'schedule' | 'borrower'>('overview')
 
   useEffect(() => {
-    try {
-      setLoading(true)
-      const mock = generateMockLoan(loanId || '1')
-      setLoan(mock)
-      setError(null)
-    } catch (e: any) {
-      setError(e.message || 'Failed to load loan details')
-    } finally {
-      setLoading(false)
+    if (!loanId) return
+
+    const fetchLoanDetails = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const response = await fetch(`/api/admin/loans/${loanId}`)
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to fetch loan details')
+        }
+
+        const data: LoanDetailsResponse = await response.json()
+        const transformedLoan = transformLoanDetails(data)
+        setLoan(transformedLoan)
+        setStatistics(data.statistics)
+      } catch (e: any) {
+        console.error('Error fetching loan details:', e)
+        setError(e.message || 'Failed to load loan details')
+      } finally {
+        setLoading(false)
+      }
     }
+
+    fetchLoanDetails()
   }, [loanId])
 
   const statusBadge = useMemo(() => {
@@ -266,6 +362,14 @@ export default function LoanDetailsPage() {
                       <p className='text-gray-700'>Last Payment: <span className='font-semibold'>{formatDateTime(loan.last_payment_date)}</span></p>
                       <p className='text-gray-700'>Next Amount Due: <span className='font-semibold'>{currency(loan.payment_amount)}</span></p>
                       <p className='text-gray-700'>Paid Payments: <span className='font-semibold'>{loan.schedule.filter(s => s.status === 'paid').length}</span></p>
+                      {statistics && (
+                        <>
+                          <p className='text-gray-700'>Total Paid: <span className='font-semibold text-green-600'>{currency(statistics.totalPaid)}</span></p>
+                          <p className='text-gray-700'>Pending Amount: <span className='font-semibold text-yellow-600'>{currency(statistics.totalPending)}</span></p>
+                          <p className='text-gray-700'>Failed Payments: <span className='font-semibold text-red-600'>{statistics.totalPayments - statistics.confirmedPayments}</span></p>
+                          <p className='text-gray-700'>Total Payments: <span className='font-semibold'>{statistics.totalPayments}</span></p>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -354,7 +458,16 @@ export default function LoanDetailsPage() {
                   <div className='p-6 grid gap-6 md:grid-cols-2'>
                     <div>
                       <label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Full Name</label>
-                      <p className='mt-1 text-sm font-medium text-gray-900'>{loan.borrower.name}</p>
+                      {loan.borrower.id && loan.borrower.id !== 'N/A' ? (
+                        <button
+                          onClick={() => router.push(`/admin/clients/${loan.borrower.id}`)}
+                          className='mt-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline'
+                        >
+                          {loan.borrower.name}
+                        </button>
+                      ) : (
+                        <p className='mt-1 text-sm font-medium text-gray-900'>{loan.borrower.name}</p>
+                      )}
                     </div>
                     <div>
                       <label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Email</label>

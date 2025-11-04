@@ -5,10 +5,40 @@ import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
 
-// Loan status type
-type LoanStatus = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
+// Loan status type matching database enum
+type LoanStatusDB = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
+type LoanStatusUI = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
 
-// Mock loan interface
+// API response interface
+interface LoanFromAPI {
+  id: string
+  application_id: string
+  user_id: string
+  principal_amount: number
+  interest_rate: number
+  term_months: number
+  disbursement_date: string | null
+  due_date: string | null
+  remaining_balance: number
+  status: LoanStatusDB
+  created_at: string
+  updated_at: string
+  loan_applications: {
+    id: string
+    loan_amount: number
+    loan_type: string
+    application_status: string
+  } | null
+  users?: {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    email: string | null
+    phone: string | null
+  } | null
+}
+
+// UI loan interface
 interface Loan {
   id: string
   loan_number: string
@@ -19,7 +49,7 @@ interface Loan {
   remaining_balance: number
   interest_rate: number
   term_months: number
-  status: LoanStatus
+  status: LoanStatusUI
   origination_date: string
   next_payment_date: string | null
   last_payment_date: string | null
@@ -35,47 +65,54 @@ interface StatusCounts {
   cancelled: number
 }
 
-// Mock data generator
-const generateMockLoans = (): Loan[] => {
-  const statuses: LoanStatus[] = ['active', 'paid', 'defaulted', 'pending', 'cancelled']
-  const provinces = ['Ontario', 'Quebec', 'British Columbia', 'Alberta', 'Manitoba']
-  const firstNames = ['John', 'Sarah', 'Michael', 'Emily', 'David', 'Jessica', 'Robert', 'Amanda', 'James', 'Lisa']
-  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez']
+// Map database status to UI status
+const mapStatusToUI = (status: LoanStatusDB): LoanStatusUI => {
+  switch (status) {
+    case 'pending_disbursement':
+      return 'pending'
+    case 'completed':
+      return 'paid'
+    default:
+      return status as LoanStatusUI
+  }
+}
 
-  return Array.from({ length: 25 }, (_, i) => {
-    const firstName = firstNames[Math.floor(Math.random() * firstNames.length)]
-    const lastName = lastNames[Math.floor(Math.random() * lastNames.length)]
-    const status = statuses[Math.floor(Math.random() * statuses.length)]
-    const loanAmount = Math.floor(Math.random() * 20000) + 1000
-    const remainingBalance = status === 'paid' ? 0 : Math.floor(Math.random() * loanAmount)
-    const interestRate = Math.random() * 10 + 5 // 5-15%
-    const termMonths = [6, 12, 18, 24, 36][Math.floor(Math.random() * 5)]
-    const originationDate = new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000)
-    const nextPaymentDate = status === 'active' 
-      ? new Date(Date.now() + Math.random() * 30 * 24 * 60 * 60 * 1000)
-      : null
-    const lastPaymentDate = status === 'paid' || status === 'active'
-      ? new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000)
-      : null
+// Map UI status to database status for filtering
+const mapStatusToDB = (status: LoanStatusUI | 'all'): LoanStatusDB | 'all' => {
+  if (status === 'all') return 'all'
+  switch (status) {
+    case 'pending':
+      return 'pending_disbursement'
+    case 'paid':
+      return 'completed'
+    default:
+      return status as LoanStatusDB
+  }
+}
 
-    return {
-      id: `loan-${i + 1}`,
-      loan_number: `LN-${String(i + 1).padStart(6, '0')}`,
-      borrower_name: `${firstName} ${lastName}`,
-      borrower_email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
-      borrower_phone: `+1 (${Math.floor(Math.random() * 900) + 100}) ${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 9000) + 1000}`,
-      loan_amount: loanAmount,
-      remaining_balance: remainingBalance,
-      interest_rate: Number(interestRate.toFixed(2)),
-      term_months: termMonths,
-      status,
-      origination_date: originationDate.toISOString(),
-      next_payment_date: nextPaymentDate?.toISOString() || null,
-      last_payment_date: lastPaymentDate?.toISOString() || null,
-      total_payments: Math.floor((loanAmount - remainingBalance) / (loanAmount / termMonths)),
-      province: provinces[Math.floor(Math.random() * provinces.length)]
-    }
-  })
+// Transform API loan to UI loan
+const transformLoan = (apiLoan: LoanFromAPI, index: number): Loan => {
+  const firstName = apiLoan.users?.first_name || ''
+  const lastName = apiLoan.users?.last_name || ''
+  const borrowerName = `${firstName} ${lastName}`.trim() || 'N/A'
+  
+  return {
+    id: apiLoan.id,
+    loan_number: `LN-${String(index + 1).padStart(6, '0')}`, // Generate loan number from index
+    borrower_name: borrowerName,
+    borrower_email: apiLoan.users?.email || 'N/A',
+    borrower_phone: apiLoan.users?.phone || 'N/A',
+    loan_amount: Number(apiLoan.principal_amount),
+    remaining_balance: Number(apiLoan.remaining_balance),
+    interest_rate: Number(apiLoan.interest_rate),
+    term_months: apiLoan.term_months,
+    status: mapStatusToUI(apiLoan.status),
+    origination_date: apiLoan.disbursement_date || apiLoan.created_at,
+    next_payment_date: apiLoan.due_date,
+    last_payment_date: null, // Will be calculated from payments if needed
+    total_payments: 0, // Will be calculated from payments if needed
+    province: 'N/A' // Not in loan table, could be fetched from address if needed
+  }
 }
 
 export default function LoansPage() {
@@ -84,7 +121,7 @@ export default function LoansPage() {
   const [filteredLoans, setFilteredLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<LoanStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<LoanStatusUI | 'all'>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusCounts, setStatusCounts] = useState<StatusCounts>({
     active: 0,
@@ -97,20 +134,30 @@ export default function LoansPage() {
   const fetchLoans = async () => {
     try {
       setLoading(true)
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500))
       
-      const mockData = generateMockLoans()
-      setLoans(mockData)
-      setFilteredLoans(mockData)
+      const response = await fetch('/api/admin/loans')
       
-      // Calculate status counts
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch loans')
+      }
+      
+      const data = await response.json()
+      const apiLoans: LoanFromAPI[] = data.loans || []
+      
+      // Transform API loans to UI format
+      const transformedLoans = apiLoans.map((loan, index) => transformLoan(loan, index))
+      
+      setLoans(transformedLoans)
+      
+      // Map status counts from API to UI format
+      const apiCounts = data.statusCounts || {}
       const counts: StatusCounts = {
-        active: mockData.filter(l => l.status === 'active').length,
-        paid: mockData.filter(l => l.status === 'paid').length,
-        defaulted: mockData.filter(l => l.status === 'defaulted').length,
-        pending: mockData.filter(l => l.status === 'pending').length,
-        cancelled: mockData.filter(l => l.status === 'cancelled').length
+        active: apiCounts.active || 0,
+        paid: apiCounts.completed || 0,
+        defaulted: apiCounts.defaulted || 0,
+        pending: apiCounts.pending_disbursement || 0,
+        cancelled: apiCounts.cancelled || 0
       }
       setStatusCounts(counts)
       setError(null)
@@ -153,7 +200,7 @@ export default function LoansPage() {
     setFilteredLoans(filtered)
   }, [statusFilter, searchTerm, loans])
 
-  const getStatusBadgeColor = (status: LoanStatus) => {
+  const getStatusBadgeColor = (status: LoanStatusUI) => {
     switch (status) {
       case 'active':
         return 'bg-blue-100 text-blue-800'
@@ -294,7 +341,7 @@ export default function LoansPage() {
               <div className='w-40'>
                 <Select
                   value={statusFilter}
-                  onValueChange={(value) => setStatusFilter(value as LoanStatus | 'all')}
+                  onValueChange={(value) => setStatusFilter(value as LoanStatusUI | 'all')}
                   options={[
                     { value: 'all', label: 'All Loans' },
                     { value: 'active', label: 'Active' },
@@ -400,7 +447,8 @@ export default function LoansPage() {
                   {filteredLoans.map(loan => (
                     <tr
                       key={loan.id}
-                      className='transition-colors hover:bg-gray-50'
+                      className='transition-colors hover:bg-gray-50 cursor-pointer'
+                      onClick={() => router.push(`/admin/loan/${loan.id}`)}
                     >
                       <td className='whitespace-nowrap px-2 py-1.5'>
                         <div className='text-xs font-semibold text-gray-900'>
@@ -413,7 +461,7 @@ export default function LoansPage() {
                       <td className='px-2 py-1.5'>
                         <div className='flex items-center'>
                           <div className='flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-purple-100 text-[10px] font-medium text-purple-600'>
-                            {loan.borrower_name[0]}
+                            {loan.borrower_name && loan.borrower_name !== 'N/A' ? loan.borrower_name[0] : '?'}
                           </div>
                           <div className='ml-2'>
                             <div className='text-xs font-medium text-gray-900'>
@@ -460,7 +508,7 @@ export default function LoansPage() {
                       <td className='whitespace-nowrap px-2 py-1.5 text-[10px] text-gray-500'>
                         {formatDate(loan.origination_date)}
                       </td>
-                      <td className='whitespace-nowrap px-2 py-1.5 text-xs'>
+                      <td className='whitespace-nowrap px-2 py-1.5 text-xs' onClick={(e) => e.stopPropagation()}>
                         <button 
                           className='mr-1.5 text-blue-600 hover:text-blue-800 text-[10px]'
                           onClick={() => router.push(`/admin/loan/${loan.id}`)}

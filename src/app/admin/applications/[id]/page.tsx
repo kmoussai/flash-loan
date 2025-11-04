@@ -420,13 +420,34 @@ export default function ApplicationDetailsPage() {
   }
 
   const handleApprove = async () => {
+    if (!applicationId) return
+    
     setProcessing(true)
-    // TODO: Implement approve API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setProcessing(false)
-    setShowApproveModal(false)
-    alert('Application approved successfully!')
-    router.push('/admin/applications')
+    try {
+      const response = await fetch(`/api/admin/applications/${applicationId}/approve`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to approve application')
+      }
+
+      const data = await response.json()
+      setProcessing(false)
+      setShowApproveModal(false)
+      alert(`Application approved successfully! Loan created with ID: ${data.loan?.id?.slice(0, 8) || 'N/A'}`)
+      
+      // Refresh application details to show updated status
+      await fetchApplicationDetails()
+      
+      // Navigate back to applications list
+      router.push('/admin/applications')
+    } catch (err: any) {
+      console.error('Error approving application:', err)
+      setProcessing(false)
+      alert(`Error: ${err.message || 'Failed to approve application'}`)
+    }
   }
 
   const handleReject = async () => {
