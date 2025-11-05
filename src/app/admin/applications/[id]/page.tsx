@@ -6,12 +6,14 @@ import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import IbvCard from '../../components/IbvCard'
 import TransactionsModal from '../../components/TransactionsModal'
 import DocumentsSection from '../../components/DocumentsSection'
+import ContractViewer from '../../components/ContractViewer'
 import Select from '@/src/app/[locale]/components/Select'
 import Button from '@/src/app/[locale]/components/Button'
 import type {
   LoanApplication,
   ApplicationStatus,
-  InveriteIbvData
+  InveriteIbvData,
+  LoanContract
 } from '@/src/lib/supabase/types'
 
 // IBV Results structure from ibv_results column
@@ -113,6 +115,9 @@ export default function ApplicationDetailsPage() {
   >(undefined)
   const [fetchingInveriteData, setFetchingInveriteData] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'ibv' | 'documents' | 'details' | 'timeline'>('overview')
+  const [showContractViewer, setShowContractViewer] = useState(false)
+  const [contract, setContract] = useState<LoanContract | null>(null)
+  const [loadingContract, setLoadingContract] = useState(false)
 
   // Get transactions from Inverite data
   // Transactions are nested inside accounts[].transactions array
@@ -361,18 +366,47 @@ export default function ApplicationDetailsPage() {
 
   const getStatusBadgeColor = (status: ApplicationStatus) => {
     switch (status) {
-      case 'approved':
-        return 'bg-gray-50 text-gray-900 border border-gray-200'
       case 'pending':
-        return 'bg-gray-50 text-gray-900 border border-gray-200'
+        return 'bg-yellow-50 text-yellow-700 border border-yellow-200'
       case 'processing':
-        return 'bg-gray-50 text-gray-900 border border-gray-200'
+        return 'bg-blue-50 text-blue-700 border border-blue-200'
+      case 'pre_approved':
+        return 'bg-green-50 text-green-700 border border-green-200'
+      case 'contract_pending':
+        return 'bg-purple-50 text-purple-700 border border-purple-200'
+      case 'contract_signed':
+        return 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+      case 'approved':
+        return 'bg-emerald-50 text-emerald-700 border border-emerald-200'
       case 'rejected':
-        return 'bg-gray-50 text-gray-900 border border-gray-200'
+        return 'bg-red-50 text-red-700 border border-red-200'
       case 'cancelled':
-        return 'bg-gray-50 text-gray-900 border border-gray-200'
+        return 'bg-gray-50 text-gray-600 border border-gray-200'
       default:
         return 'bg-gray-50 text-gray-900 border border-gray-200'
+    }
+  }
+
+  const getStatusLabel = (status: ApplicationStatus) => {
+    switch (status) {
+      case 'pending':
+        return 'Pending'
+      case 'processing':
+        return 'Processing'
+      case 'pre_approved':
+        return 'Pre-Approved'
+      case 'contract_pending':
+        return 'Contract Pending'
+      case 'contract_signed':
+        return 'Contract Signed'
+      case 'approved':
+        return 'Approved'
+      case 'rejected':
+        return 'Rejected'
+      case 'cancelled':
+        return 'Cancelled'
+      default:
+        return status
     }
   }
 
@@ -420,13 +454,31 @@ export default function ApplicationDetailsPage() {
   }
 
   const handleApprove = async () => {
+    if (!applicationId) return
+    
     setProcessing(true)
-    // TODO: Implement approve API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setProcessing(false)
-    setShowApproveModal(false)
-    alert('Application approved successfully!')
-    router.push('/admin/applications')
+    try {
+      const response = await fetch(`/api/admin/applications/${applicationId}/approve`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to approve application')
+      }
+
+      const data = await response.json()
+      setProcessing(false)
+      setShowApproveModal(false)
+      alert('Application approved successfully! You can now generate a contract.')
+      
+      // Refresh application details to show updated status
+      await fetchApplicationDetails()
+    } catch (err: any) {
+      console.error('Error approving application:', err)
+      setProcessing(false)
+      alert(`Error: ${err.message || 'Failed to approve application'}`)
+    }
   }
 
   const handleReject = async () => {
@@ -474,6 +526,96 @@ export default function ApplicationDetailsPage() {
       alert(`Error: ${error.message || 'Failed to fetch data from Inverite'}`)
     } finally {
       setFetchingInveriteData(false)
+    }
+  }
+
+  const handleGenerateContract = async () => {
+    if (!applicationId) return
+
+    setLoadingContract(true)
+    try {
+      const response = await fetch(`/api/admin/applications/${applicationId}/contract/generate`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate contract')
+      }
+
+      const result = await response.json()
+      setContract(result.contract)
+      setShowContractViewer(true)
+      
+      // Refresh application details
+      await fetchApplicationDetails()
+    } catch (error: any) {
+      console.error('Error generating contract:', error)
+      alert(`Error: ${error.message || 'Failed to generate contract'}`)
+    } finally {
+      setLoadingContract(false)
+    }
+  }
+
+  const handleViewContract = async () => {
+    if (!applicationId) return
+
+    setLoadingContract(true)
+    try {
+      const response = await fetch(`/api/admin/applications/${applicationId}/contract`)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        if (response.status === 404) {
+          // No contract exists, show generate option
+          setContract(null)
+          setShowContractViewer(true)
+          return
+        }
+        throw new Error(errorData.error || 'Failed to fetch contract')
+      }
+
+      const result = await response.json()
+      setContract(result.contract)
+      setShowContractViewer(true)
+    } catch (error: any) {
+      console.error('Error fetching contract:', error)
+      alert(`Error: ${error.message || 'Failed to fetch contract'}`)
+    } finally {
+      setLoadingContract(false)
+    }
+  }
+
+  const handleSendContract = async () => {
+    if (!applicationId) return
+
+    setLoadingContract(true)
+    try {
+      const response = await fetch(`/api/admin/applications/${applicationId}/contract/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ method: 'email' })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to send contract')
+      }
+
+      const result = await response.json()
+      setContract(result.contract)
+      
+      // Refresh application details
+      await fetchApplicationDetails()
+      
+      alert('Contract sent successfully!')
+    } catch (error: any) {
+      console.error('Error sending contract:', error)
+      alert(`Error: ${error.message || 'Failed to send contract'}`)
+    } finally {
+      setLoadingContract(false)
     }
   }
 
@@ -583,7 +725,7 @@ export default function ApplicationDetailsPage() {
             <span
               className={`inline-flex rounded px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${getStatusBadgeColor(application.application_status)}`}
             >
-              {application.application_status}
+              {getStatusLabel(application.application_status)}
             </span>
           </div>
         </div>
@@ -640,10 +782,20 @@ export default function ApplicationDetailsPage() {
                     <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
                       Status
                     </label>
-                    <p className='mt-2 text-lg font-bold capitalize text-gray-900'>
-                      {application.application_status}
+                    <p className='mt-2 text-lg font-bold text-gray-900'>
+                      {getStatusLabel(application.application_status)}
                     </p>
                   </div>
+                  {application.interest_rate && (
+                    <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-5'>
+                      <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+                        Interest Rate
+                      </label>
+                      <p className='mt-2 text-lg font-bold text-gray-900'>
+                        {application.interest_rate}%
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Loan & Client Info Side by Side */}
@@ -673,6 +825,16 @@ export default function ApplicationDetailsPage() {
                             {application.bankruptcy_plan ? 'Yes' : 'No'}
                           </p>
                         </div>
+                        {application.interest_rate && (
+                          <div>
+                            <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                              Interest Rate
+                            </label>
+                            <p className='mt-1 text-base font-medium text-gray-900'>
+                              {application.interest_rate}% APR
+                            </p>
+                          </div>
+                        )}
                         {application.income_fields &&
                           Object.keys(application.income_fields).length > 0 && (
                             <div>
@@ -766,6 +928,43 @@ export default function ApplicationDetailsPage() {
                       >
                         Approve Application
                       </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Contract Actions */}
+                {(application.application_status === 'pre_approved' || 
+                  application.application_status === 'contract_pending' || 
+                  application.application_status === 'contract_signed' ||
+                  application.application_status === 'approved') && (
+                  <div className='rounded-xl border border-gray-200 bg-white p-6'>
+                    <div className='mb-4'>
+                      <h3 className='text-lg font-semibold text-gray-900'>Contract Management</h3>
+                      <p className='mt-1 text-sm text-gray-600'>
+                        Generate, view, and send loan contracts to clients
+                      </p>
+                    </div>
+                    <div className='flex items-center gap-3'>
+                      {application.application_status === 'pre_approved' && (
+                        <Button
+                          onClick={handleGenerateContract}
+                          disabled={loadingContract}
+                          className='rounded-lg border border-blue-600 bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
+                        >
+                          {loadingContract ? 'Generating...' : 'Generate Contract'}
+                        </Button>
+                      )}
+                      {(application.application_status === 'contract_pending' || 
+                        application.application_status === 'contract_signed' ||
+                        application.application_status === 'approved') && (
+                        <Button
+                          onClick={handleViewContract}
+                          disabled={loadingContract}
+                          className='rounded-lg border border-indigo-600 bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50'
+                        >
+                          {loadingContract ? 'Loading...' : 'View Contract'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1028,9 +1227,59 @@ export default function ApplicationDetailsPage() {
                             </svg>
                           </div>
                           <div className='flex-1'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Approved</p>
+                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                              {application.application_status === 'approved' ? 'Approved (Loan Created)' : 'Pre-Approved'}
+                            </p>
                             <p className='mt-1 text-sm font-medium text-gray-900'>
                               {formatDateTime(application.approved_at)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {application.contract_generated_at && (
+                        <div className='flex items-center gap-4 rounded-lg border border-purple-200 bg-purple-50 p-4'>
+                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-purple-100'>
+                            <svg className='h-5 w-5 text-purple-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                            </svg>
+                          </div>
+                          <div className='flex-1'>
+                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Contract Generated</p>
+                            <p className='mt-1 text-sm font-medium text-gray-900'>
+                              {formatDateTime(application.contract_generated_at)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {application.contract_sent_at && (
+                        <div className='flex items-center gap-4 rounded-lg border border-blue-200 bg-blue-50 p-4'>
+                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-blue-100'>
+                            <svg className='h-5 w-5 text-blue-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' />
+                            </svg>
+                          </div>
+                          <div className='flex-1'>
+                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Contract Sent</p>
+                            <p className='mt-1 text-sm font-medium text-gray-900'>
+                              {formatDateTime(application.contract_sent_at)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {application.contract_signed_at && (
+                        <div className='flex items-center gap-4 rounded-lg border border-indigo-200 bg-indigo-50 p-4'>
+                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100'>
+                            <svg className='h-5 w-5 text-indigo-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' />
+                            </svg>
+                          </div>
+                          <div className='flex-1'>
+                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Contract Signed</p>
+                            <p className='mt-1 text-sm font-medium text-gray-900'>
+                              {formatDateTime(application.contract_signed_at)}
                             </p>
                           </div>
                         </div>
@@ -1222,6 +1471,19 @@ export default function ApplicationDetailsPage() {
           applicationId={applicationId}
           accountIndex={selectedAccountIndex}
         />
+
+        {showContractViewer && (
+          <ContractViewer
+            contract={contract}
+            applicationId={applicationId}
+            onClose={() => {
+              setShowContractViewer(false)
+              setContract(null)
+            }}
+            onGenerate={handleGenerateContract}
+            onSend={handleSendContract}
+          />
+        )}
       </div>
     </AdminDashboardLayout>
   )

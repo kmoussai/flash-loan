@@ -40,3 +40,4 @@ supabase/.temp
 scripts/seed-auth-users.ts
 .env.integration
 supabase/.temp/cli-latest
+.history

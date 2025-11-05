@@ -50,6 +50,9 @@ export async function GET(request: NextRequest) {
     const statusCounts = {
       pending: apps.filter((app: any) => app.application_status === 'pending').length,
       processing: apps.filter((app: any) => app.application_status === 'processing').length,
+      pre_approved: apps.filter((app: any) => app.application_status === 'pre_approved').length,
+      contract_pending: apps.filter((app: any) => app.application_status === 'contract_pending').length,
+      contract_signed: apps.filter((app: any) => app.application_status === 'contract_signed').length,
       approved: apps.filter((app: any) => app.application_status === 'approved').length,
       rejected: apps.filter((app: any) => app.application_status === 'rejected').length,
       cancelled: apps.filter((app: any) => app.application_status === 'cancelled').length
