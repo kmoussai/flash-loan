@@ -13,21 +13,35 @@ export type {
   Address,
   LoanApplication,
   Reference,
+  Loan,
+  LoanPayment,
   UserInsert, 
   StaffInsert, 
   AddressInsert,
   LoanApplicationInsert,
   ReferenceInsert,
+  LoanInsert,
+  LoanPaymentInsert,
+  LoanContract,
+  LoanContractInsert,
+  LoanContractUpdate,
+  ContractTerms,
+  ContractStatus,
+  ClientSignatureData,
   UserUpdate, 
   StaffUpdate,
   AddressUpdate,
   LoanApplicationUpdate,
   ReferenceUpdate,
+  LoanUpdate,
+  LoanPaymentUpdate,
   StaffRole, 
   KycStatus,
   AddressType,
   LoanType,
   ApplicationStatus,
+  LoanStatus,
+  PaymentStatus,
   IncomeSourceType,
   IbvProvider,
   IbvStatus,
@@ -73,6 +87,17 @@ export {
   updateReference,
   deleteReference
 } from './loan-helpers'
+
+// Export contract helpers
+export {
+  createLoanContract,
+  getContractByApplicationId,
+  getContractById,
+  updateLoanContract,
+  updateContractStatus,
+  signContract,
+  sendContract
+} from './contract-helpers'
 
 // Export admin helpers (server-side only)
 export {

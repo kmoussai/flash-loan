@@ -159,7 +159,10 @@ export default function ClientDashboardPage() {
     const statusClasses: Record<ApplicationStatus, string> = {
       pending: 'bg-amber-100 text-amber-800 border-amber-200',
       processing: 'bg-blue-100 text-blue-800 border-blue-200',
-      approved: 'bg-green-100 text-green-800 border-green-200',
+      pre_approved: 'bg-green-100 text-green-800 border-green-200',
+      contract_pending: 'bg-purple-100 text-purple-800 border-purple-200',
+      contract_signed: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      approved: 'bg-emerald-100 text-emerald-800 border-emerald-200',
       rejected: 'bg-red-100 text-red-800 border-red-200',
       cancelled: 'bg-gray-100 text-gray-800 border-gray-200'
     }
@@ -167,6 +170,9 @@ export default function ClientDashboardPage() {
     const statusLabels: Record<ApplicationStatus, string> = {
       pending: t('Status_Pending') || 'Pending',
       processing: t('Status_Processing') || 'Processing',
+      pre_approved: t('Status_Pre_Approved') || 'Pre-Approved',
+      contract_pending: t('Status_Contract_Pending') || 'Contract Pending',
+      contract_signed: t('Status_Contract_Signed') || 'Contract Signed',
       approved: t('Status_Approved') || 'Approved',
       rejected: t('Status_Rejected') || 'Rejected',
       cancelled: t('Status_Cancelled') || 'Cancelled'

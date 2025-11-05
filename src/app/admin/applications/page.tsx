@@ -38,6 +38,9 @@ interface ApplicationWithDetails extends LoanApplication {
 interface StatusCounts {
   pending: number
   processing: number
+  pre_approved: number
+  contract_pending: number
+  contract_signed: number
   approved: number
   rejected: number
   cancelled: number
@@ -54,6 +57,9 @@ export default function ApplicationsPage() {
   const [statusCounts, setStatusCounts] = useState<StatusCounts>({
     pending: 0,
     processing: 0,
+    pre_approved: 0,
+    contract_pending: 0,
+    contract_signed: 0,
     approved: 0,
     rejected: 0,
     cancelled: 0
@@ -75,6 +81,9 @@ export default function ApplicationsPage() {
       setStatusCounts(data.statusCounts || {
         pending: 0,
         processing: 0,
+        pre_approved: 0,
+        contract_pending: 0,
+        contract_signed: 0,
         approved: 0,
         rejected: 0,
         cancelled: 0
@@ -121,12 +130,18 @@ export default function ApplicationsPage() {
 
   const getStatusBadgeColor = (status: ApplicationStatus) => {
     switch (status) {
-      case 'approved':
-        return 'bg-green-100 text-green-800'
       case 'pending':
         return 'bg-yellow-100 text-yellow-800'
       case 'processing':
         return 'bg-blue-100 text-blue-800'
+      case 'pre_approved':
+        return 'bg-green-100 text-green-800'
+      case 'contract_pending':
+        return 'bg-purple-100 text-purple-800'
+      case 'contract_signed':
+        return 'bg-indigo-100 text-indigo-800'
+      case 'approved':
+        return 'bg-emerald-100 text-emerald-800'
       case 'rejected':
         return 'bg-red-100 text-red-800'
       case 'cancelled':
