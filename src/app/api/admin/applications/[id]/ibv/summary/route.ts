@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 
+// Force dynamic rendering - prevent caching of IBV results
+export const dynamic = 'force-dynamic'
+
 // GET /api/admin/applications/[id]/ibv/summary
 // Returns IBV summary (ibv_results) directly from the database
 export async function GET(
@@ -34,13 +37,22 @@ export async function GET(
 
     const a = app as any
 
-    return NextResponse.json({
-      application_id: a.id,
-      ibv_provider: a.ibv_provider || null,
-      ibv_status: a.ibv_status || null,
-      ibv_verified_at: a.ibv_verified_at || null,
-      ibv_results: a.ibv_results || null
-    })
+    return NextResponse.json(
+      {
+        application_id: a.id,
+        ibv_provider: a.ibv_provider || null,
+        ibv_status: a.ibv_status || null,
+        ibv_verified_at: a.ibv_verified_at || null,
+        ibv_results: a.ibv_results || null
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    )
   } catch (e: any) {
     return NextResponse.json(
       { error: 'INTERNAL_ERROR', message: e?.message || 'Unknown error' },

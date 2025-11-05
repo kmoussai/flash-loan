@@ -22,6 +22,12 @@ export type {
   ReferenceInsert,
   LoanInsert,
   LoanPaymentInsert,
+  LoanContract,
+  LoanContractInsert,
+  LoanContractUpdate,
+  ContractTerms,
+  ContractStatus,
+  ClientSignatureData,
   UserUpdate, 
   StaffUpdate,
   AddressUpdate,
@@ -81,6 +87,17 @@ export {
   updateReference,
   deleteReference
 } from './loan-helpers'
+
+// Export contract helpers
+export {
+  createLoanContract,
+  getContractByApplicationId,
+  getContractById,
+  updateLoanContract,
+  updateContractStatus,
+  signContract,
+  sendContract
+} from './contract-helpers'
 
 // Export admin helpers (server-side only)
 export {

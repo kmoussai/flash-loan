@@ -8,7 +8,8 @@ export type StaffRole = 'admin' | 'support' | 'intern'
 export type KycStatus = 'pending' | 'verified' | 'rejected'
 export type AddressType = 'current' | 'previous' | 'mailing' | 'work'
 export type LoanType = 'without-documents' | 'with-documents'
-export type ApplicationStatus = 'pending' | 'processing' | 'approved' | 'rejected' | 'cancelled'
+export type ApplicationStatus = 'pending' | 'processing' | 'pre_approved' | 'contract_pending' | 'contract_signed' | 'approved' | 'rejected' | 'cancelled'
+export type ContractStatus = 'draft' | 'generated' | 'sent' | 'pending_signature' | 'signed' | 'rejected' | 'expired'
 export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'other'
 export type IbvStatus = 'pending' | 'processing' | 'verified' | 'failed' | 'cancelled' | 'expired'
 export type DocumentType = 'drivers_license' | 'passport' | 'health_card' | 'social_insurance' | 'permanent_resident_card' | 'citizenship_card' | 'birth_certificate' | 'other'
@@ -205,6 +206,7 @@ export interface LoanApplication {
   application_status: ApplicationStatus
   assigned_to: string | null
   bankruptcy_plan: boolean | null
+  interest_rate: number | null
   staff_notes: string | null
   rejection_reason: string | null
   created_at: string
@@ -212,6 +214,10 @@ export interface LoanApplication {
   submitted_at: string | null
   approved_at: string | null
   rejected_at: string | null
+  // Contract-related timestamps
+  contract_generated_at: string | null
+  contract_sent_at: string | null
+  contract_signed_at: string | null
   // Modular IBV fields
   ibv_provider: IbvProvider | null
   ibv_status: IbvStatus | null
@@ -280,6 +286,65 @@ export interface LoanPayment {
 }
 
 // ===========================
+// CONTRACT TYPES (JSONB)
+// ===========================
+
+export interface ContractTerms {
+  interest_rate: number
+  term_months: number
+  principal_amount: number
+  total_amount: number
+  fees: {
+    origination_fee?: number
+    processing_fee?: number
+    other_fees?: number
+  }
+  payment_schedule?: Array<{
+    due_date: string
+    amount: number
+    principal: number
+    interest: number
+  }>
+  terms_and_conditions?: string
+  effective_date?: string
+  maturity_date?: string
+}
+
+export interface ClientSignatureData {
+  signature_method: 'click_to_sign' | 'drawn_signature' | 'uploaded'
+  ip_address: string
+  user_agent: string
+  signed_from_device?: string
+  signature_timestamp: string
+  signature_hash?: string
+}
+
+// ===========================
+// LOAN CONTRACT TABLE TYPE
+// ===========================
+
+export interface LoanContract {
+  id: string
+  loan_application_id: string
+  loan_id: string | null
+  contract_version: number
+  contract_terms: ContractTerms
+  contract_document_path: string | null
+  contract_status: ContractStatus
+  client_signed_at: string | null
+  client_signature_data: ClientSignatureData | null
+  staff_signed_at: string | null
+  staff_signature_id: string | null
+  sent_at: string | null
+  sent_method: string | null
+  expires_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  notes: string | null
+}
+
+// ===========================
 // INSERT TYPES
 // ===========================
 
@@ -329,6 +394,7 @@ export interface LoanApplicationInsert {
   income_fields?: Record<string, any>
   application_status?: ApplicationStatus
   bankruptcy_plan?: boolean
+  interest_rate?: number
 }
 
 export interface ReferenceInsert {
@@ -388,11 +454,16 @@ export interface LoanApplicationUpdate {
   application_status?: ApplicationStatus
   assigned_to?: string
   bankruptcy_plan?: boolean
+  interest_rate?: number
   staff_notes?: string
   rejection_reason?: string
   submitted_at?: string
   approved_at?: string
   rejected_at?: string
+  // Contract-related timestamps
+  contract_generated_at?: string
+  contract_sent_at?: string
+  contract_signed_at?: string
   // IBV fields
   ibv_provider?: IbvProvider | null
   ibv_status?: IbvStatus | null
@@ -468,6 +539,40 @@ export interface LoanPaymentUpdate {
   status?: PaymentStatus
 }
 
+export interface LoanContractInsert {
+  loan_application_id: string
+  loan_id?: string | null
+  contract_version?: number
+  contract_terms: ContractTerms
+  contract_document_path?: string | null
+  contract_status?: ContractStatus
+  client_signed_at?: string | null
+  client_signature_data?: ClientSignatureData | null
+  staff_signed_at?: string | null
+  staff_signature_id?: string | null
+  sent_at?: string | null
+  sent_method?: string | null
+  expires_at?: string | null
+  created_by?: string | null
+  notes?: string | null
+}
+
+export interface LoanContractUpdate {
+  loan_id?: string | null
+  contract_version?: number
+  contract_terms?: ContractTerms
+  contract_document_path?: string | null
+  contract_status?: ContractStatus
+  client_signed_at?: string | null
+  client_signature_data?: ClientSignatureData | null
+  staff_signed_at?: string | null
+  staff_signature_id?: string | null
+  sent_at?: string | null
+  sent_method?: string | null
+  expires_at?: string | null
+  notes?: string | null
+}
+
 // ===========================
 // COMBINED DATABASE TYPE
 // ===========================
@@ -514,6 +619,11 @@ export interface Database {
         Row: LoanPayment
         Insert: LoanPaymentInsert
         Update: LoanPaymentUpdate
+      }
+      loan_contracts: {
+        Row: LoanContract
+        Insert: LoanContractInsert
+        Update: LoanContractUpdate
       }
     }
   }

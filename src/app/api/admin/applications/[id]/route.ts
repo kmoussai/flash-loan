@@ -9,6 +9,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 
+// Disable caching to ensure fresh data from database
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -19,7 +23,14 @@ export async function GET(
     if (!applicationId) {
       return NextResponse.json(
         { error: 'Application ID is required' },
-        { status: 400 }
+        {
+          status: 400,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        }
       )
     }
 
@@ -37,6 +48,7 @@ export async function GET(
         income_fields,
         application_status,
         bankruptcy_plan,
+        interest_rate,
         ibv_provider,
         ibv_status,
         ibv_provider_data,
@@ -49,6 +61,9 @@ export async function GET(
         submitted_at,
         approved_at,
         rejected_at,
+        contract_generated_at,
+        contract_sent_at,
+        contract_signed_at,
         users!loan_applications_client_id_fkey (
           id,
           first_name,
@@ -90,14 +105,28 @@ export async function GET(
       console.error('Error fetching application:', error)
       return NextResponse.json(
         { error: 'Failed to fetch application details' },
-        { status: 500 }
+        {
+          status: 500,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        }
       )
     }
 
     if (!application) {
       return NextResponse.json(
         { error: 'Application not found' },
-        { status: 404 }
+        {
+          status: 404,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        }
       )
     }
 
@@ -161,15 +190,32 @@ export async function GET(
       references: Array.isArray(app.references) ? app.references : []
     }
 
-    return NextResponse.json({
-      application: applicationData
-    })
+    // Return response with no-cache headers to prevent caching
+    return NextResponse.json(
+      {
+        application: applicationData
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        }
+      }
+    )
 
   } catch (error: any) {
     console.error('Error in GET /api/admin/applications/[id]:', error)
     return NextResponse.json(
       { error: error.message || 'Failed to fetch application details' },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        }
+      }
     )
   }
 }
