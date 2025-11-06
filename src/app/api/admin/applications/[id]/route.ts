@@ -43,7 +43,6 @@ export async function GET(
       .select(`
         id,
         loan_amount,
-        loan_type,
         income_source,
         income_fields,
         application_status,

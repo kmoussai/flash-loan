@@ -7,7 +7,6 @@
 export type StaffRole = 'admin' | 'support' | 'intern'
 export type KycStatus = 'pending' | 'verified' | 'rejected'
 export type AddressType = 'current' | 'previous' | 'mailing' | 'work'
-export type LoanType = 'without-documents' | 'with-documents'
 export type ApplicationStatus = 'pending' | 'processing' | 'pre_approved' | 'contract_pending' | 'contract_signed' | 'approved' | 'rejected' | 'cancelled'
 export type ContractStatus = 'draft' | 'generated' | 'sent' | 'pending_signature' | 'signed' | 'rejected' | 'expired'
 export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'other'
@@ -203,8 +202,7 @@ export interface LoanApplication {
   client_id: string
   address_id: string | null
   loan_amount: number
-  loan_type: LoanType
-  income_source: IncomeSourceType
+  income_source: IncomeSourceType | null
   income_fields: Record<string, any>
   application_status: ApplicationStatus
   assigned_to: string | null
@@ -421,8 +419,7 @@ export interface LoanApplicationInsert {
   client_id: string
   address_id?: string
   loan_amount: number
-  loan_type: LoanType
-  income_source: IncomeSourceType
+  income_source?: IncomeSourceType
   income_fields?: Record<string, any>
   application_status?: ApplicationStatus
   bankruptcy_plan?: boolean
@@ -480,8 +477,7 @@ export interface AddressUpdate {
 export interface LoanApplicationUpdate {
   address_id?: string
   loan_amount?: number
-  loan_type?: LoanType
-  income_source?: IncomeSourceType
+  income_source?: IncomeSourceType | null
   income_fields?: Record<string, any>
   application_status?: ApplicationStatus
   assigned_to?: string

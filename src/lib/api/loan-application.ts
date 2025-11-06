@@ -41,7 +41,7 @@ export interface SubmitLoanApplicationData {
   reference2Relationship: string
   
   // Income Information
-  incomeSource: string
+  incomeSource?: string
   occupation?: string
   companyName?: string
   supervisorName?: string
@@ -59,7 +59,6 @@ export interface SubmitLoanApplicationData {
   
   // Loan Details
   loanAmount: string
-  loanType: string
   
   // Pre-qualification
   bankruptcyPlan: boolean
@@ -165,7 +164,7 @@ export function formatFormDataForAPI(formData: any): SubmitLoanApplicationData {
     reference2Relationship: formData.reference2Relationship,
     
     // Income Information
-    incomeSource: formData.incomeSource,
+    incomeSource: formData.incomeSource || undefined,
     occupation: formData.occupation,
     companyName: formData.companyName,
     supervisorName: formData.supervisorName,
@@ -183,7 +182,6 @@ export function formatFormDataForAPI(formData: any): SubmitLoanApplicationData {
     
     // Loan Details
     loanAmount: formData.loanAmount,
-    loanType: formData.loanType,
     
     // Pre-qualification
     bankruptcyPlan: formData.bankruptcyPlan,

@@ -44,7 +44,6 @@ export type {
   StaffRole, 
   KycStatus,
   AddressType,
-  LoanType,
   ApplicationStatus,
   LoanStatus,
   PaymentStatus,

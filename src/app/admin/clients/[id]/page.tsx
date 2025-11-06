@@ -39,8 +39,7 @@ interface ClientDetails {
 	applications: Array<{
 		id: string
 		loan_amount: number
-		loan_type: string
-		income_source: string
+		income_source: string | null
 		application_status: string
 		created_at: string
 		submitted_at: string | null

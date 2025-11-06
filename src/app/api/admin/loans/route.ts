@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
         loan_applications (
           id,
           loan_amount,
-          loan_type,
           application_status
         ),
         users!loans_user_id_fkey (

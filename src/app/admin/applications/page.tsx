@@ -181,6 +181,21 @@ export default function ApplicationsPage() {
     return `${addr.street_number || ''} ${addr.street_name || ''}, ${addr.city}, ${addr.province}`.trim()
   }
 
+const formatIncomeSource = (source?: string | null) => {
+  if (!source) return 'N/A'
+
+  const labels: Record<string, string> = {
+    employed: 'Employed',
+    'employment-insurance': 'Employment Insurance',
+    'self-employed': 'Self-Employed',
+    'csst-saaq': 'CSST/SAAQ',
+    'parental-insurance': 'Parental Insurance',
+    'retirement-plan': 'Retirement Plan'
+  }
+
+  return labels[source] || source
+}
+
   return (
     <AdminDashboardLayout>
       <div className='space-y-4'>
@@ -369,7 +384,7 @@ export default function ApplicationsPage() {
                       Amount
                     </th>
                     <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                      Type
+                      Income Source
                     </th>
                     <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                       Status
@@ -419,7 +434,7 @@ export default function ApplicationsPage() {
                       </td>
                       <td className='whitespace-nowrap px-4 py-2'>
                         <span className='text-xs text-gray-600'>
-                          {app.loan_type === 'with-documents' ? 'With Docs' : 'No Docs'}
+                          {formatIncomeSource(app.income_source)}
                         </span>
                       </td>
                       <td className='whitespace-nowrap px-4 py-2'>

@@ -308,114 +308,6 @@ export default function MicroLoanApplicationPage() {
     simulateBankVerification()
   }
 
-  const generateRandomData = () => {
-    const streets = [
-      'Main Street',
-      'King Street',
-      'Queen Street',
-      'First Avenue',
-      'Second Avenue',
-      'Park Avenue',
-      'Oak Street',
-      'Pine Street'
-    ]
-    const cities = [
-      'Montreal',
-      'Toronto',
-      'Vancouver',
-      'Calgary',
-      'Ottawa',
-      'Edmonton',
-      'Winnipeg',
-      'Quebec City'
-    ]
-    const occupations = [
-      'Software Developer',
-      'Teacher',
-      'Nurse',
-      'Engineer',
-      'Manager',
-      'Sales Representative',
-      'Accountant',
-      'Marketing Specialist'
-    ]
-    const companies = [
-      'Tech Corp',
-      'Global Solutions',
-      'Innovation Inc',
-      'Future Systems',
-      'Digital Works',
-      'Creative Agency',
-      'Business Partners',
-      'Enterprise Ltd'
-    ]
-    const supervisors = [
-      'John Smith',
-      'Marie Dubois',
-      'David Johnson',
-      'Sarah Wilson',
-      'Michael Brown',
-      'Lisa Davis',
-      'Robert Miller',
-      'Jennifer Garcia'
-    ]
-    const posts = [
-      'Senior Developer',
-      'Team Lead',
-      'Manager',
-      'Specialist',
-      'Coordinator',
-      'Analyst',
-      'Consultant',
-      'Director'
-    ]
-
-    const randomStreet = streets[Math.floor(Math.random() * streets.length)]
-    const randomCity = cities[Math.floor(Math.random() * cities.length)]
-    const randomOccupation =
-      occupations[Math.floor(Math.random() * occupations.length)]
-    const randomCompany =
-      companies[Math.floor(Math.random() * companies.length)]
-    const randomSupervisor =
-      supervisors[Math.floor(Math.random() * supervisors.length)]
-    const randomPost = posts[Math.floor(Math.random() * posts.length)]
-
-    return {
-      streetNumber: String(Math.floor(Math.random() * 9000 + 100)),
-      streetName: randomStreet,
-      city: randomCity,
-      postalCode: `${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${Math.floor(Math.random() * 10)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))} ${Math.floor(Math.random() * 10)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${Math.floor(Math.random() * 10)}`,
-      movingDate: new Date(
-        Date.now() - Math.floor(Math.random() * 365 * 24 * 60 * 60 * 1000)
-      )
-        .toISOString()
-        .split('T')[0],
-      occupation: randomOccupation,
-      companyName: randomCompany,
-      supervisorName: randomSupervisor,
-      workPhone: `${Math.floor(Math.random() * 2) === 0 ? '514' : '438'}-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
-      post: randomPost,
-      payrollFrequency: ['weekly', 'bi-weekly', 'monthly'][
-        Math.floor(Math.random() * 3)
-      ],
-      dateHired: new Date(
-        Date.now() - Math.floor(Math.random() * 5 * 365 * 24 * 60 * 60 * 1000)
-      )
-        .toISOString()
-        .split('T')[0],
-      nextPayDate: new Date(
-        Date.now() + Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)
-      )
-        .toISOString()
-        .split('T')[0],
-      grossSalary: String(Math.floor(Math.random() * 5000 + 2000)),
-      rentOrMortgageCost: String(Math.floor(Math.random() * 1500 + 500)),
-      heatingElectricityCost: String(Math.floor(Math.random() * 300 + 100)),
-      carLoan: String(Math.floor(Math.random() * 500)),
-      furnitureLoan: String(Math.floor(Math.random() * 200))
-    }
-  }
-
   const handleSubmit = async (inveriteData?: InveriteConnection) => {
     // Prevent duplicate submissions - early return if already submitting
     if (isSubmitting) {
@@ -427,9 +319,6 @@ export default function MicroLoanApplicationPage() {
     setIsSubmitting(true)
     
     try {
-      // Generate random data for missing fields after IBV verification
-      const randomData = generateRandomData()
-      
       // Use provided Inverite data or fall back to state
       const finalInveriteData = inveriteData || inveriteConnection
 
@@ -458,6 +347,8 @@ export default function MicroLoanApplicationPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          isQuickApply: true,
+
           // Personal Information (from form)
           firstName: formData.firstName,
           lastName: formData.lastName,
@@ -466,49 +357,10 @@ export default function MicroLoanApplicationPage() {
           dateOfBirth: formData.dateOfBirth,
           preferredLanguage: formData.preferredLanguage,
 
-          // Address Information (generated after IBV)
-          streetNumber: randomData.streetNumber,
-          streetName: randomData.streetName,
-          apartmentNumber: '',
-          city: randomData.city,
           province: formData.province,
-          postalCode: randomData.postalCode,
-          movingDate: randomData.movingDate,
 
           // Loan Details
           loanAmount: formData.loanAmount,
-          loanType: 'without-documents',
-          incomeSource: 'employed',
-
-          // References (generated after IBV)
-          reference1FirstName: 'John',
-          reference1LastName: 'Doe',
-          reference1Phone: '514-555-0001',
-          reference1Relationship: 'Friend',
-          reference2FirstName: 'Jane',
-          reference2LastName: 'Smith',
-          reference2Phone: '514-555-0002',
-          reference2Relationship: 'Colleague',
-
-          // Quebec-specific fields (only if Quebec)
-          ...(formData.province === 'Quebec' && {
-            residenceStatus: 'tenant',
-            grossSalary: randomData.grossSalary,
-            rentOrMortgageCost: randomData.rentOrMortgageCost,
-            heatingElectricityCost: randomData.heatingElectricityCost,
-            carLoan: randomData.carLoan,
-            furnitureLoan: randomData.furnitureLoan
-          }),
-
-          // Income fields (generated after IBV)
-          occupation: randomData.occupation,
-          companyName: randomData.companyName,
-          supervisorName: randomData.supervisorName,
-          workPhone: randomData.workPhone,
-          post: randomData.post,
-          payrollFrequency: randomData.payrollFrequency,
-          dateHired: randomData.dateHired,
-          nextPayDate: randomData.nextPayDate,
 
           // Modular IBV data (provider-agnostic)
           ibvProvider: finalInveriteData ? 'inverite' : null,

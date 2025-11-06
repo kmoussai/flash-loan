@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { 
   IncomeSourceType,
-  LoanType,
   EmployedIncomeFields,
   EmploymentInsuranceIncomeFields,
   SelfEmployedIncomeFields,
@@ -14,6 +13,9 @@ import {
 // ===========================
 
 interface LoanApplicationRequestBody {
+  // Flow control
+  isQuickApply?: boolean
+
   // Personal Information
   firstName: string
   lastName: string
@@ -23,13 +25,13 @@ interface LoanApplicationRequestBody {
   preferredLanguage: string
   
   // Address Information
-  streetNumber: string
-  streetName: string
+  streetNumber?: string
+  streetName?: string
   apartmentNumber?: string
-  city: string
-  province: string
-  postalCode: string
-  movingDate: string
+  city?: string
+  province?: string
+  postalCode?: string
+  movingDate?: string
   
   // Financial Obligations (Quebec only)
   residenceStatus?: string
@@ -40,17 +42,17 @@ interface LoanApplicationRequestBody {
   furnitureLoan?: string
   
   // References
-  reference1FirstName: string
-  reference1LastName: string
-  reference1Phone: string
-  reference1Relationship: string
-  reference2FirstName: string
-  reference2LastName: string
-  reference2Phone: string
-  reference2Relationship: string
+  reference1FirstName?: string
+  reference1LastName?: string
+  reference1Phone?: string
+  reference1Relationship?: string
+  reference2FirstName?: string
+  reference2LastName?: string
+  reference2Phone?: string
+  reference2Relationship?: string
   
   // Income Information
-  incomeSource: IncomeSourceType
+  incomeSource?: IncomeSourceType
   // Employed fields
   occupation?: string
   companyName?: string
@@ -72,10 +74,9 @@ interface LoanApplicationRequestBody {
   
   // Loan Details
   loanAmount: string
-  loanType: LoanType
   
   // Pre-qualification
-  bankruptcyPlan: boolean
+  bankruptcyPlan?: boolean
   
   // Confirmation
   confirmInformation: boolean
@@ -91,63 +92,94 @@ interface LoanApplicationRequestBody {
 // VALIDATION FUNCTIONS
 // ===========================
 
-function validateRequiredFields(body: LoanApplicationRequestBody): string | null {
+function validateQuickApplyFields(body: LoanApplicationRequestBody): string | null {
   const required = [
     'firstName',
-    'lastName', 
+    'lastName',
     'email',
     'phone',
     'dateOfBirth',
     'preferredLanguage',
-    // 'streetNumber',
-    // 'streetName',
-    // 'city',
-    // 'province',
-    // 'postalCode',
-    // 'movingDate',
-    // 'loanAmount',
-    // 'loanType',
-    // 'incomeSource',
-    // 'reference1FirstName',
-    // 'reference1LastName',
-    // 'reference1Phone',
-    // 'reference1Relationship',
-    // 'reference2FirstName',
-    // 'reference2LastName',
-    // 'reference2Phone',
-    // 'reference2Relationship'
-  ]
-  
+    'province',
+    'loanAmount'
+  ] as const
+
   for (const field of required) {
-    if (!body[field as keyof LoanApplicationRequestBody]) {
+    if (!body[field]) {
+      return `Missing required quick apply field: ${field}`
+    }
+  }
+
+  if (!body.confirmInformation) {
+    return 'You must confirm that the information is accurate'
+  }
+
+  return null
+}
+
+function validateFullApplicationFields(body: LoanApplicationRequestBody): string | null {
+  const required = [
+    'firstName',
+    'lastName',
+    'email',
+    'phone',
+    'dateOfBirth',
+    'preferredLanguage',
+    'streetNumber',
+    'streetName',
+    'city',
+    'province',
+    'postalCode',
+    'movingDate',
+    'loanAmount',
+    'incomeSource',
+    'reference1FirstName',
+    'reference1LastName',
+    'reference1Phone',
+    'reference1Relationship',
+    'reference2FirstName',
+    'reference2LastName',
+    'reference2Phone',
+    'reference2Relationship'
+  ] as const
+
+  for (const field of required) {
+    if (!body[field]) {
       return `Missing required field: ${field}`
     }
   }
-  
-  // Validate Quebec-specific fields
+
   if (body.province === 'Quebec') {
-    const quebecRequired:string[] = [
-      // 'residenceStatus',
-      // 'grossSalary',
-      // 'rentOrMortgageCost',
-      // 'heatingElectricityCost',
-      // 'carLoan',
-      // 'furnitureLoan'
-    ]
-    
+    const quebecRequired = [
+      'residenceStatus',
+      'grossSalary',
+      'rentOrMortgageCost',
+      'heatingElectricityCost',
+      'carLoan',
+      'furnitureLoan'
+    ] as const
+
     for (const field of quebecRequired) {
-      if (!body[field as keyof LoanApplicationRequestBody]) {
+      if (!body[field]) {
         return `Missing required field for Quebec residents: ${field}`
       }
     }
   }
-  
-  // Validate income source specific fields
+
   if (body.incomeSource === 'employed') {
-    const employedRequired:string[] = []
-    // ['occupation', 'companyName', 'supervisorName', 'workPhone', 'post', 'payrollFrequency', 'dateHired', 'nextPayDate']
+    const employedRequired = [
+      'occupation',
+      'companyName',
+      'supervisorName',
+      'workPhone',
+      'post',
+      'payrollFrequency',
+      'dateHired',
+      'nextPayDate'
+    ] as const
+
     for (const field of employedRequired) {
-      if (!body[field as keyof LoanApplicationRequestBody]) {
+      if (!body[field]) {
         return `Missing required field for employed income: ${field}`
       }
     }
@@ -156,24 +188,27 @@ function validateRequiredFields(body: LoanApplicationRequestBody): string | null
       return 'Missing required fields for employment insurance'
     }
   } else if (body.incomeSource === 'self-employed') {
-    const selfEmployedRequired:string[] = []
-    //  ['paidByDirectDeposit', 'selfEmployedPhone', 'depositsFrequency', 'selfEmployedStartDate', 'nextDepositDate']
+    const selfEmployedRequired = [
+      'paidByDirectDeposit',
+      'selfEmployedPhone',
+      'depositsFrequency',
+      'selfEmployedStartDate',
+      'nextDepositDate'
+    ] as const
+
     for (const field of selfEmployedRequired) {
-      if (!body[field as keyof LoanApplicationRequestBody]) {
+      if (!body[field]) {
         return `Missing required field for self-employed income: ${field}`
       }
     }
-  } else {
-    // For csst-saaq, parental-insurance, retirement-plan
-    if (!body.nextDepositDate) {
-      return 'Missing required field: nextDepositDate'
-    }
+  } else if (!body.nextDepositDate) {
+    return 'Missing required field: nextDepositDate'
   }
-  
+
   if (!body.confirmInformation) {
     return 'You must confirm that the information is accurate'
   }
-  
+
   return null
 }
 
@@ -192,9 +227,13 @@ function validateLoanAmount(amount: string): boolean {
 // ===========================
 
 function buildIncomeFields(
-  incomeSource: IncomeSourceType,
+  incomeSource: IncomeSourceType | null,
   body: LoanApplicationRequestBody
-): EmployedIncomeFields | EmploymentInsuranceIncomeFields | SelfEmployedIncomeFields | OtherIncomeFields {
+): EmployedIncomeFields | EmploymentInsuranceIncomeFields | SelfEmployedIncomeFields | OtherIncomeFields | Record<string, never> {
+  if (!incomeSource) {
+    return {}
+  }
+
   switch (incomeSource) {
     case 'employed':
       return {
@@ -241,9 +280,12 @@ function buildIncomeFields(
 export async function POST(request: NextRequest) {
   try {
     const body: LoanApplicationRequestBody = await request.json()
+    const isQuickApply = Boolean(body.isQuickApply)
     
-    // Validate required fields
-    const validationError = validateRequiredFields(body)
+    // Validate required fields based on flow
+    const validationError = isQuickApply
+      ? validateQuickApplyFields(body)
+      : validateFullApplicationFields(body)
     if (validationError) {
       return NextResponse.json(
         { error: validationError },
@@ -362,24 +404,35 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Prepare references as JSONB array
-    const references = [
-      {
-        first_name: body.reference1FirstName,
-        last_name: body.reference1LastName,
-        phone: body.reference1Phone,
-        relationship: body.reference1Relationship
-      },
-      {
-        first_name: body.reference2FirstName,
-        last_name: body.reference2LastName,
-        phone: body.reference2Phone,
-        relationship: body.reference2Relationship
-      }
-    ]
-    
-    // Build income fields
-    const incomeFields = buildIncomeFields(body.incomeSource, body)
+    // Prepare references array when provided (full application)
+    const references = [] as Array<{
+      first_name: string
+      last_name: string
+      phone: string
+      relationship: string
+    }>
+
+    if (!isQuickApply && body.reference1FirstName && body.reference2FirstName) {
+      references.push(
+        {
+          first_name: body.reference1FirstName,
+          last_name: body.reference1LastName!,
+          phone: body.reference1Phone!,
+          relationship: body.reference1Relationship!
+        },
+        {
+          first_name: body.reference2FirstName,
+          last_name: body.reference2LastName!,
+          phone: body.reference2Phone!,
+          relationship: body.reference2Relationship!
+        }
+      )
+    }
+
+    const incomeSource = body.incomeSource ?? null
+    const incomeFields = isQuickApply
+      ? {}
+      : buildIncomeFields(incomeSource, body)
     
     // Call the atomic transaction function
     // Pass NULL for p_client_id if new user - transaction will find/create by email
@@ -393,24 +446,23 @@ export async function POST(request: NextRequest) {
       p_phone: body.phone,
       p_date_of_birth: body.dateOfBirth,
       p_preferred_language: body.preferredLanguage,
-      p_street_number: body.streetNumber,
-      p_street_name: body.streetName,
-      p_apartment_number: body.apartmentNumber || null,
-      p_city: body.city,
-      p_province: body.province,
-      p_postal_code: body.postalCode,
-      p_moving_date: body.movingDate,
+      p_province: body.province || null,
       p_loan_amount: parseFloat(body.loanAmount),
-      p_loan_type: body.loanType,
-      p_income_source: body.incomeSource,
+      p_income_source: incomeSource,
       p_income_fields: incomeFields,
-      p_bankruptcy_plan: body.bankruptcyPlan,
+      p_bankruptcy_plan: body.bankruptcyPlan ?? false,
       p_references: references,
       // Optional parameters (with defaults)
       // For existing users: pass userId (transaction will use it)
       // For new users: pass NULL to let transaction find/use trigger-created user by email
       // This ensures transaction handles everything atomically
       p_client_id: existingUser ? userId : null,
+      p_street_number: body.streetNumber || null,
+      p_street_name: body.streetName || null,
+      p_apartment_number: body.apartmentNumber || null,
+      p_city: body.city || null,
+      p_postal_code: body.postalCode || null,
+      p_moving_date: body.movingDate || null,
       p_residence_status: body.residenceStatus || null,
       p_gross_salary: body.grossSalary ? parseFloat(body.grossSalary) : null,
       p_rent_or_mortgage_cost: body.rentOrMortgageCost ? parseFloat(body.rentOrMortgageCost) : null,

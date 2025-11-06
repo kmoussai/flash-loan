@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         loan_amount,
-        loan_type,
         application_status,
         ibv_provider,
         ibv_status,

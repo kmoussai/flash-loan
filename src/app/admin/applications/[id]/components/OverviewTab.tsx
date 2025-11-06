@@ -93,7 +93,9 @@ const OverviewTab = ({
             Income Source
           </label>
           <p className='mt-2 text-lg font-bold capitalize text-gray-900'>
-            {application.income_source.replace(/-/g, ' ')}
+            {application.income_source
+              ? application.income_source.replace(/-/g, ' ')
+              : 'Not provided'}
           </p>
         </div>
         <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5'>
@@ -138,7 +140,9 @@ const OverviewTab = ({
                   Income Source
                 </label>
                 <p className='mt-1 text-base font-medium capitalize text-gray-900'>
-                  {application.income_source.replace(/-/g, ' ')}
+                  {application.income_source
+                    ? application.income_source.replace(/-/g, ' ')
+                    : 'Not provided'}
                 </p>
               </div>
               <div>
