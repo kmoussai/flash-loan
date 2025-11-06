@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 
+type RequestKind = 'document' | 'address' | 'reference' | 'other'
+
 interface DocumentItem {
   name: string
   path: string
@@ -17,6 +19,44 @@ interface DocumentsResponse {
   application_id?: string | null
   client_files: DocumentItem[]
   application_files: DocumentItem[]
+}
+
+interface RequestFormSubmission {
+  id: string
+  form_data: Record<string, any>
+  submitted_at: string
+  submitted_by?: string | null
+}
+
+interface RequestTypeOption {
+  id: string
+  name: string
+  slug: string
+  default_request_kind: RequestKind
+  default_form_schema?: Record<string, any>
+  description?: string | null
+}
+
+interface AdminRequestItem {
+  id: string
+  status: string
+  request_kind: RequestKind
+  form_schema?: Record<string, any>
+  expires_at?: string | null
+  magic_link_sent_at?: string | null
+  uploaded_file_key?: string | null
+  request_link?: string | null
+  group_link?: string | null
+  group_id?: string | null
+  document_type?: {
+    id: string
+    name: string
+    slug: string
+    default_request_kind?: RequestKind
+    default_form_schema?: Record<string, any>
+    description?: string | null
+  }
+  request_form_submissions?: RequestFormSubmission[]
 }
 
 export default function DocumentsSection({
@@ -35,30 +75,13 @@ export default function DocumentsSection({
   const [loadingDocumentView, setLoadingDocumentView] = useState(false)
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   // Forward-compatible with future non-file (form) requests
-  const [requestTypes, setRequestTypes] = useState<
-    Array<{
-      id: string
-      name: string
-      slug: string
-      kind?: 'document' | 'form'
-      requires_upload?: boolean
-    }>
-  >([])
+  const [requestTypes, setRequestTypes] = useState<RequestTypeOption[]>([])
   const [selectedTypes, setSelectedTypes] = useState<Record<string, boolean>>(
     {}
   )
   const [note, setNote] = useState('')
   const [sending, setSending] = useState(false)
-  const [requests, setRequests] = useState<
-    Array<{
-      id: string
-      status: string
-      document_type: { id: string; name: string; slug: string }
-      magic_link_sent_at?: string | null
-      uploaded_file_key?: string | null
-      request_link?: string | null
-    }>
-  >([])
+  const [requests, setRequests] = useState<AdminRequestItem[]>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [submittingRequest, setSubmittingRequest] = useState<
     Record<string, boolean>
@@ -108,8 +131,13 @@ export default function DocumentsSection({
           id: d.id,
           name: d.name,
           slug: d.slug,
-          kind: d.kind,
-          requires_upload: d.requires_upload
+          default_request_kind:
+            (d.default_request_kind as RequestKind) || 'document',
+          default_form_schema:
+            typeof d.default_form_schema === 'object' && d.default_form_schema !== null
+              ? d.default_form_schema
+              : undefined,
+          description: d.description || null
         }))
       )
     } catch {}
@@ -124,7 +152,41 @@ export default function DocumentsSection({
       )
       if (!res.ok) throw new Error('Failed to load requests')
       const json = await res.json()
-      setRequests(json.requests || [])
+      const normalized: AdminRequestItem[] = (json.requests || []).map(
+        (r: any) => ({
+          ...r,
+          request_kind: (r.request_kind || 'document') as RequestKind,
+          form_schema:
+            typeof r.form_schema === 'object' && r.form_schema !== null
+              ? r.form_schema
+              : undefined,
+          document_type: r.document_type
+            ? {
+                id: r.document_type.id,
+                name: r.document_type.name,
+                slug: r.document_type.slug,
+                default_request_kind:
+                  (r.document_type.default_request_kind as RequestKind) ||
+                  'document',
+                default_form_schema:
+                  typeof r.document_type.default_form_schema === 'object' &&
+                  r.document_type.default_form_schema !== null
+                    ? r.document_type.default_form_schema
+                    : undefined,
+                description: r.document_type.description || null
+              }
+            : undefined,
+          request_form_submissions: Array.isArray(r.request_form_submissions)
+            ? r.request_form_submissions.map((sub: any) => ({
+                id: sub.id,
+                form_data: sub.form_data || {},
+                submitted_at: sub.submitted_at,
+                submitted_by: sub.submitted_by ?? null
+              }))
+            : []
+        })
+      )
+      setRequests(normalized)
     } catch {
       setRequests([])
     } finally {
@@ -140,6 +202,26 @@ export default function DocumentsSection({
     if (!applicationId) return
     const ids = Object.keys(selectedTypes).filter(id => selectedTypes[id])
     if (ids.length === 0) return
+
+    const payloadRequests = ids
+      .map(id => {
+        const type = requestTypes.find(rt => rt.id === id)
+        if (!type) return null
+        return {
+          document_type_id: id,
+          request_kind: type.default_request_kind,
+          form_schema: type.default_request_kind === 'document'
+            ? undefined
+            : type.default_form_schema || {}
+        }
+      })
+      .filter(Boolean) as Array<{
+        document_type_id: string
+        request_kind: RequestKind
+        form_schema?: Record<string, any>
+      }>
+
+    if (!payloadRequests.length) return
     try {
       setSending(true)
       const res = await fetch(
@@ -147,7 +229,7 @@ export default function DocumentsSection({
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ document_type_ids: ids, note })
+          body: JSON.stringify({ requests: payloadRequests, note })
         }
       )
       if (!res.ok) {
@@ -190,6 +272,24 @@ export default function DocumentsSection({
     } catch {
       return dateString
     }
+  }
+
+  const getFieldLabel = (
+    schema: Record<string, any> | undefined,
+    fieldId: string
+  ) => {
+    const fields = Array.isArray(schema?.fields) ? schema?.fields : []
+    const match = fields.find((f: any) => f?.id === fieldId)
+    return match?.label || fieldId
+  }
+
+  const formatSubmissionValue = (value: any) => {
+    if (value === null || value === undefined) return '—'
+    if (typeof value === 'string') return value
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value)
+    }
+    return JSON.stringify(value)
   }
 
   const openPreview = (file: DocumentItem) => {
@@ -300,6 +400,13 @@ export default function DocumentsSection({
       setSubmittingRequest(prev => ({ ...prev, [reqId]: false }))
     }
   }
+
+  const documentTypeOptions = requestTypes.filter(
+    rt => rt.default_request_kind === 'document'
+  )
+  const infoRequestOptions = requestTypes.filter(
+    rt => rt.default_request_kind !== 'document'
+  )
 
   return (
     <>
@@ -478,6 +585,19 @@ export default function DocumentsSection({
                             }
                           }
 
+                          const isDocumentRequest =
+                            r.request_kind === 'document'
+                          const displayName = isDocumentRequest
+                            ? r.document_type?.name || 'Unknown Document'
+                            : r.form_schema?.title ||
+                              r.document_type?.name ||
+                              'Information Request'
+                          const latestSubmission: RequestFormSubmission | undefined =
+                            Array.isArray(r.request_form_submissions) &&
+                            r.request_form_submissions.length > 0
+                              ? r.request_form_submissions[0]
+                              : undefined
+
                           return (
                             <div
                               key={r.id}
@@ -485,17 +605,26 @@ export default function DocumentsSection({
                             >
                               <div className='flex items-start justify-between gap-4'>
                                 <div className='min-w-0 flex-1'>
-                                  <div className='mb-2 flex items-center gap-3'>
+                                  <div className='mb-2 flex flex-wrap items-center gap-3'>
                                     <h4 className='text-sm font-semibold text-gray-900'>
-                                      {r.document_type?.name ||
-                                        'Unknown Document'}
+                                      {displayName}
                                     </h4>
                                     <span
                                       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getStatusStyles(r.status)}`}
                                     >
                                       {r.status}
                                     </span>
+                                    {!isDocumentRequest && (
+                                      <span className='inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700'>
+                                        {r.request_kind}
+                                      </span>
+                                    )}
                                   </div>
+                                  {r.form_schema?.description && !isDocumentRequest && (
+                                    <p className='mb-2 text-xs text-gray-500'>
+                                      {r.form_schema.description}
+                                    </p>
+                                  )}
                                   <div className='flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500'>
                                     {r.magic_link_sent_at && (
                                       <div className='flex items-center gap-1'>
@@ -520,7 +649,7 @@ export default function DocumentsSection({
                                         </span>
                                       </div>
                                     )}
-                                    {r.uploaded_file_key && (
+                                    {isDocumentRequest && r.uploaded_file_key && (
                                       <div className='flex items-center gap-1'>
                                         <svg
                                           className='h-3.5 w-3.5'
@@ -540,11 +669,67 @@ export default function DocumentsSection({
                                         </span>
                                       </div>
                                     )}
+                                    {latestSubmission && (
+                                      <div className='flex items-center gap-1'>
+                                        <svg
+                                          className='h-3.5 w-3.5'
+                                          fill='none'
+                                          stroke='currentColor'
+                                          viewBox='0 0 24 24'
+                                        >
+                                          <path
+                                            strokeLinecap='round'
+                                            strokeLinejoin='round'
+                                            strokeWidth={2}
+                                            d='M9 12h6m-3-3v6m9-3a9 9 0 11-18 0 9 9 0 0118 0z'
+                                          />
+                                        </svg>
+                                        <span>
+                                          Last submission:{' '}
+                                          {formatDateTime(
+                                            latestSubmission.submitted_at
+                                          )}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
+
+                                  {!isDocumentRequest && latestSubmission && (
+                                    <div className='mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700'>
+                                      <p className='mb-2 text-xs uppercase tracking-wide text-gray-500'>
+                                        Submitted details
+                                      </p>
+                                      <dl className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                                        {Object.entries(
+                                          latestSubmission.form_data || {}
+                                        ).map(([key, value]) => (
+                                          <div
+                                            key={key}
+                                            className='rounded bg-white p-3 shadow-sm'
+                                          >
+                                            <dt className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                                              {getFieldLabel(r.form_schema, key)}
+                                            </dt>
+                                            <dd className='mt-1 text-sm text-gray-900 break-words'>
+                                              {formatSubmissionValue(value)}
+                                            </dd>
+                                          </div>
+                                        ))}
+                                        {Object.keys(
+                                          latestSubmission.form_data || {}
+                                        ).length === 0 && (
+                                          <div className='col-span-full text-sm text-gray-500'>
+                                            No fields were provided.
+                                          </div>
+                                        )}
+                                      </dl>
+                                    </div>
+                                  )}
                                 </div>
-                                <div className='flex flex-shrink-0 items-center gap-2'>
+                                <div className='flex flex-shrink-0 flex-wrap items-center gap-2'>
                                   {(r.status === 'uploaded' ||
                                     r.status === 'verified') &&
+                                    isDocumentRequest &&
                                     r.uploaded_file_key && (
                                       <button
                                         onClick={() =>
@@ -827,51 +1012,119 @@ export default function DocumentsSection({
                 <p className='mb-3 text-sm font-semibold text-gray-900'>
                   Select items to request:
                 </p>
-                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-                  {requestTypes.map(dt => {
-                    const isRequested = requests.some(
-                      r =>
-                        r.document_type?.id === dt.id &&
-                        (r.status === 'requested' || r.status === 'uploaded')
-                    )
-                    return (
-                      <label
-                        key={dt.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-lg border-2 p-3 transition-all ${
-                          isRequested
-                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-60'
-                            : selectedTypes[dt.id]
-                              ? 'border-indigo-500 bg-indigo-50'
-                              : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/50'
-                        }`}
-                      >
-                        <input
-                          type='checkbox'
-                          className='mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500'
-                          checked={!!selectedTypes[dt.id]}
-                          onChange={() => toggleType(dt.id)}
-                          disabled={isRequested}
-                        />
-                        <div className='min-w-0 flex-1'>
-                          <span
-                            className={`block text-sm font-medium ${isRequested ? 'text-gray-400' : 'text-gray-900'}`}
-                          >
-                            {dt.name}
-                          </span>
-                          {dt.kind && (
-                            <span className='mt-0.5 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600'>
-                              {dt.kind}
-                            </span>
-                          )}
-                          {isRequested && (
-                            <span className='mt-1 block text-xs font-medium text-amber-600'>
-                              ✓ Already requested
-                            </span>
-                          )}
-                        </div>
-                      </label>
-                    )
-                  })}
+                <div className='space-y-4'>
+                  {documentTypeOptions.length > 0 && (
+                    <div>
+                      <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        Document uploads
+                      </p>
+                      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                        {documentTypeOptions.map(dt => {
+                          const isRequested = requests.some(
+                            r =>
+                              r.document_type?.id === dt.id &&
+                              (r.status === 'requested' ||
+                                r.status === 'uploaded')
+                          )
+                          return (
+                            <label
+                              key={dt.id}
+                              className={`flex cursor-pointer items-start gap-3 rounded-lg border-2 p-3 transition-all ${
+                                isRequested
+                                  ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-60'
+                                  : selectedTypes[dt.id]
+                                    ? 'border-indigo-500 bg-indigo-50'
+                                    : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/50'
+                              }`}
+                            >
+                              <input
+                                type='checkbox'
+                                className='mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500'
+                                checked={!!selectedTypes[dt.id]}
+                                onChange={() => toggleType(dt.id)}
+                                disabled={isRequested}
+                              />
+                              <div className='min-w-0 flex-1'>
+                                <span
+                                  className={`block text-sm font-medium ${isRequested ? 'text-gray-400' : 'text-gray-900'}`}
+                                >
+                                  {dt.name}
+                                </span>
+                                {dt.description && (
+                                  <span className='mt-1 block text-xs text-gray-500'>
+                                    {dt.description}
+                                  </span>
+                                )}
+                                {isRequested && (
+                                  <span className='mt-1 block text-xs font-medium text-amber-600'>
+                                    ✓ Already requested
+                                  </span>
+                                )}
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {infoRequestOptions.length > 0 && (
+                    <div>
+                      <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        Information requests
+                      </p>
+                      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                        {infoRequestOptions.map(dt => {
+                          const isRequested = requests.some(
+                            r =>
+                              r.document_type?.id === dt.id &&
+                              (r.status === 'requested' ||
+                                r.status === 'uploaded')
+                          )
+                          return (
+                            <label
+                              key={dt.id}
+                              className={`flex cursor-pointer items-start gap-3 rounded-lg border-2 p-3 transition-all ${
+                                isRequested
+                                  ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-60'
+                                  : selectedTypes[dt.id]
+                                    ? 'border-indigo-500 bg-indigo-50'
+                                    : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/50'
+                              }`}
+                            >
+                              <input
+                                type='checkbox'
+                                className='mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500'
+                                checked={!!selectedTypes[dt.id]}
+                                onChange={() => toggleType(dt.id)}
+                                disabled={isRequested}
+                              />
+                              <div className='min-w-0 flex-1'>
+                                <span
+                                  className={`block text-sm font-medium ${isRequested ? 'text-gray-400' : 'text-gray-900'}`}
+                                >
+                                  {dt.name}
+                                </span>
+                                <span className='mt-0.5 inline-block rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-700'>
+                                  {dt.default_request_kind}
+                                </span>
+                                {dt.description && (
+                                  <span className='mt-1 block text-xs text-gray-500'>
+                                    {dt.description}
+                                  </span>
+                                )}
+                                {isRequested && (
+                                  <span className='mt-1 block text-xs font-medium text-amber-600'>
+                                    ✓ Already requested
+                                  </span>
+                                )}
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div>

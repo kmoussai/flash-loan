@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isStaff } from '@/src/lib/supabase/admin-helpers'
-import {
-  createServerSupabaseAdminClient,
-  createServerSupabaseClient
-} from '@/src/lib/supabase/server'
+import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { signRequestToken } from '@/src/lib/security/token'
 import { sendEmail } from '@/src/lib/email/smtp'
 import { generateDocumentRequestEmail } from '@/src/lib/email/templates/document-request'
 
 // POST /api/admin/loan-apps/:id/request-docs
-// Body: { document_type_ids: string[], expires_at?: string, requested_by?: string }
+// Body: {
+//   requests?: Array<{ document_type_id: string, request_kind?: 'document' | 'address' | 'reference' | 'other', form_schema?: Record<string, any> }>,
+//   document_type_ids?: string[] // legacy support
+//   expires_at?: string,
+//   requested_by?: string
+// }
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -30,14 +32,84 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}))
-    const documentTypeIds: string[] = Array.isArray(body?.document_type_ids)
+    const legacyDocumentTypeIds: string[] = Array.isArray(body?.document_type_ids)
       ? body.document_type_ids
       : []
+    const incomingRequests: any[] = Array.isArray(body?.requests)
+      ? body.requests
+      : []
     let expiresAt: string | undefined = body?.expires_at
+    const requestedBy: string | null =
+      typeof body?.requested_by === 'string' ? body.requested_by : null
 
-    if (!documentTypeIds.length) {
+    const allowedKinds = new Set(['document', 'address', 'reference', 'other'])
+
+    const normalizedRequests: Array<{
+      document_type_id: string
+      request_kind: 'document' | 'address' | 'reference' | 'other'
+      form_schema: Record<string, any>
+    }> = []
+    const invalidRequestIndexes: number[] = []
+
+    incomingRequests.forEach((item, index) => {
+      const documentTypeId =
+        item && typeof item.document_type_id === 'string'
+          ? (item.document_type_id as string)
+          : null
+
+      if (!documentTypeId) {
+        invalidRequestIndexes.push(index)
+        return
+      }
+
+      const rawKind =
+        item && typeof item.request_kind === 'string'
+          ? item.request_kind.toLowerCase()
+          : 'document'
+
+      const requestKind = allowedKinds.has(rawKind)
+        ? (rawKind as 'document' | 'address' | 'reference' | 'other')
+        : 'document'
+
+      const formSchema =
+        item && typeof item.form_schema === 'object' && item.form_schema !== null && !Array.isArray(item.form_schema)
+          ? (item.form_schema as Record<string, any>)
+          : {}
+
+      normalizedRequests.push({
+        document_type_id: documentTypeId,
+        request_kind: requestKind,
+        form_schema: formSchema
+      })
+    })
+
+    if (invalidRequestIndexes.length > 0) {
       return NextResponse.json(
-        { error: 'document_type_ids is required' },
+        {
+          error: 'Each request must include a document_type_id',
+          invalid_requests: invalidRequestIndexes
+        },
+        { status: 400 }
+      )
+    }
+
+    if (!normalizedRequests.length && legacyDocumentTypeIds.length) {
+      legacyDocumentTypeIds.forEach(dtId => {
+        if (typeof dtId === 'string') {
+          normalizedRequests.push({
+            document_type_id: dtId,
+            request_kind: 'document',
+            form_schema: {}
+          })
+        }
+      })
+    }
+
+    if (!normalizedRequests.length) {
+      return NextResponse.json(
+        {
+          error: 'No requests provided. Include either requests[] or document_type_ids[]'
+        },
         { status: 400 }
       )
     }
@@ -58,35 +130,54 @@ export async function POST(
       )
     }
 
-    // Check for existing requests with same document types
-    const { data: existingRequests, error: checkErr } = await admin
-      .from('document_requests' as any)
-      .select('document_type_id, status')
-      .eq('loan_application_id', loanApplicationId)
-      .in('document_type_id', documentTypeIds)
-      .in('status', ['requested', 'uploaded'])
+    // Check for existing requests with same document types (documents only)
+    const documentRequestCandidates = normalizedRequests.filter(
+      req => req.request_kind === 'document'
+    )
 
-    if (checkErr) {
-      return NextResponse.json(
-        { error: 'Failed to check existing requests' },
-        { status: 400 }
+    let filteredRequests = [...normalizedRequests]
+    let skippedDocumentTypeIds: string[] = []
+
+    if (documentRequestCandidates.length > 0) {
+      const documentTypeIds = Array.from(
+        new Set(documentRequestCandidates.map(req => req.document_type_id))
       )
+
+      const { data: existingRequests, error: checkErr } = await admin
+        .from('document_requests' as any)
+        .select('document_type_id, status')
+        .eq('loan_application_id', loanApplicationId)
+        .in('document_type_id', documentTypeIds)
+        .in('status', ['requested', 'uploaded'])
+
+      if (checkErr) {
+        return NextResponse.json(
+          { error: 'Failed to check existing requests' },
+          { status: 400 }
+        )
+      }
+
+      const existingTypeIds = new Set(
+        (existingRequests || []).map((r: any) => r.document_type_id)
+      )
+
+      filteredRequests = filteredRequests.filter(req => {
+        if (req.request_kind === 'document' && existingTypeIds.has(req.document_type_id)) {
+          skippedDocumentTypeIds.push(req.document_type_id)
+          return false
+        }
+        return true
+      })
     }
 
-    // Filter out document types that already have pending/active requests
-    const existingTypeIds = new Set(
-      (existingRequests || []).map((r: any) => r.document_type_id)
-    )
-    const newDocumentTypeIds = documentTypeIds.filter(
-      dt => !existingTypeIds.has(dt)
-    )
-
-    if (newDocumentTypeIds.length === 0) {
+    if (filteredRequests.length === 0) {
       return NextResponse.json(
         {
           error:
-            'All selected document types already have pending or active requests',
-          skipped: documentTypeIds
+            'All selected requests already have pending or active items for this application',
+          skipped: skippedDocumentTypeIds.length
+            ? Array.from(new Set(skippedDocumentTypeIds))
+            : undefined
         },
         { status: 400 }
       )
@@ -122,12 +213,15 @@ export async function POST(
 
     const groupId = (groupRow as any).id as string
 
-    const rowsToInsert = newDocumentTypeIds.map(dt => ({
+    const rowsToInsert = filteredRequests.map(req => ({
       loan_application_id: loanApplicationId,
-      document_type_id: dt,
+      document_type_id: req.document_type_id,
       group_id: groupId,
+      request_kind: req.request_kind,
       status: 'requested',
       expires_at: expiresAt || null,
+      form_schema: req.form_schema || {},
+      requested_by: requestedBy,
       created_at: nowIso,
       updated_at: nowIso
     }))
@@ -165,10 +259,24 @@ export async function POST(
     }
 
     // Get document type names for email
-    const { data: docTypes, error: docTypesErr } = await admin
-      .from('document_types' as any)
-      .select('id, name')
-      .in('id', newDocumentTypeIds)
+    const documentTypeIdsForEmail = filteredRequests
+      .filter(req => req.request_kind === 'document')
+      .map(req => req.document_type_id)
+
+    const { data: docTypes, error: docTypesErr } =
+      documentTypeIdsForEmail.length > 0
+        ? await admin
+            .from('document_types' as any)
+            .select('id, name')
+            .in('id', Array.from(new Set(documentTypeIdsForEmail)))
+        : { data: [], error: null }
+
+    if (docTypesErr) {
+      return NextResponse.json(
+        { error: docTypesErr.message || 'Failed to fetch document type names' },
+        { status: 400 }
+      )
+    }
 
     // Send email if we have client email and group link
     let emailSent = false
@@ -211,16 +319,16 @@ export async function POST(
     }
 
     // Include information about which types were skipped
-    const skipped = documentTypeIds.filter(
-      dt => !newDocumentTypeIds.includes(dt)
-    )
+    const skipped = skippedDocumentTypeIds.length
+      ? Array.from(new Set(skippedDocumentTypeIds))
+      : undefined
 
     return NextResponse.json({
       ok: true,
       group_id: groupId,
       group_link,
       request_ids: createdIds,
-      skipped: skipped.length > 0 ? skipped : undefined,
+      skipped,
       email_sent: emailSent,
       email_error: emailError || undefined
     })

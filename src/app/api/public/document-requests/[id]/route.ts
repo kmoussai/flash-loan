@@ -13,7 +13,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const admin = createServerSupabaseAdminClient()
     const { data: reqRow, error } = await admin
       .from('document_requests' as any)
-      .select('id, status, expires_at, magic_link_sent_at, document_type:document_type_id(name, slug)')
+      .select(`
+        id,
+        status,
+        request_kind,
+        form_schema,
+        expires_at,
+        magic_link_sent_at,
+        document_type:document_type_id(name, slug),
+        request_form_submissions(id, form_data, submitted_at, submitted_by)
+      `)
       .eq('id', id)
       .single()
 

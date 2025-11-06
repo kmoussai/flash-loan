@@ -17,6 +17,8 @@ export type DocumentStatus = 'pending' | 'under_review' | 'approved' | 'rejected
 export type LoanStatus = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
 export type PaymentFrequency = 'monthly' | 'bi-weekly' | 'weekly'
+export type DocumentRequestStatus = 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
+export type RequestKind = 'document' | 'address' | 'reference' | 'other'
 export type IncomeSourceType = 
   | 'employed' 
   | 'employment-insurance' 
@@ -261,6 +263,33 @@ export interface IdDocument {
   updated_at: string
 }
 
+export interface DocumentRequest {
+  id: string
+  loan_application_id: string
+  document_type_id: string
+  group_id: string | null
+  request_kind: RequestKind
+  status: DocumentRequestStatus
+  request_token_hash: string | null
+  expires_at: string | null
+  magic_link_sent_at: string | null
+  uploaded_file_key: string | null
+  uploaded_meta: Record<string, any>
+  form_schema: Record<string, any>
+  requested_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface RequestFormSubmission {
+  id: string
+  document_request_id: string
+  submitted_by: string | null
+  form_data: Record<string, any>
+  submitted_at: string
+  updated_at: string
+}
+
 export interface Loan {
   id: string
   application_id: string
@@ -494,6 +523,27 @@ export interface IdDocumentInsert {
   notes?: string | null
 }
 
+export interface DocumentRequestInsert {
+  loan_application_id: string
+  document_type_id: string
+  group_id?: string | null
+  request_kind?: RequestKind
+  status?: DocumentRequestStatus
+  request_token_hash?: string | null
+  expires_at?: string | null
+  magic_link_sent_at?: string | null
+  uploaded_file_key?: string | null
+  uploaded_meta?: Record<string, any>
+  form_schema?: Record<string, any>
+  requested_by?: string | null
+}
+
+export interface RequestFormSubmissionInsert {
+  document_request_id: string
+  submitted_by?: string | null
+  form_data: Record<string, any>
+}
+
 export interface IdDocumentUpdate {
   document_type?: DocumentType
   document_name?: string
@@ -503,6 +553,23 @@ export interface IdDocumentUpdate {
   verified_at?: string | null
   expires_at?: string | null
   notes?: string | null
+}
+
+export interface DocumentRequestUpdate {
+  group_id?: string | null
+  request_kind?: RequestKind
+  status?: DocumentRequestStatus
+  request_token_hash?: string | null
+  expires_at?: string | null
+  magic_link_sent_at?: string | null
+  uploaded_file_key?: string | null
+  uploaded_meta?: Record<string, any>
+  form_schema?: Record<string, any>
+  requested_by?: string | null
+}
+
+export interface RequestFormSubmissionUpdate {
+  form_data?: Record<string, any>
 }
 
 export interface LoanInsert {
@@ -627,6 +694,16 @@ export interface Database {
         Row: LoanContract
         Insert: LoanContractInsert
         Update: LoanContractUpdate
+      }
+      document_requests: {
+        Row: DocumentRequest
+        Insert: DocumentRequestInsert
+        Update: DocumentRequestUpdate
+      }
+      request_form_submissions: {
+        Row: RequestFormSubmission
+        Insert: RequestFormSubmissionInsert
+        Update: RequestFormSubmissionUpdate
       }
     }
   }

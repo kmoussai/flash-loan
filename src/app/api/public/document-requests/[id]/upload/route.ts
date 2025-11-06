@@ -18,6 +18,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Authentication: Either token-based OR session-based
     let isAuthorized = false
     
+    let requestRow: any = null
+
     if (token && id) {
       // Token-based auth (public magic link)
       // For groups: verify token against group ID, then check request belongs to group
@@ -29,17 +31,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           // Also verify the request belongs to this group
           const { data: reqRow, error: reqErr } = await admin
             .from('document_requests' as any)
-            .select('id, group_id')
+            .select('id, group_id, request_kind')
             .eq('id', id)
             .single()
           
           if (!reqErr && reqRow && (reqRow as any).group_id === groupParam) {
+            requestRow = reqRow
             isAuthorized = true
           }
         }
       } else {
         // Single request mode: verify token against request ID
-        isAuthorized = verifyRequestToken(token, id)
+        if (verifyRequestToken(token, id)) {
+          const { data: reqRow, error: reqErr } = await admin
+            .from('document_requests' as any)
+            .select('id, request_kind')
+            .eq('id', id)
+            .single()
+
+          if (!reqErr && reqRow) {
+            requestRow = reqRow
+            isAuthorized = true
+          }
+        }
       }
     } else {
       // Session-based auth (authenticated user)
@@ -50,11 +64,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         // Verify the request belongs to this user
         const { data: reqRow, error: reqErr } = await admin
           .from('document_requests' as any)
-          .select('id, loan_applications!inner(id, client_id)')
+          .select('id, request_kind, loan_applications!inner(id, client_id)')
           .eq('id', id)
           .single()
         
         if (!reqErr && reqRow && (reqRow as any).loan_applications.client_id === user.id) {
+          requestRow = reqRow
           isAuthorized = true
         }
       }
@@ -62,6 +77,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     
     if (!id || !isAuthorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!requestRow || (requestRow as any).request_kind !== 'document') {
+      return NextResponse.json({ error: 'Uploads are only allowed for document requests' }, { status: 400 })
     }
 
     const form = await request.formData()
