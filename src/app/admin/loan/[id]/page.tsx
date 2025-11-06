@@ -56,7 +56,6 @@ interface LoanFromAPI {
   loan_applications: {
     id: string
     loan_amount: number
-    loan_type: string
     application_status: string
     income_source?: string
     created_at?: string

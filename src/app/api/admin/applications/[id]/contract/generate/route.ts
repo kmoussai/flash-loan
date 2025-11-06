@@ -43,7 +43,6 @@ export async function POST(
       .select(`
         id,
         loan_amount,
-        loan_type,
         application_status,
         interest_rate,
         users!loan_applications_client_id_fkey (
@@ -66,7 +65,6 @@ export async function POST(
     const app = application as {
       id: string
       loan_amount: number
-      loan_type: string
       application_status: string
       interest_rate: number | null
       users: {

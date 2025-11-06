@@ -52,6 +52,23 @@ export default function ClientDashboardPage() {
     file: null as File | null
   })
 
+  const formatIncomeSource = (source?: string | null) => {
+    if (!source) {
+      return 'Not provided'
+    }
+
+    const labels: Record<string, string> = {
+      employed: 'Employed',
+      'employment-insurance': 'Employment Insurance',
+      'self-employed': 'Self-Employed',
+      'csst-saaq': 'CSST/SAAQ',
+      'parental-insurance': 'Parental Insurance',
+      'retirement-plan': 'Retirement Plan'
+    }
+
+    return labels[source] || source
+  }
+
   useEffect(() => {
     fetchDashboardData()
     fetchIdDocuments()
@@ -1349,13 +1366,10 @@ export default function ClientDashboardPage() {
                                 />
                               </svg>
                               <span className='text-text-secondary'>
-                                {t('Loan_Type') || 'Loan Type'}:{' '}
+                                {t('Income_Source') || 'Income Source'}:{' '}
                               </span>
                               <span className='font-semibold text-primary'>
-                                {application.loan_type === 'with-documents'
-                                  ? t('Loan_With_Documents') || 'With Documents'
-                                  : t('Loan_Without_Documents') ||
-                                    'Without Documents'}
+                                {formatIncomeSource(application.income_source)}
                               </span>
                             </div>
                             <div className='flex items-center gap-2 text-sm'>

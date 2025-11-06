@@ -40,8 +40,8 @@ export async function GET(
 
 		// Fetch applications (lightweight list)
 		const { data: applications, error: appsError } = await supabase
-			.from('loan_applications')
-			.select('id, loan_amount, loan_type, income_source, application_status, created_at, submitted_at')
+		.from('loan_applications')
+		.select('id, loan_amount, income_source, application_status, created_at, submitted_at')
 			.eq('client_id', clientId)
 			.order('created_at', { ascending: false })
 

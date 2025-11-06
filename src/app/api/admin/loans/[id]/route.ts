@@ -43,7 +43,6 @@ export async function GET(
         loan_applications (
           id,
           loan_amount,
-          loan_type,
           application_status,
           income_source,
           created_at,

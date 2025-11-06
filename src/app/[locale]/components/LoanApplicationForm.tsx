@@ -81,7 +81,6 @@ interface FormData {
   paymentFrequency: string
 
   // Confirmation & Submission
-  loanType: string // 'without-documents' or 'with-documents'
   confirmInformation: boolean
   agreeTerms: boolean
   agreePrivacy: boolean
@@ -195,7 +194,6 @@ export default function LoanApplicationForm() {
       loanPurpose: '',
       repaymentPeriod: '',
       paymentFrequency: '',
-      loanType: '',
       confirmInformation: false,
       agreeTerms: false,
       agreePrivacy: false,
@@ -440,7 +438,7 @@ export default function LoanApplicationForm() {
         reference2Relationship: formData.reference2Relationship,
         
         // Income Information
-        incomeSource: formData.incomeSource,
+        incomeSource: formData.incomeSource || undefined,
         // Include income fields based on income source
         ...(formData.incomeSource === 'employed' && {
           occupation: formData.occupation,
@@ -469,7 +467,6 @@ export default function LoanApplicationForm() {
         
         // Loan Details
         loanAmount: formData.loanAmount,
-        loanType: 'without-documents', // All loans use IBV verification
         
         // Pre-qualification
         bankruptcyPlan: bankruptcyPlan,
@@ -571,7 +568,6 @@ export default function LoanApplicationForm() {
       loanPurpose: '',
       repaymentPeriod: '',
       paymentFrequency: '',
-      loanType: '',
       confirmInformation: false,
       agreeTerms: false,
       agreePrivacy: false,
@@ -668,9 +664,8 @@ export default function LoanApplicationForm() {
       loanPurpose: '',
       repaymentPeriod: '',
       paymentFrequency: '',
-
+      
       // Confirmation & Submission
-      loanType: 'without-documents',
       confirmInformation: true,
       agreeTerms: true,
       agreePrivacy: true,
