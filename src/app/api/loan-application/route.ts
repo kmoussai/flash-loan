@@ -445,9 +445,11 @@ export async function POST(request: NextRequest) {
     
     const txResult = result as any
 
+    let requestGuidFromBody: string | null = null
+
     // If Inverite request GUID is present in provider data, persist it in ibv_results for easier access
     try {
-      const requestGuidFromBody = (body.ibvProviderData as any)?.request_guid || null
+      requestGuidFromBody = (body.ibvProviderData as any)?.request_guid || null
       if (requestGuidFromBody && txResult?.application_id) {
         const supabaseForUpdate = createServerSupabaseAdminClient()
         await (supabaseForUpdate as any)
@@ -459,7 +461,44 @@ export async function POST(request: NextRequest) {
       }
     } catch (e) {
       // Non-fatal: continue even if this convenience write fails
-      console.warn('[Loan Application] Failed to set initial ibv_results.request_guid')
+      console.warn('[Loan Application] Failed to set initial ibv_results.request_guid', e)
+    }
+
+    // Automatically fetch Inverite data when an Inverite request GUID is available
+    try {
+      const shouldFetchInverite = body.ibvProvider === 'inverite'
+      const requestGuid =
+        requestGuidFromBody ||
+        (txResult?.ibv_provider_data as any)?.request_guid ||
+        (body.ibvProviderData as any)?.requestGuid ||
+        null
+
+      if (shouldFetchInverite && requestGuid && txResult?.application_id) {
+        const baseUrl = request.nextUrl.origin
+        const fetchUrl = `${baseUrl}/api/inverite/fetch/${encodeURIComponent(
+          requestGuid
+        )}?application_id=${encodeURIComponent(txResult.application_id)}`
+
+        console.log('[Loan Application] Fetching Inverite data for request GUID:', requestGuid)
+
+        const fetchResponse = await fetch(fetchUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!fetchResponse.ok) {
+          const errorText = await fetchResponse.text().catch(() => '')
+          console.warn(
+            '[Loan Application] Inverite fetch failed:',
+            fetchResponse.status,
+            errorText
+          )
+        }
+      }
+    } catch (inveriteError) {
+      console.warn('[Loan Application] Failed to fetch Inverite data automatically', inveriteError)
     }
     
     // Return success response

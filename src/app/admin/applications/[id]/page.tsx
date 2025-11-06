@@ -3,98 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
-import IbvCard from '../../components/IbvCard'
 import TransactionsModal from '../../components/TransactionsModal'
-import DocumentsSection from '../../components/DocumentsSection'
 import ContractViewer from '../../components/ContractViewer'
-import Select from '@/src/app/[locale]/components/Select'
-import Button from '@/src/app/[locale]/components/Button'
-import type {
-  LoanApplication,
-  ApplicationStatus,
-  InveriteIbvData,
-  LoanContract
-} from '@/src/lib/supabase/types'
-
-// IBV Results structure from ibv_results column
-interface IbvResults {
-  extracted_at?: string
-  accounts_count?: number
-  accounts_summary?: Array<{
-    account_index?: number
-    account_type?: string | null
-    account_description?: string | null
-    institution?: string | null
-    quarter_all_time?: {
-      number_of_deposits?: number | null
-      amount_of_deposits?: number | null
-      average_amount_of_deposits?: number | null
-      number_of_withdrawals?: number | null
-      amount_of_withdrawals?: number | null
-      average_balance?: number | null
-      highest_balance?: number | null
-      lowest_balance?: number | null
-      ending_balance?: number | null
-      overdraft_count?: number | null
-      negative_balance_count?: number | null
-      negative_balance_days?: number | null
-      total_transactions?: number | null
-    } | null
-    current_balance?: {
-      available?: number | null
-      current?: number | null
-    } | null
-    transaction_count?: number
-  }>
-  aggregates?: {
-    total_deposits?: number | null
-    total_withdrawals?: number | null
-    total_accounts?: number
-    accounts_with_statistics?: number
-  }
-}
-
-// Extended type for application with client details
-interface ApplicationWithDetails extends LoanApplication {
-  ibv_results?: IbvResults | null
-  users: {
-    id: string
-    first_name: string | null
-    last_name: string | null
-    email: string | null
-    phone: string | null
-    preferred_language: string | null
-    kyc_status: string
-    date_of_birth: string | null
-    residence_status: string | null
-    gross_salary: number | null
-    rent_or_mortgage_cost: number | null
-    heating_electricity_cost: number | null
-    car_loan: number | null
-    furniture_loan: number | null
-  } | null
-  addresses:
-    | {
-        id: string
-        street_number: string | null
-        street_name: string | null
-        apartment_number: string | null
-        city: string
-        province: string
-        postal_code: string
-        moving_date: string | null
-      }[]
-    | null
-  references:
-    | {
-        id: string
-        first_name: string
-        last_name: string
-        phone: string
-        relationship: string
-      }[]
-    | null
-}
+import OverviewTab from './components/OverviewTab'
+import IbvTab from './components/IbvTab'
+import DocumentsTab from './components/DocumentsTab'
+import DetailsTab from './components/DetailsTab'
+import TimelineTab from './components/TimelineTab'
+import type { ApplicationStatus, InveriteIbvData, LoanContract, PaymentFrequency } from '@/src/lib/supabase/types'
+import type { ApplicationWithDetails, IbvResults } from './types'
 
 export default function ApplicationDetailsPage() {
   const router = useRouter()
@@ -410,38 +327,10 @@ export default function ApplicationDetailsPage() {
     }
   }
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
-  const formatDateTime = (dateString: string | null) => {
-    if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-CA', {
       style: 'currency',
       currency: 'CAD'
-    }).format(amount)
-  }
-
-  const formatCurrencyShort = (amount: number) => {
-    return new Intl.NumberFormat('en-CA', {
-      style: 'currency',
-      currency: 'CAD',
-      notation: 'compact'
     }).format(amount)
   }
 
@@ -529,13 +418,53 @@ export default function ApplicationDetailsPage() {
     }
   }
 
-  const handleGenerateContract = async () => {
+  type ContractGenerationOptions = {
+    termMonths?: number
+    paymentFrequency?: PaymentFrequency
+    numberOfPayments?: number
+    loanAmount?: number
+    nextPaymentDate?: string
+  }
+
+  type ContractGenerationPayload = {
+    termMonths?: number
+    paymentFrequency?: PaymentFrequency
+    numberOfPayments?: number
+    loanAmount?: number
+    firstPaymentDate?: string
+  }
+
+  const handleGenerateContract = async (options?: ContractGenerationOptions) => {
     if (!applicationId) return
 
     setLoadingContract(true)
     try {
+      const payload: ContractGenerationPayload = {}
+      if (options?.termMonths && Number.isFinite(options.termMonths)) {
+        payload.termMonths = options.termMonths
+      }
+      if (options?.paymentFrequency) {
+        payload.paymentFrequency = options.paymentFrequency
+      }
+      if (options?.numberOfPayments && Number.isFinite(options.numberOfPayments)) {
+        payload.numberOfPayments = Math.max(1, Math.round(options.numberOfPayments))
+      }
+      if (options?.loanAmount && Number.isFinite(options.loanAmount)) {
+        payload.loanAmount = Math.max(0, Math.round(options.loanAmount * 100) / 100)
+      }
+      if (options?.nextPaymentDate) {
+        const parsedDate = new Date(options.nextPaymentDate)
+        if (!Number.isNaN(parsedDate.getTime())) {
+          payload.firstPaymentDate = parsedDate.toISOString().split('T')[0]
+        }
+      }
+
       const response = await fetch(`/api/admin/applications/${applicationId}/contract/generate`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       })
 
       if (!response.ok) {
@@ -617,13 +546,6 @@ export default function ApplicationDetailsPage() {
     } finally {
       setLoadingContract(false)
     }
-  }
-
-  const getAddressString = () => {
-    if (!application?.addresses || application.addresses.length === 0)
-      return 'N/A'
-    const addr = application.addresses[0]
-    return `${addr.street_number || ''} ${addr.street_name || ''}${addr.apartment_number ? `, Apt ${addr.apartment_number}` : ''}, ${addr.city}, ${addr.province} ${addr.postal_code}`.trim()
   }
 
   if (loading) {
@@ -759,597 +681,45 @@ export default function ApplicationDetailsPage() {
 
             {/* Tab: Overview */}
             {activeTab === 'overview' && (
-              <div className='space-y-6'>
-                {/* Quick Stats Grid */}
-                <div className='grid gap-4 md:grid-cols-3'>
-                  <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-5'>
-                    <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
-                      Loan Amount
-                    </label>
-                    <p className='mt-2 text-3xl font-bold text-gray-900'>
-                      {formatCurrency(application.loan_amount)}
-                    </p>
-                  </div>
-                  <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-5'>
-                    <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
-                      Income Source
-                    </label>
-                    <p className='mt-2 text-lg font-bold capitalize text-gray-900'>
-                      {application.income_source.replace(/-/g, ' ')}
-                    </p>
-                  </div>
-                  <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5'>
-                    <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
-                      Status
-                    </label>
-                    <p className='mt-2 text-lg font-bold text-gray-900'>
-                      {getStatusLabel(application.application_status)}
-                    </p>
-                  </div>
-                  {application.interest_rate && (
-                    <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-5'>
-                      <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
-                        Interest Rate
-                      </label>
-                      <p className='mt-2 text-lg font-bold text-gray-900'>
-                        {application.interest_rate}%
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Loan & Client Info Side by Side */}
-                <div className='grid gap-6 lg:grid-cols-2'>
-                  {/* Loan Information */}
-                  <div className='overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
-                    <div className='border-b border-gray-200 bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4'>
-                      <h2 className='text-lg font-bold text-gray-900'>
-                        Loan Information
-                      </h2>
-                    </div>
-                    <div className='p-6'>
-                      <div className='space-y-4'>
-                        <div>
-                          <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                            Income Source
-                          </label>
-                          <p className='mt-1 text-base font-medium capitalize text-gray-900'>
-                            {application.income_source.replace(/-/g, ' ')}
-                          </p>
-                        </div>
-                        <div>
-                          <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                            Bankruptcy Plan
-                          </label>
-                          <p className='mt-1 text-base font-medium text-gray-900'>
-                            {application.bankruptcy_plan ? 'Yes' : 'No'}
-                          </p>
-                        </div>
-                        {application.interest_rate && (
-                          <div>
-                            <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                              Interest Rate
-                            </label>
-                            <p className='mt-1 text-base font-medium text-gray-900'>
-                              {application.interest_rate}% APR
-                            </p>
-                          </div>
-                        )}
-                        {application.income_fields &&
-                          Object.keys(application.income_fields).length > 0 && (
-                            <div>
-                              <label className='mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500'>
-                                Income Details
-                              </label>
-                              <div className='space-y-1 text-sm text-gray-700'>
-                                {Object.entries(application.income_fields)
-                                  .slice(0, 3)
-                                  .map(([key, value]) => (
-                                    <p key={key}>
-                                      <span className='font-medium capitalize'>
-                                        {key.replace(/_/g, ' ')}:
-                                      </span>{' '}
-                                      {String(value)}
-                                    </p>
-                                  ))}
-                                {Object.keys(application.income_fields).length > 3 && (
-                                  <p className='text-xs text-gray-500'>
-                                    +{Object.keys(application.income_fields).length - 3} more
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Client Quick Info */}
-                  <div className='overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
-                    <div className='border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4'>
-                      <h2 className='text-lg font-bold text-gray-900'>
-                        Client Information
-                      </h2>
-                    </div>
-                    <div className='p-6'>
-                      <div className='space-y-4'>
-                        <div>
-                          <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                            Email
-                          </label>
-                          <p className='mt-1 text-sm font-medium text-gray-900'>
-                            {application.users?.email || 'N/A'}
-                          </p>
-                        </div>
-                        <div>
-                          <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                            Phone
-                          </label>
-                          <p className='mt-1 text-sm font-medium text-gray-900'>
-                            {application.users?.phone || 'N/A'}
-                          </p>
-                        </div>
-                        <div>
-                          <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                            Language
-                          </label>
-                          <p className='mt-1 text-sm font-medium text-gray-900'>
-                            {application.users?.preferred_language || 'N/A'}
-                          </p>
-                        </div>
-                        {application.addresses && application.addresses.length > 0 && (
-                          <div>
-                            <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                              Address
-                            </label>
-                            <p className='mt-1 text-sm text-gray-900'>
-                              {getAddressString()}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                {application.application_status === 'pending' && (
-                  <div className='rounded-xl border border-gray-200 bg-white p-6'>
-                    <div className='flex items-center justify-center gap-4'>
-                      <Button
-                        onClick={() => setShowRejectModal(true)}
-                        className='rounded-lg border border-red-300 bg-white px-6 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50'
-                      >
-                        Reject Application
-                      </Button>
-                      <Button
-                        onClick={() => setShowApproveModal(true)}
-                        className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg'
-                      >
-                        Approve Application
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Contract Actions */}
-                {(application.application_status === 'pre_approved' || 
-                  application.application_status === 'contract_pending' || 
-                  application.application_status === 'contract_signed' ||
-                  application.application_status === 'approved') && (
-                  <div className='rounded-xl border border-gray-200 bg-white p-6'>
-                    <div className='mb-4'>
-                      <h3 className='text-lg font-semibold text-gray-900'>Contract Management</h3>
-                      <p className='mt-1 text-sm text-gray-600'>
-                        Generate, view, and send loan contracts to clients
-                      </p>
-                    </div>
-                    <div className='flex items-center gap-3'>
-                      {application.application_status === 'pre_approved' && (
-                        <Button
-                          onClick={handleGenerateContract}
-                          disabled={loadingContract}
-                          className='rounded-lg border border-blue-600 bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
-                        >
-                          {loadingContract ? 'Generating...' : 'Generate Contract'}
-                        </Button>
-                      )}
-                      {(application.application_status === 'contract_pending' || 
-                        application.application_status === 'contract_signed' ||
-                        application.application_status === 'approved') && (
-                        <Button
-                          onClick={handleViewContract}
-                          disabled={loadingContract}
-                          className='rounded-lg border border-indigo-600 bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50'
-                        >
-                          {loadingContract ? 'Loading...' : 'View Contract'}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <OverviewTab
+                application={application}
+                loadingContract={loadingContract}
+                onGenerateContract={options => handleGenerateContract(options)}
+                onViewContract={handleViewContract}
+                onOpenApproveModal={() => setShowApproveModal(true)}
+                onOpenRejectModal={() => setShowRejectModal(true)}
+              />
             )}
 
             {/* Tab: IBV Verification */}
             {activeTab === 'ibv' && (
-              <div className='space-y-6'>
-                <IbvCard
+              <IbvTab
                   applicationId={applicationId}
                   onViewTransactions={accountIndex => {
                     setSelectedAccountIndex(accountIndex)
                     setShowTransactionsModal(true)
                   }}
                 />
-              </div>
             )}
 
             {/* Tab: Documents */}
             {activeTab === 'documents' && (
-              <div>
-                <DocumentsSection
+              <DocumentsTab
                   clientId={application.users?.id || ''}
                   applicationId={applicationId}
                 />
-              </div>
             )}
 
             {/* Tab: Details */}
             {activeTab === 'details' && (
-              <div className='space-y-6'>
-                {/* Additional Client Information */}
-                <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
-                  <div className='border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white px-6 py-4'>
-                    <h3 className='text-lg font-bold text-gray-900'>
-                      Additional Information
-                    </h3>
-                  </div>
-                  <div className='p-6'>
-                    <div className='grid gap-6 md:grid-cols-2'>
-                      <div>
-                        <label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                          Email
-                        </label>
-                        <p className='mt-1 text-sm font-medium text-gray-900'>
-                          {application.users?.email || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                          Phone
-                        </label>
-                        <p className='mt-1 text-sm font-medium text-gray-900'>
-                          {application.users?.phone || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                          Language
-                        </label>
-                        <p className='mt-1 text-sm font-medium text-gray-900'>
-                          {application.users?.preferred_language || 'N/A'}
-                        </p>
-                      </div>
-                      {application.addresses && application.addresses.length > 0 && (
-                        <div>
-                          <label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                            Address
-                          </label>
-                          <p className='mt-1 text-sm text-gray-900'>
-                            {getAddressString()}
-                          </p>
-                          {application.addresses[0].moving_date && (
-                            <p className='mt-1 text-xs text-gray-500'>
-                              Moved in: {formatDate(application.addresses[0].moving_date)}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Financial Obligations */}
-                    {(application.users?.residence_status ||
-                      application.users?.gross_salary) && (
-                      <div className='mt-6 border-t border-gray-200 pt-6'>
-                        <h4 className='mb-4 text-sm font-bold text-gray-900'>
-                          Financial Information
-                        </h4>
-                        <div className='grid gap-4 md:grid-cols-2'>
-                          {application.users?.residence_status && (
-                            <div>
-                              <label className='text-xs font-medium text-gray-500'>
-                                Residence Status
-                              </label>
-                              <p className='mt-1 text-sm font-semibold text-gray-900'>
-                                {application.users.residence_status}
-                              </p>
-                            </div>
-                          )}
-                          {application.users?.gross_salary && (
-                            <div>
-                              <label className='text-xs font-medium text-gray-500'>
-                                Gross Salary
-                              </label>
-                              <p className='mt-1 text-sm font-semibold text-gray-900'>
-                                {formatCurrency(application.users.gross_salary)}
-                              </p>
-                            </div>
-                          )}
-                          {application.users?.rent_or_mortgage_cost && (
-                            <div>
-                              <label className='text-xs font-medium text-gray-500'>
-                                Rent/Mortgage
-                              </label>
-                              <p className='mt-1 text-sm font-semibold text-gray-900'>
-                                {formatCurrency(application.users.rent_or_mortgage_cost)}
-                              </p>
-                            </div>
-                          )}
-                          {application.users?.heating_electricity_cost && (
-                            <div>
-                              <label className='text-xs font-medium text-gray-500'>
-                                Heating/Electricity
-                              </label>
-                              <p className='mt-1 text-sm font-semibold text-gray-900'>
-                                {formatCurrency(application.users.heating_electricity_cost)}
-                              </p>
-                            </div>
-                          )}
-                          {application.users?.car_loan && (
-                            <div>
-                              <label className='text-xs font-medium text-gray-500'>
-                                Car Loan
-                              </label>
-                              <p className='mt-1 text-sm font-semibold text-gray-900'>
-                                {formatCurrency(application.users.car_loan)}
-                              </p>
-                            </div>
-                          )}
-                          {application.users?.furniture_loan && (
-                            <div>
-                              <label className='text-xs font-medium text-gray-500'>
-                                Furniture Loan
-                              </label>
-                              <p className='mt-1 text-sm font-semibold text-gray-900'>
-                                {formatCurrency(application.users.furniture_loan)}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Income Details */}
-                {application.income_fields &&
-                  Object.keys(application.income_fields).length > 0 && (
-                    <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
-                      <div className='border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4'>
-                        <h3 className='text-lg font-bold text-gray-900'>
-                          Income Details
-                        </h3>
-                      </div>
-                      <div className='p-6'>
-                        <div className='grid gap-3 md:grid-cols-2'>
-                          {Object.entries(application.income_fields).map(
-                            ([key, value]) => (
-                              <div key={key} className='rounded-lg border border-gray-200 bg-gray-50 p-3'>
-                                <label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                                  {key.replace(/_/g, ' ')}
-                                </label>
-                                <p className='mt-1 text-sm font-medium text-gray-900'>
-                                  {String(value)}
-                                </p>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                {/* References */}
-                {application.references && application.references.length > 0 && (
-                  <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
-                    <div className='border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4'>
-                      <h3 className='text-lg font-bold text-gray-900'>
-                        References
-                      </h3>
-                    </div>
-                    <div className='p-6'>
-                      <div className='grid gap-4 md:grid-cols-2'>
-                        {application.references.map((ref) => (
-                          <div
-                            key={ref.id}
-                            className='rounded-lg border border-gray-200 bg-gray-50 p-4'
-                          >
-                            <h4 className='mb-2 font-semibold text-gray-900'>
-                              {ref.first_name} {ref.last_name}
-                            </h4>
-                            <div className='space-y-1 text-sm text-gray-600'>
-                              <p>Phone: {ref.phone}</p>
-                              <p>Relationship: {ref.relationship}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <DetailsTab application={application} />
             )}
 
             {/* Tab: Timeline */}
             {activeTab === 'timeline' && (
-              <div className='space-y-6'>
-                <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
-                  <div className='border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4'>
-                    <h3 className='text-lg font-bold text-gray-900'>Timeline</h3>
-                  </div>
-                  <div className='p-6'>
-                    <div className='space-y-4'>
-                      <div className='flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4'>
-                        <div className='flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100'>
-                          <svg className='h-5 w-5 text-indigo-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' />
-                          </svg>
-                        </div>
-                        <div className='flex-1'>
-                          <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Created</p>
-                          <p className='mt-1 text-sm font-medium text-gray-900'>
-                            {formatDateTime(application.created_at)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {application.submitted_at && (
-                        <div className='flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-blue-100'>
-                            <svg className='h-5 w-5 text-blue-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
-                            </svg>
-                          </div>
-                          <div className='flex-1'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Submitted</p>
-                            <p className='mt-1 text-sm font-medium text-gray-900'>
-                              {formatDateTime(application.submitted_at)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {application.approved_at && (
-                        <div className='flex items-center gap-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100'>
-                            <svg className='h-5 w-5 text-emerald-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
-                            </svg>
-                          </div>
-                          <div className='flex-1'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                              {application.application_status === 'approved' ? 'Approved (Loan Created)' : 'Pre-Approved'}
-                            </p>
-                            <p className='mt-1 text-sm font-medium text-gray-900'>
-                              {formatDateTime(application.approved_at)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {application.contract_generated_at && (
-                        <div className='flex items-center gap-4 rounded-lg border border-purple-200 bg-purple-50 p-4'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-purple-100'>
-                            <svg className='h-5 w-5 text-purple-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
-                            </svg>
-                          </div>
-                          <div className='flex-1'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Contract Generated</p>
-                            <p className='mt-1 text-sm font-medium text-gray-900'>
-                              {formatDateTime(application.contract_generated_at)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {application.contract_sent_at && (
-                        <div className='flex items-center gap-4 rounded-lg border border-blue-200 bg-blue-50 p-4'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-blue-100'>
-                            <svg className='h-5 w-5 text-blue-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' />
-                            </svg>
-                          </div>
-                          <div className='flex-1'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Contract Sent</p>
-                            <p className='mt-1 text-sm font-medium text-gray-900'>
-                              {formatDateTime(application.contract_sent_at)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {application.contract_signed_at && (
-                        <div className='flex items-center gap-4 rounded-lg border border-indigo-200 bg-indigo-50 p-4'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100'>
-                            <svg className='h-5 w-5 text-indigo-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' />
-                            </svg>
-                          </div>
-                          <div className='flex-1'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Contract Signed</p>
-                            <p className='mt-1 text-sm font-medium text-gray-900'>
-                              {formatDateTime(application.contract_signed_at)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {application.rejected_at && (
-                        <div className='flex items-center gap-4 rounded-lg border border-red-200 bg-red-50 p-4'>
-                          <div className='flex h-10 w-10 items-center justify-center rounded-full bg-red-100'>
-                            <svg className='h-5 w-5 text-red-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
-                            </svg>
-                          </div>
-                          <div className='flex-1'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Rejected</p>
-                            <p className='mt-1 text-sm font-medium text-gray-900'>
-                              {formatDateTime(application.rejected_at)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className='flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4'>
-                        <div className='flex h-10 w-10 items-center justify-center rounded-full bg-gray-100'>
-                          <svg className='h-5 w-5 text-gray-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                          </svg>
-                        </div>
-                        <div className='flex-1'>
-                          <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Last Updated</p>
-                          <p className='mt-1 text-sm font-medium text-gray-900'>
-                            {formatDateTime(application.updated_at)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Staff Notes */}
-                {application.staff_notes && (
-                  <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
-                    <div className='border-b border-gray-200 bg-gradient-to-r from-slate-50 to-gray-50 px-6 py-4'>
-                      <h3 className='text-lg font-bold text-gray-900'>
-                        Staff Notes
-                      </h3>
-                    </div>
-                    <div className='p-6'>
-                      <p className='text-sm text-gray-700 leading-relaxed'>{application.staff_notes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Rejection Reason */}
-                {application.rejection_reason && (
-                  <div className='rounded-xl border border-red-200 bg-red-50 shadow-sm'>
-                    <div className='border-b border-red-200 bg-red-100 px-6 py-4'>
-                      <h3 className='text-lg font-bold text-gray-900'>
-                        Rejection Reason
-                      </h3>
-                    </div>
-                    <div className='p-6'>
-                      <p className='text-sm text-gray-700 leading-relaxed'>
-                        {application.rejection_reason}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <TimelineTab application={application} />
             )}
-          </div>
+                          </div>
         </div>
 
         {/* Approve Modal */}

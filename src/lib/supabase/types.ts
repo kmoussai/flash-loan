@@ -16,6 +16,7 @@ export type DocumentType = 'drivers_license' | 'passport' | 'health_card' | 'soc
 export type DocumentStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'expired'
 export type LoanStatus = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
+export type PaymentFrequency = 'monthly' | 'bi-weekly' | 'weekly'
 export type IncomeSourceType = 
   | 'employed' 
   | 'employment-insurance' 
@@ -294,6 +295,8 @@ export interface ContractTerms {
   term_months: number
   principal_amount: number
   total_amount: number
+  payment_frequency?: PaymentFrequency
+  number_of_payments?: number
   fees: {
     origination_fee?: number
     processing_fee?: number

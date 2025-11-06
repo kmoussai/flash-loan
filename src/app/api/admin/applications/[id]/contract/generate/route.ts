@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { createLoanContract, getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
-import type { ContractTerms } from '@/src/lib/supabase/types'
+import type { ContractTerms, PaymentFrequency } from '@/src/lib/supabase/types'
 
 export async function POST(
   request: NextRequest,
@@ -26,6 +26,16 @@ export async function POST(
     }
 
     const supabase = await createServerSupabaseAdminClient()
+
+    let payload: any = {}
+    try {
+      payload = await request.json()
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('No JSON payload provided or failed to parse payload:', error)
+      }
+      payload = {}
+    }
 
     // Fetch application details
     const { data: application, error: appError } = await supabase
@@ -87,37 +97,147 @@ export async function POST(
       )
     }
 
+    const normalizeTermMonths = (rawValue: unknown, fallback = 3): number => {
+      const parsed = Number(rawValue)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return fallback
+      }
+
+      return Math.round(parsed)
+    }
+
+    const allowedPaymentFrequencies: PaymentFrequency[] = ['monthly', 'bi-weekly', 'weekly']
+    const normalizePaymentFrequency = (rawValue: unknown, fallback: PaymentFrequency = 'monthly'): PaymentFrequency => {
+      if (typeof rawValue !== 'string') {
+        return fallback
+      }
+
+      const normalized = rawValue.trim().toLowerCase() as PaymentFrequency
+      return allowedPaymentFrequencies.includes(normalized) ? normalized : fallback
+    }
+
+    const normalizeNumberOfPayments = (rawValue: unknown): number | null => {
+      const parsed = Number(rawValue)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return null
+      }
+
+      return Math.max(1, Math.round(parsed))
+    }
+
+    const normalizeLoanAmount = (rawValue: unknown, fallback: number): number => {
+      const parsed = Number(rawValue)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return fallback
+      }
+
+      return Math.round(parsed * 100) / 100
+    }
+
+    const normalizeFirstPaymentDate = (rawValue: unknown): Date | null => {
+      if (!rawValue) {
+        return null
+      }
+
+      if (rawValue instanceof Date) {
+        return Number.isNaN(rawValue.getTime()) ? null : rawValue
+      }
+
+      if (typeof rawValue === 'string' || typeof rawValue === 'number') {
+        const parsed = new Date(rawValue)
+        return Number.isNaN(parsed.getTime()) ? null : parsed
+      }
+
+      return null
+    }
+
+    const calculateNumberOfPayments = (months: number, frequency: PaymentFrequency): number => {
+      switch (frequency) {
+        case 'weekly':
+          return months * 4
+        case 'bi-weekly':
+          return months * 2
+        default:
+          return months
+      }
+    }
+
+    const calculateDueDate = (startDate: Date, index: number, frequency: PaymentFrequency): Date => {
+      const dueDate = new Date(startDate)
+
+      switch (frequency) {
+        case 'weekly':
+          dueDate.setDate(startDate.getDate() + index * 7)
+          break
+        case 'bi-weekly':
+          dueDate.setDate(startDate.getDate() + index * 14)
+          break
+        default:
+          dueDate.setMonth(startDate.getMonth() + index)
+          break
+      }
+
+      return dueDate
+    }
+
     // Calculate contract terms (simplified - you may want to add more sophisticated calculations)
-    const loanAmount = parseFloat(String(app.loan_amount))
-    // Use application's interest_rate, default to 29% if not set
+    const loanAmount = normalizeLoanAmount(payload?.loanAmount, parseFloat(String(app.loan_amount)))
     const interestRate = app.interest_rate ?? 29.0
-    const termMonths = 3 // 3 months term (adjust as needed)
-    
+    const paymentFrequency = normalizePaymentFrequency(payload?.paymentFrequency)
+    const providedNumberOfPayments = normalizeNumberOfPayments(payload?.numberOfPayments)
+    const fallbackTermMonths = normalizeTermMonths(payload?.termMonths)
+
+    const paymentsPerMonthMap: Record<PaymentFrequency, number> = {
+      weekly: 4,
+      'bi-weekly': 2,
+      monthly: 1
+    }
+
+    const paymentsPerMonth = paymentsPerMonthMap[paymentFrequency] ?? 1
+
+    const numberOfPayments = providedNumberOfPayments ?? Math.max(1, calculateNumberOfPayments(fallbackTermMonths, paymentFrequency))
+
+    const durationInMonths = providedNumberOfPayments
+      ? Math.max(providedNumberOfPayments / paymentsPerMonth, 1 / paymentsPerMonth)
+      : fallbackTermMonths
+
+    const termMonths = Math.max(1, Math.ceil(durationInMonths))
+    const monthsForInterest = Math.max(durationInMonths, 1)
+
     // Calculate total with interest
-    const monthlyInterest = (loanAmount * interestRate / 100) / 12
-    const totalInterest = monthlyInterest * termMonths
+    const monthlyInterestPortion = (loanAmount * interestRate) / 100 / 12
+    const totalInterest = monthlyInterestPortion * monthsForInterest
     const totalAmount = loanAmount + totalInterest
-    const monthlyPayment = totalAmount / termMonths
+    const paymentAmount = totalAmount / numberOfPayments
+    const principalPerPayment = loanAmount / numberOfPayments
+    const interestPerPayment = totalInterest / numberOfPayments
 
     // Generate payment schedule
-    const paymentSchedule = []
-    const today = new Date()
-    for (let i = 0; i < termMonths; i++) {
-      const dueDate = new Date(today)
-      dueDate.setMonth(dueDate.getMonth() + i + 1)
+    const paymentSchedule = [] as NonNullable<ContractTerms['payment_schedule']>
+    const scheduleStartDate = normalizeFirstPaymentDate(payload?.firstPaymentDate) ?? new Date()
+    const startDate = new Date(scheduleStartDate)
+    startDate.setHours(0, 0, 0, 0)
+    for (let i = 0; i < numberOfPayments; i++) {
+      const dueDate = calculateDueDate(startDate, i, paymentFrequency)
       paymentSchedule.push({
         due_date: dueDate.toISOString().split('T')[0],
-        amount: monthlyPayment,
-        principal: loanAmount / termMonths,
-        interest: monthlyInterest
+        amount: paymentAmount,
+        principal: principalPerPayment,
+        interest: interestPerPayment
       })
     }
+
+    const maturityDate = paymentSchedule.length > 0
+      ? paymentSchedule[paymentSchedule.length - 1].due_date
+      : new Date(startDate).toISOString().split('T')[0]
 
     const contractTerms: ContractTerms = {
       interest_rate: interestRate,
       term_months: termMonths,
       principal_amount: loanAmount,
       total_amount: totalAmount,
+      payment_frequency: paymentFrequency,
+      number_of_payments: numberOfPayments,
       fees: {
         origination_fee: 0,
         processing_fee: 0,
@@ -125,8 +245,8 @@ export async function POST(
       },
       payment_schedule: paymentSchedule,
       terms_and_conditions: 'Standard loan terms and conditions apply. Please review carefully before signing.',
-      effective_date: new Date().toISOString(),
-      maturity_date: paymentSchedule[paymentSchedule.length - 1].due_date
+      effective_date: startDate.toISOString(),
+      maturity_date: maturityDate
     }
 
     // Create contract
