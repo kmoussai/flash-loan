@@ -128,6 +128,8 @@ export async function POST(
       )
     }
 
+    const submissionRecord = submission as { id: string }
+
     await admin
       .from('document_requests' as any)
       // @ts-ignore
@@ -141,7 +143,7 @@ export async function POST(
       })
       .eq('id', id)
 
-    return NextResponse.json({ success: true, submission_id: submission.id })
+    return NextResponse.json({ success: true, submission_id: submissionRecord.id })
   } catch (e: any) {
     return NextResponse.json(
       { error: e?.message || 'Internal server error' },
