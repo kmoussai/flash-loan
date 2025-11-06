@@ -15,6 +15,8 @@ export type {
   Reference,
   Loan,
   LoanPayment,
+  DocumentRequest,
+  RequestFormSubmission,
   UserInsert, 
   StaffInsert, 
   AddressInsert,
@@ -22,6 +24,8 @@ export type {
   ReferenceInsert,
   LoanInsert,
   LoanPaymentInsert,
+  DocumentRequestInsert,
+  RequestFormSubmissionInsert,
   LoanContract,
   LoanContractInsert,
   LoanContractUpdate,
@@ -35,6 +39,8 @@ export type {
   ReferenceUpdate,
   LoanUpdate,
   LoanPaymentUpdate,
+  DocumentRequestUpdate,
+  RequestFormSubmissionUpdate,
   StaffRole, 
   KycStatus,
   AddressType,
@@ -48,7 +54,9 @@ export type {
   IbvProviderData,
   FlinksIbvData,
   InveriteIbvData,
-  PlaidIbvData
+  PlaidIbvData,
+  DocumentRequestStatus,
+  RequestKind
 } from './types'
 
 // Export user and staff helpers
@@ -85,7 +93,14 @@ export {
   createReferences,
   getApplicationReferences,
   updateReference,
-  deleteReference
+  deleteReference,
+  getDocumentRequestsForApplication,
+  getDocumentRequestById,
+  updateDocumentRequest,
+  createRequestFormSubmission,
+  getRequestFormSubmissions,
+  getLatestRequestFormSubmission,
+  updateRequestFormSubmission
 } from './loan-helpers'
 
 // Export contract helpers

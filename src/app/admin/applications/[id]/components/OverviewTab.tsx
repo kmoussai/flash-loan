@@ -1,0 +1,342 @@
+'use client'
+
+import { useState } from 'react'
+import Button from '@/src/app/[locale]/components/Button'
+import type { PaymentFrequency } from '@/src/lib/supabase/types'
+import GenerateContractModal from './GenerateContractModal'
+import type { ApplicationWithDetails } from '../types'
+
+interface OverviewTabProps {
+  application: ApplicationWithDetails
+  loadingContract: boolean
+  onGenerateContract: (options: {
+    termMonths?: number
+    paymentFrequency: PaymentFrequency
+    numberOfPayments: number
+    loanAmount: number
+    nextPaymentDate: string
+  }) => Promise<void> | void
+  onViewContract: () => void
+  onOpenApproveModal: () => void
+  onOpenRejectModal: () => void
+}
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency: 'CAD'
+  }).format(amount)
+
+const formatCurrencyCompact = (amount: number) =>
+  new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    notation: 'compact'
+  }).format(amount)
+
+const getStatusLabel = (status: ApplicationWithDetails['application_status']) => {
+  switch (status) {
+    case 'pending':
+      return 'Pending'
+    case 'processing':
+      return 'Processing'
+    case 'pre_approved':
+      return 'Pre-Approved'
+    case 'contract_pending':
+      return 'Contract Pending'
+    case 'contract_signed':
+      return 'Contract Signed'
+    case 'approved':
+      return 'Approved'
+    case 'rejected':
+      return 'Rejected'
+    case 'cancelled':
+      return 'Cancelled'
+    default:
+      return status
+  }
+}
+
+const OverviewTab = ({
+  application,
+  loadingContract,
+  onGenerateContract,
+  onViewContract,
+  onOpenApproveModal,
+  onOpenRejectModal
+}: OverviewTabProps) => {
+  const [showContractModal, setShowContractModal] = useState(false)
+
+  const handleOpenModal = () => {
+    setShowContractModal(true)
+  }
+
+  const handleCloseModal = () => {
+    if (!loadingContract) {
+      setShowContractModal(false)
+    }
+  }
+
+  return (
+    <div className='space-y-6'>
+      <div className='grid gap-4 md:grid-cols-3'>
+        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-5'>
+          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+            Loan Amount
+          </label>
+          <p className='mt-2 text-3xl font-bold text-gray-900'>
+            {formatCurrency(application.loan_amount)}
+          </p>
+        </div>
+        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-5'>
+          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+            Income Source
+          </label>
+          <p className='mt-2 text-lg font-bold capitalize text-gray-900'>
+            {application.income_source.replace(/-/g, ' ')}
+          </p>
+        </div>
+        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5'>
+          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+            Status
+          </label>
+          <p className='mt-2 text-lg font-bold text-gray-900'>
+            {getStatusLabel(application.application_status)}
+          </p>
+        </div>
+        {application.interest_rate && (
+          <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-5'>
+            <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+              Interest Rate
+            </label>
+            <p className='mt-2 text-lg font-bold text-gray-900'>
+              {application.interest_rate}%
+            </p>
+          </div>
+        )}
+        {application.ibv_results?.aggregates?.total_deposits && (
+          <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5'>
+            <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+              Avg Deposits
+            </label>
+            <p className='mt-2 text-lg font-bold text-gray-900'>
+              {formatCurrencyCompact(application.ibv_results.aggregates.total_deposits)}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className='grid gap-6 lg:grid-cols-2'>
+        <div className='overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
+          <div className='border-b border-gray-200 bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4'>
+            <h2 className='text-lg font-bold text-gray-900'>Loan Information</h2>
+          </div>
+          <div className='p-6'>
+            <div className='space-y-4'>
+              <div>
+                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                  Income Source
+                </label>
+                <p className='mt-1 text-base font-medium capitalize text-gray-900'>
+                  {application.income_source.replace(/-/g, ' ')}
+                </p>
+              </div>
+              <div>
+                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                  Bankruptcy Plan
+                </label>
+                <p className='mt-1 text-base font-medium text-gray-900'>
+                  {application.bankruptcy_plan ? 'Yes' : 'No'}
+                </p>
+              </div>
+              {application.interest_rate && (
+                <div>
+                  <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                    Interest Rate
+                  </label>
+                  <p className='mt-1 text-base font-medium text-gray-900'>
+                    {application.interest_rate}% APR
+                  </p>
+                </div>
+              )}
+              {application.income_fields &&
+                Object.keys(application.income_fields).length > 0 && (
+                  <div>
+                    <label className='mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500'>
+                      Income Details
+                    </label>
+                    <div className='space-y-1 text-sm text-gray-700'>
+                      {Object.entries(application.income_fields)
+                        .slice(0, 3)
+                        .map(([key, value]) => (
+                          <p key={key}>
+                            <span className='font-medium capitalize'>
+                              {key.replace(/_/g, ' ')}:
+                            </span>{' '}
+                            {String(value)}
+                          </p>
+                        ))}
+                      {Object.keys(application.income_fields).length > 3 && (
+                        <p className='text-xs text-gray-500'>
+                          +{Object.keys(application.income_fields).length - 3} more
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+            </div>
+          </div>
+        </div>
+
+        <div className='overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
+          <div className='border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4'>
+            <h2 className='text-lg font-bold text-gray-900'>Client Information</h2>
+          </div>
+          <div className='p-6'>
+            <div className='space-y-4'>
+              <div>
+                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                  Email
+                </label>
+                <p className='mt-1 text-sm font-medium text-gray-900'>
+                  {application.users?.email || 'N/A'}
+                </p>
+              </div>
+              <div>
+                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                  Phone
+                </label>
+                <p className='mt-1 text-sm font-medium text-gray-900'>
+                  {application.users?.phone || 'N/A'}
+                </p>
+              </div>
+              <div>
+                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                  Language
+                </label>
+                <p className='mt-1 text-sm font-medium text-gray-900'>
+                  {application.users?.preferred_language || 'N/A'}
+                </p>
+              </div>
+              {application.addresses && application.addresses.length > 0 && (
+                <div>
+                  <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                    Address
+                  </label>
+                  <p className='mt-1 text-sm text-gray-900'>
+                    {formatAddress(application)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {application.application_status === 'pending' && (
+        <div className='rounded-xl border border-gray-200 bg-white p-6'>
+          <div className='flex items-center justify-center gap-4'>
+            <Button
+              onClick={onOpenRejectModal}
+              className='rounded-lg border border-red-300 bg-white px-6 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50'
+            >
+              Reject Application
+            </Button>
+            <Button
+              onClick={onOpenApproveModal}
+              className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg'
+            >
+              Approve Application
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {(application.application_status === 'pre_approved' ||
+        application.application_status === 'contract_pending' ||
+        application.application_status === 'contract_signed' ||
+        application.application_status === 'approved') && (
+        <div className='rounded-xl border border-gray-200 bg-white p-6'>
+          <div className='mb-4'>
+            <h3 className='text-lg font-semibold text-gray-900'>Contract Management</h3>
+            <p className='mt-1 text-sm text-gray-600'>
+              Generate, view, and send loan contracts to clients
+            </p>
+          </div>
+          <div className='flex items-center gap-3'>
+            {application.application_status === 'pre_approved' && (
+              <Button
+                onClick={handleOpenModal}
+                disabled={loadingContract}
+                className='rounded-lg border border-blue-600 bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
+              >
+                {loadingContract ? 'Generating...' : 'Generate Contract'}
+              </Button>
+            )}
+            {(application.application_status === 'contract_pending' ||
+              application.application_status === 'contract_signed' ||
+              application.application_status === 'approved') && (
+              <Button
+                onClick={onViewContract}
+                disabled={loadingContract}
+                className='rounded-lg border border-indigo-600 bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50'
+              >
+                {loadingContract ? 'Loading...' : 'View Contract'}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <GenerateContractModal
+        open={showContractModal}
+        loadingContract={loadingContract}
+        applicationId={application.id}
+        onSubmit={async ({ paymentFrequency, numberOfPayments, loanAmount, nextPaymentDate }) => {
+          const termMonths = (() => {
+            switch (paymentFrequency) {
+              case 'weekly':
+                return Math.max(1, Math.ceil(numberOfPayments / 4))
+              case 'bi-weekly':
+                return Math.max(1, Math.ceil(numberOfPayments / 2))
+              default:
+                return Math.max(1, numberOfPayments)
+            }
+          })()
+
+          await onGenerateContract({
+            termMonths,
+            paymentFrequency,
+            numberOfPayments,
+            loanAmount,
+            nextPaymentDate
+          })
+          setShowContractModal(false)
+        }}
+        onClose={handleCloseModal}
+      />
+    </div>
+  )
+}
+
+const formatAddress = (application: ApplicationWithDetails) => {
+  if (!application.addresses || application.addresses.length === 0) {
+    return 'N/A'
+  }
+
+  const address = application.addresses[0]
+  const { street_number, street_name, apartment_number, city, province, postal_code } = address
+
+  const parts = [
+    [street_number, street_name].filter(Boolean).join(' '),
+    apartment_number ? `Apt ${apartment_number}` : null,
+    [city, province].filter(Boolean).join(', '),
+    postal_code
+  ]
+
+  return parts.filter(Boolean).join(', ')
+}
+
+export default OverviewTab
+
+

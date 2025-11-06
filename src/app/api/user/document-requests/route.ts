@@ -12,7 +12,17 @@ export async function GET(_request: NextRequest) {
     const admin = createServerSupabaseAdminClient()
     const { data, error } = await admin
       .from('document_requests' as any)
-      .select('id, status, expires_at, magic_link_sent_at, document_type:document_type_id(name, slug), loan_applications!inner(id, client_id)')
+      .select(`
+        id,
+        status,
+        request_kind,
+        form_schema,
+        expires_at,
+        magic_link_sent_at,
+        document_type:document_type_id(name, slug),
+        request_form_submissions(id, form_data, submitted_at, submitted_by),
+        loan_applications!inner(id, client_id)
+      `)
       .eq('loan_applications.client_id', user.id)
       .in('status', ['requested', 'uploaded'])
       .order('created_at', { ascending: false })
