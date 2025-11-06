@@ -16,7 +16,21 @@ export async function GET(
     const admin = createServerSupabaseAdminClient()
     const { data, error } = await admin
       .from('document_requests' as any)
-      .select('id, status, expires_at, magic_link_sent_at, uploaded_file_key, created_at, updated_at, group_id, document_type:document_type_id(id, name, slug), group:group_id(id, expires_at)')
+      .select(`
+        id,
+        status,
+        request_kind,
+        form_schema,
+        expires_at,
+        magic_link_sent_at,
+        uploaded_file_key,
+        created_at,
+        updated_at,
+        group_id,
+        document_type:document_type_id(id, name, slug, default_request_kind, default_form_schema, description),
+        request_form_submissions(id, form_data, submitted_at, submitted_by),
+        group:group_id(id, expires_at)
+      `)
       .eq('loan_application_id', appId)
       .order('created_at', { ascending: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -28,6 +42,13 @@ export async function GET(
       .single()
     const preferredLanguage: 'en' | 'fr' = ((appRow as any)?.users?.preferred_language === 'fr') ? 'fr' : 'en'
     const enhanced = (data || []).map((r: any) => {
+      if (Array.isArray(r.request_form_submissions)) {
+        r.request_form_submissions.sort((a: any, b: any) => {
+          const aTime = a?.submitted_at ? new Date(a.submitted_at).getTime() : 0
+          const bTime = b?.submitted_at ? new Date(b.submitted_at).getTime() : 0
+          return bTime - aTime
+        })
+      }
       let link: string | null = null
       if (r.expires_at) {
         const exp = new Date(r.expires_at).getTime()

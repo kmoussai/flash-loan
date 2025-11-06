@@ -1,25 +1,55 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Button from '../components/Button'
 import { createClient } from '@/src/lib/supabase/client'
 
+type DocumentRequestStatus = 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
+type RequestKind = 'document' | 'address' | 'reference' | 'other'
+
+type FormSchemaOption = {
+  label: string
+  value: string
+}
+
+type FormSchemaField = {
+  id: string
+  label: string
+  type?: 'text' | 'textarea' | 'select' | 'date' | 'phone' | 'number'
+  required?: boolean
+  placeholder?: string
+  helperText?: string
+  options?: FormSchemaOption[]
+  maxLength?: number
+  defaultValue?: string
+  default?: string
+}
+
+type FormSchema = {
+  title?: string
+  description?: string
+  submit_label?: string
+  fields?: FormSchemaField[]
+}
+
+type RequestSubmission = {
+  id: string
+  form_data: Record<string, any>
+  submitted_at: string
+  submitted_by?: string | null
+}
+
 type RequestItem = {
   id: string
-  status: 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
+  status: DocumentRequestStatus
+  request_kind: RequestKind
   expires_at?: string | null
   magic_link_sent_at?: string | null
   document_type?: { name: string; slug: string }
   uploaded_file_key?: string | null
-}
-
-type DocumentStatus = {
-  documentType: { name: string; slug: string }
-  requestId: string | null
-  status: 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired' | 'not-requested'
-  expiresAt?: string | null
-  requestedAt?: string | null
+  form_schema?: FormSchema
+  submissions?: RequestSubmission[]
 }
 
 export default function UploadDocumentsPage() {
@@ -31,6 +61,8 @@ export default function UploadDocumentsPage() {
   const [files, setFiles] = useState<Record<string, File | null>>({})
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({})
   const [success, setSuccess] = useState<Record<string, boolean>>({})
+  const [formValues, setFormValues] = useState<Record<string, Record<string, any>>>({})
+  const [formErrors, setFormErrors] = useState<Record<string, string | null>>({})
   const [ready, setReady] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewMime, setPreviewMime] = useState<string | null>(null)
@@ -47,13 +79,12 @@ export default function UploadDocumentsPage() {
     }
   }, []) as { reqParam: string | null; groupParam: string | null; tokenParam: string | null }
 
-  const [documentStatuses, setDocumentStatuses] = useState<DocumentStatus[]>([])
 
   const loadRequests = async () => {
     try {
       setLoading(true)
       let res: Response
-      let fetchedRequests: RequestItem[] = []
+      let fetchedRequests: any[] = []
       
       if (tokenParam && reqParam) {
         res = await fetch(`/api/public/document-requests/${reqParam}?token=${encodeURIComponent(tokenParam)}`)
@@ -77,27 +108,57 @@ export default function UploadDocumentsPage() {
         fetchedRequests = j.requests || []
       }
 
-      setRequests(fetchedRequests)
-      
-      // Organize by document type for better display
-      const statusMap = new Map<string, DocumentStatus>()
-      
-      // Initialize with known document types from requests
-      fetchedRequests.forEach(req => {
-        if (req.document_type) {
-          statusMap.set(req.document_type.slug, {
-            documentType: req.document_type,
-            requestId: req.id,
-            status: req.status,
-            expiresAt: req.expires_at,
-            requestedAt: req.magic_link_sent_at || null
-          })
+      const normalizedRequests: RequestItem[] = (fetchedRequests || []).map(raw => {
+        const requestKind = (raw?.request_kind as RequestKind) || 'document'
+        const formSchema = raw?.form_schema && typeof raw.form_schema === 'object' ? raw.form_schema : undefined
+        const submissionsArray: RequestSubmission[] = Array.isArray(raw?.request_form_submissions)
+          ? raw.request_form_submissions.map((sub: any) => ({
+              id: sub.id,
+              form_data: sub.form_data || {},
+              submitted_at: sub.submitted_at,
+              submitted_by: sub.submitted_by ?? null
+            }))
+          : []
+
+        submissionsArray.sort((a, b) => {
+          const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : 0
+          const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : 0
+          return bTime - aTime
+        })
+
+        return {
+          id: raw.id,
+          status: raw.status as DocumentRequestStatus,
+          request_kind: requestKind,
+          expires_at: raw.expires_at,
+          magic_link_sent_at: raw.magic_link_sent_at,
+          document_type: raw.document_type || undefined,
+          uploaded_file_key: raw.uploaded_file_key || null,
+          form_schema: formSchema,
+          submissions: submissionsArray
         }
       })
-      
-      // Also add any document types that were requested but not yet in our list
-      const allStatuses = Array.from(statusMap.values())
-      setDocumentStatuses(allStatuses)
+
+      setRequests(normalizedRequests)
+
+      const nextFormValues: Record<string, Record<string, any>> = {}
+      normalizedRequests.forEach(req => {
+        if (req.request_kind !== 'document') {
+          const fields = req.form_schema?.fields || []
+          const latestSubmission = req.submissions?.[0]
+          const initialValues: Record<string, any> = {}
+
+          fields.forEach(field => {
+            const fallback = field.defaultValue ?? field.default ?? ''
+            initialValues[field.id] = latestSubmission?.form_data?.[field.id] ?? fallback
+          })
+
+          nextFormValues[req.id] = initialValues
+        }
+      })
+
+      setFormValues(nextFormValues)
+      setFormErrors({})
       setError(null)
     } catch (e: any) {
       setError(e?.message || 'Failed to load requests')
@@ -188,6 +249,9 @@ export default function UploadDocumentsPage() {
   }
 
   const uploadForRequest = async (requestId: string) => {
+    const request = requests.find(r => r.id === requestId)
+    if (!request || request.request_kind !== 'document') return
+
     const file = files[requestId]
     if (!file) return
     try {
@@ -233,6 +297,215 @@ export default function UploadDocumentsPage() {
       setError(e?.message || 'Upload failed')
     } finally {
       setSubmitting(prev => ({ ...prev, [requestId]: false }))
+    }
+  }
+
+  const handleFormValueChange = (
+    requestId: string,
+    fieldId: string,
+    value: any
+  ) => {
+    setFormValues(prev => ({
+      ...prev,
+      [requestId]: {
+        ...(prev[requestId] || {}),
+        [fieldId]: value
+      }
+    }))
+  }
+
+  const submitFormForRequest = async (requestId: string) => {
+    const request = requests.find(r => r.id === requestId)
+    if (!request || request.request_kind === 'document') return
+
+    const fields = request.form_schema?.fields || []
+    const values = formValues[requestId] || {}
+
+    const missingRequired = fields.filter(field => {
+      if (!field.required) return false
+      const rawValue = values[field.id]
+      if (rawValue === null || rawValue === undefined) return true
+      if (typeof rawValue === 'string') return rawValue.trim().length === 0
+      return false
+    })
+
+    if (missingRequired.length > 0) {
+      setFormErrors(prev => ({
+        ...prev,
+        [requestId]:
+          t('Please_Fill_Required_Fields') || 'Please fill all required fields before submitting.'
+      }))
+      return
+    }
+
+    try {
+      setSubmitting(prev => ({ ...prev, [requestId]: true }))
+      setSuccess(prev => ({ ...prev, [requestId]: false }))
+      setFormErrors(prev => ({ ...prev, [requestId]: null }))
+
+      let submitUrl = `/api/public/document-requests/${requestId}/submit`
+      const urlParams = new URLSearchParams()
+
+      if (tokenParam && groupParam) {
+        urlParams.append('group', groupParam)
+        urlParams.append('token', tokenParam)
+      } else if (tokenParam) {
+        urlParams.append('token', tokenParam)
+      }
+
+      if (urlParams.toString()) {
+        submitUrl += `?${urlParams.toString()}`
+      }
+
+      const res = await fetch(submitUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ form_data: values })
+      })
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Submission failed')
+      }
+
+      setSuccess(prev => ({ ...prev, [requestId]: true }))
+      await loadRequests()
+    } catch (e: any) {
+      setError(e?.message || 'Submission failed')
+    } finally {
+      setSubmitting(prev => ({ ...prev, [requestId]: false }))
+    }
+  }
+
+  const renderFormField = (requestId: string, field: FormSchemaField) => {
+    const value = formValues[requestId]?.[field.id] ?? ''
+    const inputId = `${requestId}-${field.id}`
+    const label = field.label || field.id
+    const placeholder = field.placeholder || ''
+    const helper = field.helperText
+    const isRequired = !!field.required
+
+    const onChange = (
+      event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    ) => {
+      handleFormValueChange(requestId, field.id, event.target.value)
+    }
+
+    const commonLabel = (
+      <label htmlFor={inputId} className='mb-2 block text-sm font-medium text-primary'>
+        {label}
+        {isRequired ? <span className='ml-1 text-red-500'>*</span> : null}
+      </label>
+    )
+
+    switch (field.type) {
+      case 'textarea':
+        return (
+          <div key={field.id} className='space-y-2'>
+            {commonLabel}
+            <textarea
+              id={inputId}
+              value={value}
+              onChange={onChange}
+              placeholder={placeholder}
+              required={isRequired}
+              maxLength={field.maxLength}
+              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
+              rows={4}
+            />
+            {helper && <p className='text-xs text-text-secondary'>{helper}</p>}
+          </div>
+        )
+      case 'select':
+        return (
+          <div key={field.id} className='space-y-2'>
+            {commonLabel}
+            <select
+              id={inputId}
+              value={value}
+              onChange={onChange}
+              required={isRequired}
+              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
+            >
+              <option value='' disabled>
+                {placeholder || t('Select_Option') || 'Select an option'}
+              </option>
+              {(field.options || []).map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {helper && <p className='text-xs text-text-secondary'>{helper}</p>}
+          </div>
+        )
+      case 'date':
+        return (
+          <div key={field.id} className='space-y-2'>
+            {commonLabel}
+            <input
+              type='date'
+              id={inputId}
+              value={value}
+              onChange={onChange}
+              required={isRequired}
+              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
+            />
+            {helper && <p className='text-xs text-text-secondary'>{helper}</p>}
+          </div>
+        )
+      case 'phone':
+        return (
+          <div key={field.id} className='space-y-2'>
+            {commonLabel}
+            <input
+              type='tel'
+              id={inputId}
+              value={value}
+              onChange={onChange}
+              placeholder={placeholder}
+              required={isRequired}
+              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
+            />
+            {helper && <p className='text-xs text-text-secondary'>{helper}</p>}
+          </div>
+        )
+      case 'number':
+        return (
+          <div key={field.id} className='space-y-2'>
+            {commonLabel}
+            <input
+              type='number'
+              id={inputId}
+              value={value}
+              onChange={onChange}
+              placeholder={placeholder}
+              required={isRequired}
+              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
+            />
+            {helper && <p className='text-xs text-text-secondary'>{helper}</p>}
+          </div>
+        )
+      case 'text':
+      default:
+        return (
+          <div key={field.id} className='space-y-2'>
+            {commonLabel}
+            <input
+              type='text'
+              id={inputId}
+              value={value}
+              onChange={onChange}
+              placeholder={placeholder}
+              required={isRequired}
+              maxLength={field.maxLength}
+              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
+            />
+            {helper && <p className='text-xs text-text-secondary'>{helper}</p>}
+          </div>
+        )
     }
   }
 
@@ -324,56 +597,64 @@ export default function UploadDocumentsPage() {
             </div>
           ) : (
             <div className='space-y-3'>
-              {/* List of documents to upload */}
-              {requests.map((r) => {
-                const docStatus = documentStatuses.find(ds => ds.requestId === r.id) || {
-                  documentType: r.document_type || { name: 'Document', slug: 'unknown' },
-                  requestId: r.id,
-                  status: r.status as DocumentStatus['status'],
-                  expiresAt: r.expires_at,
-                  requestedAt: r.magic_link_sent_at || null
-                }
-                
+              {requests.map(r => {
+                const isDocument = r.request_kind === 'document'
                 const needsAction = r.status === 'requested' || r.status === 'rejected'
                 const isHighlighted = reqParam && reqParam === r.id
+                const schema = r.form_schema
+                const fields = schema?.fields || []
+                const latestSubmission = r.submissions?.[0]
+                const displayTitle = schema?.title || r.document_type?.name || t('Supplemental_Information') || 'Supplemental Information'
+                const description = schema?.description
+                const formError = formErrors[r.id]
+                const submitLabel = schema?.submit_label || t('Submit_Information') || 'Submit Information'
 
                 return (
-                  <div 
-                    key={r.id} 
+                  <div
+                    key={r.id}
                     className={`rounded-lg border bg-background-secondary p-5 shadow-sm transition-all ${
                       isHighlighted ? 'border-primary border-2 shadow-md ring-2 ring-primary/20' : 'border-gray-200'
                     } ${needsAction ? 'bg-orange-50/50 border-orange-200' : ''}`}
                   >
-                    {/* Document Header */}
-                    <div className='flex items-start justify-between mb-4'>
-                      <div className='flex items-start gap-3 flex-1'>
-                        <div className={`flex h-12 w-12 items-center justify-center rounded-lg flex-shrink-0 ${
-                          needsAction 
-                            ? 'bg-orange-100' 
-                            : r.status === 'verified' 
-                            ? 'bg-emerald-100' 
-                            : r.status === 'uploaded' 
-                            ? 'bg-blue-100' 
-                            : 'bg-gray-100'
-                        }`}>
+                    <div className='mb-4 flex items-start justify-between'>
+                      <div className='flex flex-1 items-start gap-3'>
+                        <div
+                          className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg ${
+                            needsAction
+                              ? 'bg-orange-100'
+                              : r.status === 'verified'
+                              ? 'bg-emerald-100'
+                              : r.status === 'uploaded'
+                              ? 'bg-blue-100'
+                              : 'bg-gray-100'
+                          }`}
+                        >
                           {needsAction ? (
                             <svg className='h-6 w-6 text-orange-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                               <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12' />
                             </svg>
                           ) : (
-                            <svg className={`h-6 w-6 ${
-                              r.status === 'verified' ? 'text-emerald-600' : 
-                              r.status === 'uploaded' ? 'text-blue-600' : 
-                              'text-gray-600'
-                            }`} fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <svg
+                              className={`h-6 w-6 ${
+                                r.status === 'verified'
+                                  ? 'text-emerald-600'
+                                  : r.status === 'uploaded'
+                                  ? 'text-blue-600'
+                                  : 'text-gray-600'
+                              }`}
+                              fill='none'
+                              stroke='currentColor'
+                              viewBox='0 0 24 24'
+                            >
                               <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
                             </svg>
                           )}
                         </div>
-                        <div className='flex-1 min-w-0'>
-                          <h3 className='text-lg font-semibold text-primary mb-1'>
-                            {r.document_type?.name || 'Document'}
-                          </h3>
+                        <div className='min-w-0 flex-1'>
+                          <h3 className='mb-1 text-lg font-semibold text-primary'>{displayTitle}</h3>
+                          {description && !isDocument && (
+                            <p className='text-sm text-text-secondary'>{description}</p>
+                          )}
                           {r.magic_link_sent_at && (
                             <p className='text-xs text-text-secondary'>
                               {t('Requested')}: {formatDateTime(r.magic_link_sent_at)}
@@ -381,132 +662,201 @@ export default function UploadDocumentsPage() {
                           )}
                         </div>
                       </div>
-                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border flex-shrink-0 ${
-                        r.status === 'verified' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' :
-                        r.status === 'rejected' ? 'border-red-300 bg-red-50 text-red-700' :
-                        r.status === 'uploaded' ? 'border-blue-300 bg-blue-50 text-blue-700' :
-                        r.status === 'expired' ? 'border-gray-300 bg-gray-50 text-gray-700' :
-                        'border-orange-300 bg-orange-50 text-orange-700'
-                      }`}>
-                        {r.status === 'requested' ? t('Action_Required') || 'Action Required' :
-                         r.status === 'uploaded' ? t('Uploaded') :
-                         r.status === 'verified' ? t('Verified') :
-                         r.status === 'rejected' ? t('Rejected') :
-                         r.status === 'expired' ? t('Expired') : r.status}
+                      <span
+                        className={`inline-flex flex-shrink-0 items-center rounded-full px-3 py-1 text-xs font-medium border ${
+                          r.status === 'verified'
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                            : r.status === 'rejected'
+                            ? 'border-red-300 bg-red-50 text-red-700'
+                            : r.status === 'uploaded'
+                            ? 'border-blue-300 bg-blue-50 text-blue-700'
+                            : r.status === 'expired'
+                            ? 'border-gray-300 bg-gray-50 text-gray-700'
+                            : 'border-orange-300 bg-orange-50 text-orange-700'
+                        }`}
+                      >
+                        {r.status === 'requested'
+                          ? t('Action_Required') || 'Action Required'
+                          : r.status === 'uploaded'
+                          ? t('Uploaded')
+                          : r.status === 'verified'
+                          ? t('Verified')
+                          : r.status === 'rejected'
+                          ? t('Rejected')
+                          : r.status === 'expired'
+                          ? t('Expired')
+                          : r.status}
                       </span>
                     </div>
 
-                    {/* Status Messages */}
-                    {r.status === 'uploaded' && (
-                      <div className='mb-4 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-3'>
-                        <p className='text-sm text-blue-700'>{t('File_Received')}</p>
-                        <button
-                          onClick={() => openPreview(r.id)}
-                          disabled={loadingPreview}
-                          className='flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50'
-                        >
-                          {loadingPreview ? (
-                            <>
-                              <svg className='h-4 w-4 animate-spin' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                              </svg>
-                              {t('Loading_Dots') || 'Loading...'}
-                            </>
-                          ) : (
-                            <>
-                              <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 12a3 3 0 11-6 0 3 3 0 016 0z' />
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z' />
-                              </svg>
-                              {t('View') || 'View'}
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
+                    {/* Document-specific content */}
+                    {isDocument ? (
+                      <>
+                        {r.status === 'uploaded' && (
+                          <div className='mb-4 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-3'>
+                            <p className='text-sm text-blue-700'>{t('File_Received')}</p>
+                            <button
+                              onClick={() => openPreview(r.id)}
+                              disabled={loadingPreview}
+                              className='flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50'
+                            >
+                              {loadingPreview ? (
+                                <>
+                                  <svg className='h-4 w-4 animate-spin' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                                  </svg>
+                                  {t('Loading_Dots') || 'Loading...'}
+                                </>
+                              ) : (
+                                <>
+                                  <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 12a3 3 0 11-6 0 3 3 0 016 0z' />
+                                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z' />
+                                  </svg>
+                                  {t('View') || 'View'}
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
 
-                    {r.status === 'verified' && (
-                      <div className='mb-4 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3'>
-                        <p className='text-sm font-medium text-emerald-700'>
-                          ✓ {t('Verified')}
-                        </p>
-                        <button
-                          onClick={() => openPreview(r.id)}
-                          disabled={loadingPreview}
-                          className='flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50'
-                        >
-                          {loadingPreview ? (
-                            <>
-                              <svg className='h-4 w-4 animate-spin' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                              </svg>
-                              {t('Loading_Dots') || 'Loading...'}
-                            </>
-                          ) : (
-                            <>
-                              <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 12a3 3 0 11-6 0 3 3 0 016 0z' />
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z' />
-                              </svg>
-                              {t('View') || 'View'}
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
+                        {r.status === 'verified' && (
+                          <div className='mb-4 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3'>
+                            <p className='text-sm font-medium text-emerald-700'>✓ {t('Verified')}</p>
+                            <button
+                              onClick={() => openPreview(r.id)}
+                              disabled={loadingPreview}
+                              className='flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50'
+                            >
+                              {loadingPreview ? (
+                                <>
+                                  <svg className='h-4 w-4 animate-spin' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                                  </svg>
+                                  {t('Loading_Dots') || 'Loading...'}
+                                </>
+                              ) : (
+                                <>
+                                  <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 12a3 3 0 11-6 0 3 3 0 016 0z' />
+                                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z' />
+                                  </svg>
+                                  {t('View') || 'View'}
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
 
-                    {r.status === 'rejected' && (
-                      <div className='mb-4 rounded-lg border border-red-200 bg-red-50 p-3'>
-                        <p className='text-sm text-red-700'>{t('Rejected_Message')}</p>
-                      </div>
-                    )}
+                        {r.status === 'rejected' && (
+                          <div className='mb-4 rounded-lg border border-red-200 bg-red-50 p-3'>
+                            <p className='text-sm text-red-700'>{t('Rejected_Message')}</p>
+                          </div>
+                        )}
 
-                    {r.status === 'expired' && (
-                      <div className='mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3'>
-                        <p className='text-sm text-gray-700'>
-                          {t('Expired')} — {t('Rejected_Message')}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Upload Form - Only show for requested/rejected documents */}
-                    {(r.status === 'requested' || r.status === 'rejected') && (
-                      <div className='mt-4 pt-4 border-t border-gray-200'>
-                        <div className='flex flex-col gap-4 sm:flex-row sm:items-center'>
-                          <div className='flex-1'>
-                            <label htmlFor={`file-${r.id}`} className='block text-sm font-medium text-primary mb-2'>
-                              {t('Select_File') || 'Select File'}
-                            </label>
-                            <input
-                              type='file'
-                              id={`file-${r.id}`}
-                              onChange={(e) => onFileChange(r.id, e.target.files?.[0] || null)}
-                              accept='image/jpeg,image/png,application/pdf'
-                              className='block w-full text-sm text-gray-700 file:mr-4 file:rounded file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 cursor-pointer'
-                            />
-                            <p className='mt-1 text-xs text-text-secondary'>
-                              {t('Allowed_Formats') || 'Allowed: JPEG, PNG, PDF. Max size: 10MB'}
+                        {r.status === 'expired' && (
+                          <div className='mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3'>
+                            <p className='text-sm text-gray-700'>
+                              {t('Expired')} — {t('Rejected_Message')}
                             </p>
                           </div>
-                          <div className='flex items-center gap-3'>
-                            <Button
-                              onClick={() => uploadForRequest(r.id)}
-                              disabled={!files[r.id] || !!submitting[r.id]}
-                              className='sm:w-auto disabled:opacity-50'
-                            >
-                              {submitting[r.id] ? t('Uploading_Dots') : t('Upload')}
-                            </Button>
-                            {success[r.id] && (
-                              <span className='inline-flex items-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700'>
-                                <svg className='mr-2 h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
-                                </svg>
-                                {t('Uploaded_Exclamation')}
-                              </span>
-                            )}
+                        )}
+
+                        {(r.status === 'requested' || r.status === 'rejected') && (
+                          <div className='mt-4 border-t border-gray-200 pt-4'>
+                            <div className='flex flex-col gap-4 sm:flex-row sm:items-center'>
+                              <div className='flex-1'>
+                                <label htmlFor={`file-${r.id}`} className='mb-2 block text-sm font-medium text-primary'>
+                                  {t('Select_File') || 'Select File'}
+                                </label>
+                                <input
+                                  type='file'
+                                  id={`file-${r.id}`}
+                                  onChange={e => onFileChange(r.id, e.target.files?.[0] || null)}
+                                  accept='image/jpeg,image/png,application/pdf'
+                                  className='block w-full cursor-pointer text-sm text-gray-700 file:mr-4 file:rounded file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90'
+                                />
+                                <p className='mt-1 text-xs text-text-secondary'>
+                                  {t('Allowed_Formats') || 'Allowed: JPEG, PNG, PDF. Max size: 10MB'}
+                                </p>
+                              </div>
+                              <div className='flex items-center gap-3'>
+                                <Button
+                                  onClick={() => uploadForRequest(r.id)}
+                                  disabled={!files[r.id] || !!submitting[r.id]}
+                                  className='sm:w-auto disabled:opacity-50'
+                                >
+                                  {submitting[r.id] ? t('Uploading_Dots') : t('Upload')}
+                                </Button>
+                                {success[r.id] && (
+                                  <span className='inline-flex items-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700'>
+                                    <svg className='mr-2 h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
+                                    </svg>
+                                    {t('Uploaded_Exclamation')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {latestSubmission && (
+                          <div className='mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700'>
+                            {t('Last_Submitted') || 'Last submitted'}: {formatDateTime(latestSubmission.submitted_at)}
+                          </div>
+                        )}
+
+                        {needsAction ? (
+                          <div className='mt-4 border-t border-gray-200 pt-4'>
+                            <div className='space-y-4'>
+                              {fields.length === 0 ? (
+                                <textarea
+                                  value={formValues[r.id]?.['notes'] ?? ''}
+                                  onChange={event => handleFormValueChange(r.id, 'notes', event.target.value)}
+                                  placeholder={t('Provide_Details') || 'Provide the requested information here'}
+                                  className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
+                                  rows={4}
+                                />
+                              ) : (
+                                fields.map(field => renderFormField(r.id, field))
+                              )}
+
+                              {formError && (
+                                <div className='rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700'>
+                                  {formError}
+                                </div>
+                              )}
+
+                              <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                                <Button
+                                  onClick={() => submitFormForRequest(r.id)}
+                                  disabled={!!submitting[r.id]}
+                                  className='sm:w-auto disabled:opacity-50'
+                                >
+                                  {submitting[r.id]
+                                    ? t('Submitting_Dots') || 'Submitting...'
+                                    : submitLabel}
+                                </Button>
+                                {success[r.id] && (
+                                  <span className='inline-flex items-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700'>
+                                    <svg className='mr-2 h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
+                                    </svg>
+                                    {t('Information_Submitted') || 'Information submitted'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className='rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700'>
+                            {t('Information_Received') || 'Thank you! We have received this information.'}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )

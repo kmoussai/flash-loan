@@ -1,16 +1,21 @@
 // Database helper functions for loan application system
 
-import type { 
-  Address, 
-  AddressInsert, 
+import type {
+  Address,
+  AddressInsert,
   AddressUpdate,
-  LoanApplication, 
-  LoanApplicationInsert, 
+  LoanApplication,
+  LoanApplicationInsert,
   LoanApplicationUpdate,
   Reference,
   ReferenceInsert,
   ReferenceUpdate,
-  ApplicationStatus 
+  ApplicationStatus,
+  DocumentRequest,
+  DocumentRequestUpdate,
+  RequestFormSubmission,
+  RequestFormSubmissionInsert,
+  RequestFormSubmissionUpdate
 } from './types'
 import { createClient } from './client'
 
@@ -425,5 +430,173 @@ export async function deleteReference(referenceId: string, isServer = false) {
   }
   
   return { success: true }
+}
+
+// ===========================
+// DOCUMENT REQUEST OPERATIONS
+// ===========================
+
+export async function getDocumentRequestsForApplication(
+  loanApplicationId: string,
+  isServer = false
+) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('document_requests')
+    .select('*')
+    .eq('loan_application_id', loanApplicationId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching document requests:', error)
+    return []
+  }
+
+  return (data || []) as DocumentRequest[]
+}
+
+export async function getDocumentRequestById(
+  requestId: string,
+  isServer = false
+) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('document_requests')
+    .select('*')
+    .eq('id', requestId)
+    .single()
+
+  if (error) {
+    console.error('Error fetching document request:', error)
+    return null
+  }
+
+  return data as DocumentRequest
+}
+
+export async function updateDocumentRequest(
+  requestId: string,
+  updates: DocumentRequestUpdate,
+  isServer = false
+) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('document_requests')
+    .update(updates)
+    .eq('id', requestId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating document request:', error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true, data: data as DocumentRequest }
+}
+
+// ===========================
+// REQUEST FORM SUBMISSIONS
+// ===========================
+
+export async function createRequestFormSubmission(
+  submission: RequestFormSubmissionInsert,
+  isServer = false
+) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('request_form_submissions')
+    .insert(submission)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error creating request form submission:', error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true, data: data as RequestFormSubmission }
+}
+
+export async function getRequestFormSubmissions(
+  requestId: string,
+  isServer = false
+) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('request_form_submissions')
+    .select('*')
+    .eq('document_request_id', requestId)
+    .order('submitted_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching request form submissions:', error)
+    return []
+  }
+
+  return (data || []) as RequestFormSubmission[]
+}
+
+export async function getLatestRequestFormSubmission(
+  requestId: string,
+  isServer = false
+) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('request_form_submissions')
+    .select('*')
+    .eq('document_request_id', requestId)
+    .order('submitted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error fetching latest request form submission:', error)
+    return null
+  }
+
+  return data as RequestFormSubmission | null
+}
+
+export async function updateRequestFormSubmission(
+  submissionId: string,
+  updates: RequestFormSubmissionUpdate,
+  isServer = false
+) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('request_form_submissions')
+    .update(updates)
+    .eq('id', submissionId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating request form submission:', error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true, data: data as RequestFormSubmission }
 }
 

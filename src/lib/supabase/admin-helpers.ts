@@ -1,7 +1,14 @@
 // Admin helper functions for managing users and staff
 // Only accessible by admin role staff members
 
-import type { StaffRole, Database, UserInsert, StaffInsert, Staff } from './types'
+import type {
+  StaffRole,
+  Database,
+  UserInsert,
+  StaffInsert,
+  Staff,
+  DocumentRequest
+} from './types'
 import { createClient } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -316,9 +323,9 @@ interface SendDocumentRequestMagicLinkResult {
 }
 
 /**
- * Generate and log a signed upload link for a document request (no auth magic link)
+ * Generate and log a signed access link for any supplemental request (no auth magic link)
  * - Finds user email via document_requests -> loan_applications -> users
- * - Builds signed token URL to upload-documents page
+ * - Builds signed token URL to upload-documents page (forms or uploads)
  * - Updates document_requests.magic_link_sent_at as a send timestamp
  */
 export async function sendDocumentRequestMagicLink(
@@ -333,7 +340,7 @@ export async function sendDocumentRequestMagicLink(
     // Resolve email for the request
     const { data: reqRow, error: reqErr } = await adminClient
       .from('document_requests' as any)
-      .select('id, loan_application_id, document_type_id')
+      .select('id, loan_application_id, document_type_id, request_kind, expires_at')
       .eq('id', requestId)
       .single()
 
@@ -341,11 +348,13 @@ export async function sendDocumentRequestMagicLink(
       return { success: false, error: reqErr?.message || 'Request not found' }
     }
 
+    const request = reqRow as DocumentRequest
+
     // Join to users via loan_applications
     const { data: appJoin, error: joinErr } = await adminClient
       .from('loan_applications' as any)
       .select('id, client_id, users:client_id(email, preferred_language)')
-      .eq('id', (reqRow as any).loan_application_id)
+      .eq('id', request.loan_application_id)
       .single()
 
     if (joinErr || !appJoin) {
