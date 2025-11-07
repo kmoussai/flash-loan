@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-type RequestKind = 'document' | 'address' | 'reference' | 'other'
+type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
 
 interface DocumentItem {
   name: string

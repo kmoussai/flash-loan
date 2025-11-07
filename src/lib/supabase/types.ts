@@ -17,7 +17,7 @@ export type LoanStatus = 'pending_disbursement' | 'active' | 'completed' | 'defa
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
 export type PaymentFrequency = 'monthly' | 'bi-weekly' | 'weekly'
 export type DocumentRequestStatus = 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
-export type RequestKind = 'document' | 'address' | 'reference' | 'other'
+export type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
 export type IncomeSourceType = 
   | 'employed' 
   | 'employment-insurance' 
