@@ -2,17 +2,14 @@
 import { useTranslations } from 'next-intl'
 import Select from '../../components/Select'
 
-interface Step2LoanDetailsProps {
+interface Step3LoanDetailsProps {
   formData: {
     loanAmount: string
   }
-  onUpdate: any
+  onUpdate: (field: string, value: string | boolean) => void
 }
 
-export default function Step2LoanDetails({
-  formData,
-  onUpdate
-}: Step2LoanDetailsProps) {
+export default function Step3LoanDetails({ formData, onUpdate }: Step3LoanDetailsProps) {
   const t = useTranslations('')
 
   const loanAmountOptions = [

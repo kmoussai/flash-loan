@@ -12,9 +12,10 @@ import {
 } from '@/src/lib/ibv/inverite'
 import { createIbvProviderData, determineIbvStatus } from '@/src/lib/supabase/ibv-helpers'
 import Step1PersonalInfo from './components/Step1PersonalInfo'
-import Step2LoanDetails from './components/Step2LoanDetails'
-import Step3Confirmation from './components/Step3Confirmation'
-import Step4BankVerification from './components/Step4BankVerification'
+import Step2Address from './components/Step2Address'
+import Step3LoanDetails from './components/Step3LoanDetails'
+import Step4Confirmation from './components/Step4Confirmation'
+import Step5BankVerification from './components/Step5BankVerification'
 
 interface MicroLoanFormData {
   firstName: string
@@ -23,7 +24,14 @@ interface MicroLoanFormData {
   phone: string
   dateOfBirth: string
   preferredLanguage: string
+  streetNumber: string
+  streetName: string
+  apartmentNumber: string
+  city: string
   province: string
+  postalCode: string
+  movingDate: string
+  country: string
   loanAmount: string
   confirmInformation: boolean
 }
@@ -34,23 +42,38 @@ export default function MicroLoanApplicationPage() {
   const locale = params.locale as string
 
   const [formData, setFormData] = useState<MicroLoanFormData>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('microLoanFormData')
-      if (saved) {
-        return JSON.parse(saved)
-      }
-    }
-    return {
+    const defaults: MicroLoanFormData = {
       firstName: '',
       lastName: '',
       email: '',
       phone: '',
       dateOfBirth: '',
       preferredLanguage: locale || 'en',
+      streetNumber: '',
+      streetName: '',
+      apartmentNumber: '',
+      city: '',
       province: '',
+      postalCode: '',
+      movingDate: '',
+      country: '',
       loanAmount: '',
       confirmInformation: false
     }
+
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('microLoanFormData')
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          return { ...defaults, ...parsed }
+        } catch {
+          return defaults
+        }
+      }
+    }
+
+    return defaults
   })
 
   const [currentStep, setCurrentStep] = useState(1)
@@ -90,7 +113,14 @@ export default function MicroLoanApplicationPage() {
       phone: '',
       dateOfBirth: '',
       preferredLanguage: locale || 'en',
+      streetNumber: '',
+      streetName: '',
+      apartmentNumber: '',
+      city: '',
       province: '',
+      postalCode: '',
+      movingDate: '',
+      country: '',
       loanAmount: '',
       confirmInformation: false
     })
@@ -115,7 +145,7 @@ export default function MicroLoanApplicationPage() {
 
   // Inverite event listener
   useEffect(() => {
-    if (currentStep !== 4) return
+    if (currentStep !== 5) return
 
     const cleanup = addInveriteListener(true, {
       onSuccess: (connection) => {
@@ -195,6 +225,30 @@ export default function MicroLoanApplicationPage() {
       'New Brunswick',
       'Saskatchewan'
     ]
+    const streetNames = [
+      'Maple',
+      'Elm',
+      'Saint-Laurent',
+      'Crescent',
+      'Sherbrooke',
+      'Peel',
+      'Queen',
+      'King'
+    ]
+    const cities = [
+      'Montréal',
+      'Laval',
+      'Longueuil',
+      'Québec',
+      'Gatineau',
+      'Sherbrooke'
+    ]
+    const postalCodes = [
+      'H2X 1Y4',
+      'H3B 2Y7',
+      'H4N 3K6',
+      'H1A 0A1'
+    ]
     const loanAmounts = [
       '250',
       '300',
@@ -217,6 +271,20 @@ export default function MicroLoanApplicationPage() {
       provinces[Math.floor(Math.random() * provinces.length)]
     const randomLoanAmount =
       loanAmounts[Math.floor(Math.random() * loanAmounts.length)]
+    const randomStreetName =
+      streetNames[Math.floor(Math.random() * streetNames.length)]
+    const randomCity = cities[Math.floor(Math.random() * cities.length)]
+    const randomPostalCode =
+      postalCodes[Math.floor(Math.random() * postalCodes.length)]
+
+    const randomMovingDate = () => {
+      const today = new Date()
+      const pastMonths = Math.floor(Math.random() * 24)
+      today.setMonth(today.getMonth() - pastMonths)
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(Math.min(today.getDate(), 28)).padStart(2, '0')
+      return `${today.getFullYear()}-${month}-${day}`
+    }
 
     // Remove accents for email generation
     const cleanFirstName = randomFirstName
@@ -233,7 +301,14 @@ export default function MicroLoanApplicationPage() {
       phone: `${Math.floor(Math.random() * 2) === 0 ? '514' : '438'}-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
       dateOfBirth: `19${Math.floor(Math.random() * 30 + 70)}-${String(Math.floor(Math.random() * 12 + 1)).padStart(2, '0')}-${String(Math.floor(Math.random() * 28 + 1)).padStart(2, '0')}`,
       preferredLanguage: locale || 'en',
+      streetNumber: String(Math.floor(Math.random() * 900) + 100),
+      streetName: `${randomStreetName} ${Math.random() > 0.5 ? 'Street' : 'Avenue'}`,
+      apartmentNumber: Math.random() > 0.5 ? `${Math.floor(Math.random() * 20) + 1}` : '',
+      city: randomCity,
       province: randomProvince,
+      postalCode: randomPostalCode,
+      movingDate: randomMovingDate(),
+      country: 'Canada',
       loanAmount: randomLoanAmount,
       confirmInformation: true
     }
@@ -249,7 +324,14 @@ export default function MicroLoanApplicationPage() {
       phone: '',
       dateOfBirth: '',
       preferredLanguage: locale || 'en',
+      streetNumber: '',
+      streetName: '',
+      apartmentNumber: '',
+      city: '',
       province: '',
+      postalCode: '',
+      movingDate: '',
+      country: '',
       loanAmount: '',
       confirmInformation: false
     })
@@ -271,7 +353,7 @@ export default function MicroLoanApplicationPage() {
   }
 
   const nextStep = () => {
-    if (currentStep < 4) {
+    if (currentStep < 5) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -357,7 +439,15 @@ export default function MicroLoanApplicationPage() {
           dateOfBirth: formData.dateOfBirth,
           preferredLanguage: formData.preferredLanguage,
 
+          // Address Information
+          streetNumber: formData.streetNumber,
+          streetName: formData.streetName,
+          apartmentNumber: formData.apartmentNumber || null,
+          city: formData.city,
           province: formData.province,
+          postalCode: formData.postalCode,
+          country: formData.country,
+          movingDate: formData.movingDate,
 
           // Loan Details
           loanAmount: formData.loanAmount,
@@ -403,10 +493,20 @@ export default function MicroLoanApplicationPage() {
           formData.dateOfBirth
         )
       case 2:
-        return formData.province && formData.loanAmount
+        return (
+          formData.streetNumber &&
+          formData.streetName &&
+          formData.city &&
+          formData.province &&
+          formData.postalCode &&
+          formData.country &&
+          formData.movingDate
+        )
       case 3:
-        return formData.confirmInformation
+        return formData.loanAmount
       case 4:
+        return formData.confirmInformation
+      case 5:
         return ibvVerified
       default:
         return false
@@ -564,16 +664,16 @@ export default function MicroLoanApplicationPage() {
         <div className='mb-8'>
           <div className='mb-4 flex items-center justify-between'>
             <span className='text-sm font-medium text-gray-600'>
-              Step {currentStep} of 4
+              Step {currentStep} of 5
             </span>
             <span className='text-sm font-medium text-gray-600'>
-              {Math.round((currentStep / 4) * 100)}% Complete
+              {Math.round((currentStep / 5) * 100)}% Complete
             </span>
           </div>
           <div className='h-2 w-full rounded-full bg-gray-200'>
             <div
               className='h-2 rounded-full bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] transition-all duration-300'
-              style={{ width: `${(currentStep / 4) * 100}%` }}
+              style={{ width: `${(currentStep / 5) * 100}%` }}
             />
           </div>
         </div>
@@ -585,20 +685,25 @@ export default function MicroLoanApplicationPage() {
             <Step1PersonalInfo formData={formData} onUpdate={updateFormData} />
           )}
 
-          {/* Step 2: Loan Details */}
+          {/* Step 2: Address Details */}
           {currentStep === 2 && (
-            <Step2LoanDetails formData={formData} onUpdate={updateFormData} />
+            <Step2Address formData={formData} onUpdate={updateFormData} />
           )}
 
-          {/* Step 3: Confirmation */}
+          {/* Step 3: Loan Details */}
           {currentStep === 3 && (
-            <Step3Confirmation formData={formData} onUpdate={updateFormData} />
+            <Step3LoanDetails formData={formData} onUpdate={updateFormData} />
           )}
 
-          {/* Step 4: Bank Verification */}
+          {/* Step 4: Confirmation */}
           {currentStep === 4 && (
-            <Step4BankVerification 
-              formData={formData} 
+            <Step4Confirmation formData={formData} onUpdate={updateFormData} />
+          )}
+
+          {/* Step 5: Bank Verification */}
+          {currentStep === 5 && (
+            <Step5BankVerification
+              formData={formData}
               ibvVerified={ibvVerified}
               onRequestGuidReceived={(requestGuid) => setInveriteRequestGuid(requestGuid)}
             />
@@ -617,14 +722,14 @@ export default function MicroLoanApplicationPage() {
               </Button>
             )}
             <Button
-              onClick={() => currentStep === 4 ? handleSubmit() : nextStep()}
+              onClick={() => (currentStep === 5 ? handleSubmit() : nextStep())}
               disabled={!isStepValid() || isSubmitting}
               size='large'
               className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
             >
-              {currentStep === 3
+              {currentStep === 4
                 ? t('Continue_To_Verification')
-                : currentStep === 4
+                : currentStep === 5
                   ? (isSubmitting ? t('Submitting') || 'Submitting...' : t('Submit_Application'))
                   : t('Next')}
             </Button>

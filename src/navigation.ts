@@ -14,7 +14,7 @@ export const pathnames = {
   '/repayment': '/repayment',
   '/contact': '/contact',
   '/apply': '/apply',
-  '/apply1': '/apply1',
+  '/quick-apply': '/quick-apply',
   '/dashboard': '/dashboard',
   '/upload-documents': '/upload-documents',
   '/auth/signin': '/auth/signin',

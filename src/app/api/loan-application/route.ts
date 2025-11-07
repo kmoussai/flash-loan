@@ -31,6 +31,7 @@ interface LoanApplicationRequestBody {
   city?: string
   province?: string
   postalCode?: string
+  country?: string
   movingDate?: string
   
   // Financial Obligations (Quebec only)

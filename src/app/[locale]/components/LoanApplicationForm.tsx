@@ -889,7 +889,7 @@ export default function LoanApplicationForm() {
                 
                 <div className='grid gap-3 sm:gap-4 md:grid-cols-2'>
                   {/* Quick Apply - Compact Design */}
-                  <Link href='/apply1' className='group block'>
+                  <Link href='/quick-apply' className='group block'>
                     <div className='relative h-full overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-5 sm:p-6 shadow-md transition-all duration-300 hover:scale-[1.02] hover:border-green-400 hover:shadow-lg'>
                       {/* Top Badge */}
                       <div className='mb-3 inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 sm:px-3 py-1'>

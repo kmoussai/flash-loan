@@ -1,23 +1,39 @@
 'use client'
 import { useTranslations } from 'next-intl'
 
-interface Step3ConfirmationProps {
+interface Step4ConfirmationProps {
   formData: {
     firstName: string
     lastName: string
     email: string
     phone: string
+    streetNumber: string
+    streetName: string
+    apartmentNumber?: string
+    city: string
+    province: string
+    postalCode: string
+    movingDate: string
     loanAmount: string
     confirmInformation: boolean
   }
-  onUpdate: any
+  onUpdate: (field: string, value: string | boolean) => void
 }
 
-export default function Step3Confirmation({
-  formData,
-  onUpdate
-}: Step3ConfirmationProps) {
+export default function Step4Confirmation({ formData, onUpdate }: Step4ConfirmationProps) {
   const t = useTranslations('')
+
+  const formatAddress = () => {
+    const parts = [
+      `${formData.streetNumber} ${formData.streetName}`.trim(),
+      formData.apartmentNumber ? `${t('Apartment_Number')}: ${formData.apartmentNumber}` : null,
+      formData.city,
+      formData.province,
+      formData.postalCode
+    ].filter(Boolean)
+
+    return parts.join(' · ')
+  }
 
   return (
     <div className='space-y-6'>
@@ -41,11 +57,19 @@ export default function Step3Confirmation({
           </div>
           <div className='flex justify-between'>
             <span className='text-gray-600'>{t('Email')}:</span>
-            <span className='font-medium'>{formData.email}</span>
+            <span className='font-medium break-all'>{formData.email}</span>
           </div>
           <div className='flex justify-between'>
             <span className='text-gray-600'>{t('Phone')}:</span>
             <span className='font-medium'>{formData.phone}</span>
+          </div>
+          <div className='flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
+            <span className='text-gray-600'>{t('Street_Address')}:</span>
+            <span className='font-medium text-right sm:text-left'>{formatAddress()}</span>
+          </div>
+          <div className='flex justify-between'>
+            <span className='text-gray-600'>{t('Moving_Date')}:</span>
+            <span className='font-medium'>{formData.movingDate}</span>
           </div>
           <div className='flex justify-between'>
             <span className='text-gray-600'>{t('Loan_Amount')}:</span>

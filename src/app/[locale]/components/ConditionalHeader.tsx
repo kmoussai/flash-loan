@@ -16,7 +16,7 @@ export default function ConditionalHeader({ locale }: ConditionalHeaderProps) {
   const pathname = usePathname()
   
   // Routes where header should be hidden
-  const hideHeaderRoutes = ['/apply', '/dashboard']
+  const hideHeaderRoutes = ['/apply', '/dashboard', '/quick-apply']
   
   // Check if current route should hide header
   const shouldHideHeader = hideHeaderRoutes.some(route => pathname.includes(route))

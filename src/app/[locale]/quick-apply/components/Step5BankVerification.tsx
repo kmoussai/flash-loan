@@ -6,7 +6,7 @@ import {
   initializeInveriteSession
 } from '@/src/lib/ibv/inverite'
 
-interface Step4BankVerificationProps {
+interface Step5BankVerificationProps {
   ibvVerified: boolean
   formData: {
     firstName: string
@@ -19,11 +19,11 @@ interface Step4BankVerificationProps {
 
 const INVERITE_INIT_KEY = 'inverite_init_session_id'
 
-export default function Step4BankVerification({
+export default function Step5BankVerification({
   ibvVerified,
   formData,
   onRequestGuidReceived
-}: Step4BankVerificationProps) {
+}: Step5BankVerificationProps) {
   const t = useTranslations('')
   const [iframeSrc, setIframeSrc] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
@@ -37,17 +37,15 @@ export default function Step4BankVerification({
   )
 
   async function startInverite() {
-    // Prevent concurrent calls
     if (isInitializing.current || hasInitialized.current || iframeSrc) {
       console.log('[Inverite] Already initialized or in progress, skipping')
       return
     }
 
-    // Check localStorage to prevent double initialization across remounts (React Strict Mode)
-    const sessionId = typeof window !== 'undefined' 
+    const sessionId = typeof window !== 'undefined'
       ? sessionStorage.getItem(INVERITE_INIT_KEY)
       : null
-    
+
     if (sessionId) {
       console.log('[Inverite] Session already initialized in this browser session')
       hasInitialized.current = true
@@ -58,7 +56,7 @@ export default function Step4BankVerification({
       isInitializing.current = true
       setError(null)
       setLoading(true)
-      
+
       const initSessionId = `inverite_${Date.now()}_${Math.random().toString(36).substring(7)}`
       if (typeof window !== 'undefined') {
         sessionStorage.setItem(INVERITE_INIT_KEY, initSessionId)
@@ -73,14 +71,12 @@ export default function Step4BankVerification({
       const src = iframeUrl || getInveriteIframeConfig(requestGuid).src
       setIframeSrc(src)
       hasInitialized.current = true
-      
-      // Pass requestGuid to parent component
+
       if (requestGuid && onRequestGuidReceived) {
         onRequestGuidReceived(requestGuid)
       }
     } catch (e: any) {
       setError(e?.message || 'Failed to start Inverite session')
-      // Clear session storage on error so user can retry
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem(INVERITE_INIT_KEY)
       }
@@ -101,10 +97,8 @@ export default function Step4BankVerification({
 
   return (
     <div className='space-y-6'>
-      {/* Inverite Verification */}
       <div className='mb-6 sm:mb-8'>
         <div className='overflow-hidden rounded-xl border border-gray-200 shadow-lg'>
-          {/* Inverite iframe */}
           {error ? (
             <div className='flex flex-col items-center justify-center p-8 text-center'>
               <p className='mb-4 text-sm text-red-600'>
@@ -112,7 +106,6 @@ export default function Step4BankVerification({
               </p>
               <button
                 onClick={() => {
-                  // Clear session storage and reset flags for retry
                   if (typeof window !== 'undefined') {
                     sessionStorage.removeItem(INVERITE_INIT_KEY)
                   }
@@ -141,7 +134,6 @@ export default function Step4BankVerification({
           {t('Connecting_To_Bank') || 'Connecting to Inverite...'}
         </div>
       )}
-      {/* Verification Status */}
       {ibvVerified && (
         <div className='rounded-lg border border-green-200 bg-green-50 p-4'>
           <div className='flex items-center'>
@@ -175,3 +167,4 @@ export default function Step4BankVerification({
     </div>
   )
 }
+

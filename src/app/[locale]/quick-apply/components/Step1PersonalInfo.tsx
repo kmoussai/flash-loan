@@ -1,22 +1,5 @@
 'use client'
 import { useTranslations } from 'next-intl'
-import Select from '../../components/Select'
-
-const CANADIAN_PROVINCES = [
-  'Alberta',
-  'British Columbia',
-  'Manitoba',
-  'New Brunswick',
-  'Newfoundland and Labrador',
-  'Northwest Territories',
-  'Nova Scotia',
-  'Nunavut',
-  'Ontario',
-  'Prince Edward Island',
-  'Quebec',
-  'Saskatchewan',
-  'Yukon'
-]
 
 interface Step1PersonalInfoProps {
   formData: {
@@ -25,9 +8,8 @@ interface Step1PersonalInfoProps {
     email: string
     phone: string
     dateOfBirth: string
-    province: string
   }
-  onUpdate: any
+  onUpdate: (field: string, value: string | boolean) => void
 }
 
 export default function Step1PersonalInfo({
@@ -99,32 +81,16 @@ export default function Step1PersonalInfo({
         </div>
       </div>
 
-      <div className='grid gap-4 md:grid-cols-2'>
-        <div>
-          <label className='mb-2 block text-sm font-medium text-primary'>
-            {t('Date_of_Birth')} *
-          </label>
-          <input
-            type='date'
-            value={formData.dateOfBirth}
-            onChange={e => onUpdate('dateOfBirth', e.target.value)}
-            className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
-          />
-        </div>
-        <div>
-          <label className='mb-2 block text-sm font-medium text-primary'>
-            {t('Province')} *
-          </label>
-          <Select
-            value={formData.province}
-            onValueChange={value => onUpdate('province', value)}
-            placeholder={t('Select_Province')}
-            options={CANADIAN_PROVINCES.map(province => ({
-              value: province,
-              label: province
-            }))}
-          />
-        </div>
+      <div>
+        <label className='mb-2 block text-sm font-medium text-primary'>
+          {t('Date_of_Birth')} *
+        </label>
+        <input
+          type='date'
+          value={formData.dateOfBirth}
+          onChange={e => onUpdate('dateOfBirth', e.target.value)}
+          className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+        />
       </div>
     </div>
   )
