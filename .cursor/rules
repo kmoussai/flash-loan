@@ -1,0 +1,44 @@
+# 🧭 Global Project Rules — Next.js + Supabase
+
+## Core Principles
+- Always prioritize **code readability** and **maintainability**.  
+- Use **clear naming conventions**, **consistent formatting**, and **meaningful comments**.  
+- Write **modular, reusable code** — each component or function should have a **single responsibility**.  
+- **Avoid repetition** — extract shared logic into utilities, hooks, or reusable components.  
+
+## File Structure Guidelines
+- Organize code logically:
+  - `/components` → UI components  
+  - `/hooks` → custom React hooks  
+  - `/lib` → helper functions (e.g., Supabase client, validators)  
+  - `/app/api` → Next.js API routes  
+  - `/types` → shared TypeScript types  
+  - `/utils` → pure helper functions  
+- Create **separate files** for reusable code to keep builds optimized and reduce bundle size.  
+- Use **lazy loading** or **dynamic imports** for large components when appropriate.  
+
+## Supabase Integration
+- Use **Supabase client** initialized in a shared module (`/lib/supabaseClient.ts`).  
+- Handle **Auth** securely using Supabase’s Next.js integration (`@supabase/auth-helpers-nextjs`).  
+- Always include **error handling** and **type safety** for DB operations.  
+- Store and fetch files from **Supabase Storage** through a centralized helper (e.g., `/lib/storage.ts`).  
+
+## Coding Standards
+- Use **TypeScript** everywhere.  
+- Keep functions and components **small, typed, and self-contained**.  
+- Use **async/await** with proper try/catch error handling.  
+- Include **docstrings** or inline comments for complex logic.  
+- Follow **Next.js conventions** for file-based routing and server components.  
+- Ensure code follows **ESLint + Prettier** formatting rules.  
+
+## Performance & Optimization
+- Use **React Server Components** and **API Routes** efficiently.  
+- Implement **incremental static regeneration (ISR)** where possible.  
+- Optimize Supabase queries — fetch only needed fields.  
+- Apply **code splitting**, **memoization**, and **debouncing** where necessary.
+
+## Prompt Behavior
+Whenever generating or modifying code:
+- Apply the above conventions automatically.
+- Suggest reusable components or hooks instead of inline logic.
+- Propose file structures and imports explicitly.

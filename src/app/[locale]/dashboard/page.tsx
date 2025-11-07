@@ -1,8 +1,9 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { useEffect, useState } from 'react'
-import { Link, useRouter } from '@/src/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Link, usePathname, useRouter } from '@/src/navigation'
 import Button from '../components/Button'
 import Select from '../components/Select'
 import type {
@@ -27,6 +28,8 @@ interface IdDocumentWithUrl extends IdDocument {
 export default function ClientDashboardPage() {
   const t = useTranslations('')
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -51,6 +54,15 @@ export default function ClientDashboardPage() {
     expires_at: '',
     file: null as File | null
   })
+  const sectionTabs = useMemo(
+    () => [
+      { id: 'personal', label: t('Personal_Info') || 'Personal Info' },
+      { id: 'documents', label: t('Requested_Items') || 'Requested Items' },
+      { id: 'applications', label: t('My_Applications') || 'Loan Applications' }
+    ],
+    [t]
+  )
+  const [activeSection, setActiveSection] = useState<string>('personal')
 
   const formatIncomeSource = (source?: string | null) => {
     if (!source) {
@@ -69,10 +81,40 @@ export default function ClientDashboardPage() {
     return labels[source] || source
   }
 
+  const handleSectionChange = (sectionId: string) => {
+    if (sectionId === activeSection) {
+      return
+    }
+
+    setActiveSection(sectionId)
+    const params = new URLSearchParams(searchParams.toString())
+    const defaultSection = sectionTabs[0]?.id ?? 'personal'
+
+    if (sectionId === defaultSection) {
+      params.delete('section')
+    } else {
+      params.set('section', sectionId)
+    }
+
+    const nextQuery = Object.fromEntries(params.entries())
+    router.replace({ pathname, query: nextQuery })
+  }
+
   useEffect(() => {
     fetchDashboardData()
     fetchIdDocuments()
   }, [])
+
+  useEffect(() => {
+    const section = searchParams.get('section')
+    const defaultSection = sectionTabs[0]?.id ?? 'personal'
+
+    if (section && sectionTabs.some(tab => tab.id === section)) {
+      setActiveSection(prev => (prev === section ? prev : section))
+    } else if (!section && activeSection !== defaultSection) {
+      setActiveSection(defaultSection)
+    }
+  }, [searchParams, sectionTabs, activeSection])
 
   // Auto-fill document name based on document type (except for "other")
   useEffect(() => {
@@ -389,7 +431,7 @@ export default function ClientDashboardPage() {
 
   if (loading) {
     return (
-      <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4'>
+      <div className='flex min-h-screen items-center justify-center bg-background p-6'>
         <div className='text-center'>
           <div className='mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent'></div>
           <p className='text-lg font-medium text-text-secondary'>
@@ -402,9 +444,9 @@ export default function ClientDashboardPage() {
 
   if (error) {
     return (
-      <div className='min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-4 py-8'>
-        <div className='mx-auto max-w-4xl'>
-          <div className='rounded-2xl border-2 border-red-200 bg-red-50 p-6 text-center shadow-sm sm:p-8'>
+      <div className='min-h-screen bg-background px-4 py-8'>
+        <div className='mx-auto max-w-2xl'>
+          <div className='rounded-2xl border border-red-200 bg-red-50/70 p-6 text-center shadow-sm sm:p-8'>
             <div className='mb-4 flex justify-center'>
               <div className='flex h-16 w-16 items-center justify-center rounded-full bg-red-100'>
                 <svg
@@ -460,186 +502,176 @@ export default function ClientDashboardPage() {
   ).length
 
   return (
-    <div className='min-h-screen bg-gradient-to-br from-gray-50 via-gray-50 to-gray-100 pb-8'>
+    <div className='min-h-screen bg-background pb-8'>
       {/* Sticky Header */}
-      <div className='sticky top-0 z-10 border-b border-gray-200 bg-white/80 shadow-sm backdrop-blur-md'>
-        <div className='mx-auto max-w-4xl px-4 py-4 sm:px-6'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h1 className='text-2xl font-bold text-primary sm:text-3xl'>
-                {t('My_Dashboard') || 'My Dashboard'}
-              </h1>
-              <p className='mt-1 hidden text-sm text-text-secondary sm:block'>
-                {t('Dashboard_Subtitle') ||
-                  'View your profile and loan applications'}
-              </p>
-            </div>
-            <div className='flex gap-2'>
-              <Button
-                variant='secondary'
-                size='small'
-                onClick={async () => {
-                  await supabase.auth.signOut()
-                  router.push('/')
-                  router.refresh()
-                }}
-                className='min-h-[44px] px-4'
-              >
-                <svg
-                  className='mr-1.5 h-5 w-5 sm:mr-0 sm:hidden'
-                  fill='none'
-                  viewBox='0 0 24 24'
-                  stroke='currentColor'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1'
-                  />
-                </svg>
-                <span className='hidden sm:inline'>
-                  {t('Sign_Out') || 'Sign Out'}
-                </span>
-              </Button>
-            </div>
+      <div className='sticky top-0 z-10 border-b border-gray-200/70 bg-white/95 backdrop-blur-md'>
+        <div className='mx-auto flex w-full max-w-4xl items-center justify-between px-4 py-3 sm:px-6'>
+          <div>
+            <h1 className='text-xl font-semibold text-primary sm:text-2xl'>
+              {t('My_Dashboard') || 'My Dashboard'}
+            </h1>
+            <p className='mt-1 text-xs text-text-secondary sm:text-sm'>
+              {t('Dashboard_Subtitle') || 'View your profile and loan applications'}
+            </p>
           </div>
+          <Button
+            variant='secondary'
+            size='small'
+            onClick={async () => {
+              const locale = window.location.pathname.split('/')[1] || 'en'
+              await supabase.auth.signOut()
+              router.push('/', { locale })
+              router.refresh()
+            }}
+            className='min-h-[40px] px-3 text-sm'
+          >
+            <svg
+              className='mr-1.5 h-5 w-5 text-primary sm:mr-2'
+              fill='none'
+              viewBox='0 0 24 24'
+              stroke='currentColor'
+            >
+              <path
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                strokeWidth={2}
+                d='M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1'
+              />
+            </svg>
+            <span>{t('Sign_Out') || 'Sign Out'}</span>
+          </Button>
         </div>
       </div>
 
       <div className='mx-auto max-w-4xl px-4 pt-6 sm:px-6'>
         {/* Quick Stats */}
-        <div className='mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4'>
-          <div className='from-primary/10 to-primary/5 border-primary/20 rounded-xl border bg-gradient-to-br p-4 sm:p-5'>
-            <div className='mb-2 flex items-center justify-between'>
-              <div className='bg-primary/20 flex h-10 w-10 items-center justify-center rounded-lg'>
-                <svg
-                  className='h-6 w-6 text-primary'
-                  fill='none'
-                  viewBox='0 0 24 24'
-                  stroke='currentColor'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
-                  />
-                </svg>
-              </div>
-            </div>
-            <p className='text-2xl font-bold text-primary sm:text-3xl'>
-              {totalApplications}
-            </p>
-            <p className='mt-1 text-xs text-text-secondary sm:text-sm'>
-              {t('Total_Applications') || 'Total Applications'}
-            </p>
-          </div>
-          <div className='rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-4 sm:p-5'>
-            <div className='mb-2 flex items-center justify-between'>
-              <div className='flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20'>
-                <svg
-                  className='h-6 w-6 text-blue-600'
-                  fill='none'
-                  viewBox='0 0 24 24'
-                  stroke='currentColor'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
-                  />
-                </svg>
-              </div>
-            </div>
-            <p className='text-2xl font-bold text-blue-600 sm:text-3xl'>
-              {pendingApplications}
-            </p>
-            <p className='mt-1 text-xs text-text-secondary sm:text-sm'>
-              {t('In_Progress') || 'In Progress'}
-            </p>
-          </div>
-          <div className='col-span-2 rounded-xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5 p-4 sm:col-span-1 sm:p-5'>
-            <div className='mb-2 flex items-center justify-between'>
-              <div className='flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/20'>
-                <svg
-                  className='h-6 w-6 text-green-600'
-                  fill='none'
-                  viewBox='0 0 24 24'
-                  stroke='currentColor'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
-                  />
-                </svg>
-              </div>
-            </div>
-            <p className='text-2xl font-bold text-green-600 sm:text-3xl'>
-              {approvedApplications}
-            </p>
-            <p className='mt-1 text-xs text-text-secondary sm:text-sm'>
-              {t('Approved') || 'Approved'}
-            </p>
-          </div>
-        </div>
-
-        {/* Personal Details Card */}
-        <div className='mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm'>
-          <div className='from-primary/5 to-secondary/5 border-b border-gray-200 bg-gradient-to-r px-4 py-4 sm:px-6'>
-            <div className='flex items-center justify-between'>
+        <section className='mb-6'>
+          <div className='flex snap-x gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0'>
+            <article className='flex min-w-[180px] flex-1 flex-col justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-transform hover:-translate-y-0.5 sm:min-w-0'>
               <div className='flex items-center gap-3'>
-                <div className='bg-primary/20 flex h-10 w-10 items-center justify-center rounded-lg'>
-                  <svg
-                    className='h-6 w-6 text-primary'
-                    fill='none'
-                    viewBox='0 0 24 24'
-                    stroke='currentColor'
-                  >
+                <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary'>
+                  <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                     <path
                       strokeLinecap='round'
                       strokeLinejoin='round'
                       strokeWidth={2}
-                      d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+                      d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
                     />
                   </svg>
-                </div>
-                <h2 className='text-lg font-bold text-primary sm:text-xl'>
-                  {t('Personal_Details') || 'Personal Details'}
-                </h2>
+                </span>
+                <p className='text-xs font-medium uppercase tracking-wide text-text-secondary'>
+                  {t('Total_Applications') || 'Total Applications'}
+                </p>
               </div>
-              {!editingProfile && (
-                <Button
-                  variant='secondary'
-                  size='small'
-                  onClick={() => setEditingProfile(true)}
-                  className='min-h-[44px] px-4'
-                >
-                  <svg
-                    className='mr-2 h-5 w-5'
-                    fill='none'
-                    viewBox='0 0 24 24'
-                    stroke='currentColor'
-                  >
+              <p className='mt-4 text-3xl font-semibold text-primary sm:text-4xl'>
+                {totalApplications}
+              </p>
+            </article>
+            <article className='flex min-w-[180px] flex-1 flex-col justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-transform hover:-translate-y-0.5 sm:min-w-0'>
+              <div className='flex items-center gap-3'>
+                <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600'>
+                  <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                     <path
                       strokeLinecap='round'
                       strokeLinejoin='round'
                       strokeWidth={2}
-                      d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
+                      d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
                     />
                   </svg>
-                  {t('Edit') || 'Edit'}
-                </Button>
-              )}
+                </span>
+                <p className='text-xs font-medium uppercase tracking-wide text-text-secondary'>
+                  {t('In_Progress') || 'In Progress'}
+                </p>
+              </div>
+              <p className='mt-4 text-3xl font-semibold text-blue-600 sm:text-4xl'>
+                {pendingApplications}
+              </p>
+            </article>
+            <article className='flex min-w-[180px] flex-1 flex-col justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-transform hover:-translate-y-0.5 sm:min-w-0'>
+              <div className='flex items-center gap-3'>
+                <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600'>
+                  <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+                    />
+                  </svg>
+                </span>
+                <p className='text-xs font-medium uppercase tracking-wide text-text-secondary'>
+                  {t('Approved') || 'Approved'}
+                </p>
+              </div>
+              <p className='mt-4 text-3xl font-semibold text-emerald-600 sm:text-4xl'>
+                {approvedApplications}
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <nav className='mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-sm sm:gap-3'>
+          {sectionTabs.map(tab => {
+            const isActive = activeSection === tab.id
+
+            return (
+              <button
+                key={tab.id}
+                type='button'
+                onClick={() => handleSectionChange(tab.id)}
+                className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-transparent text-text-secondary hover:bg-gray-100'
+                }`}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </nav>
+
+        {activeSection === 'personal' && (
+          <div className='mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm'>
+            <div className='flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-6'>
+            <div className='flex items-center gap-3'>
+              <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary'>
+                <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+                  />
+                </svg>
+              </span>
+              <h2 className='text-base font-semibold text-primary sm:text-lg'>
+                {t('Personal_Details') || 'Personal Details'}
+              </h2>
             </div>
+            {!editingProfile && (
+              <Button
+                variant='secondary'
+                size='small'
+                onClick={() => setEditingProfile(true)}
+                className='min-h-[40px] rounded-xl px-3 text-sm'
+              >
+                <svg className='mr-1.5 h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
+                  />
+                </svg>
+                {t('Edit') || 'Edit'}
+              </Button>
+            )}
           </div>
           <div className='p-4 sm:p-6'>
             {editingProfile ? (
-              <form onSubmit={handleUpdateProfile} className='space-y-5'>
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+              <form onSubmit={handleUpdateProfile} className='space-y-4'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                   <div>
                     <label className='mb-2 block text-sm font-semibold text-primary'>
                       {t('First_Name') || 'First Name'}
@@ -653,7 +685,7 @@ export default function ClientDashboardPage() {
                           first_name: e.target.value
                         })
                       }
-                      className='focus:ring-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
                       required
                     />
                   </div>
@@ -670,13 +702,13 @@ export default function ClientDashboardPage() {
                           last_name: e.target.value
                         })
                       }
-                      className='focus:ring-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
                       required
                     />
                   </div>
                 </div>
 
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                   <div>
                     <label className='mb-2 block text-sm font-semibold text-primary'>
                       {t('Email_Address') || 'Email Address'}
@@ -690,7 +722,7 @@ export default function ClientDashboardPage() {
                           email: e.target.value
                         })
                       }
-                      className='focus:ring-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
                       required
                     />
                   </div>
@@ -707,13 +739,13 @@ export default function ClientDashboardPage() {
                           phone: e.target.value
                         })
                       }
-                      className='focus:ring-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
                       required
                     />
                   </div>
                 </div>
 
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                   <div>
                     <label className='mb-2 block text-sm font-semibold text-primary'>
                       {t('Date_of_Birth') || 'Date of Birth'}
@@ -727,7 +759,7 @@ export default function ClientDashboardPage() {
                           date_of_birth: e.target.value
                         })
                       }
-                      className='focus:ring-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
                     />
                   </div>
                   <div>
@@ -758,7 +790,7 @@ export default function ClientDashboardPage() {
                     variant='primary'
                     size='medium'
                     disabled={updating}
-                    className='min-h-[48px] flex-1 sm:flex-none'
+                    className='min-h-[40px] flex-1 rounded-xl sm:flex-none'
                   >
                     {updating
                       ? t('Saving') || 'Saving...'
@@ -784,64 +816,64 @@ export default function ClientDashboardPage() {
                       }
                     }}
                     disabled={updating}
-                    className='min-h-[48px] flex-1 sm:flex-none'
+                    className='min-h-[40px] flex-1 rounded-xl sm:flex-none'
                   >
                     {t('Cancel') || 'Cancel'}
                   </Button>
                 </div>
               </form>
             ) : (
-              <div className='space-y-4'>
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-                  <div className='rounded-xl border border-gray-100 bg-gray-50 p-4'>
+              <div className='space-y-3'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                  <div className='rounded-xl border border-gray-200 bg-gray-50/80 p-4'>
                     <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary'>
                       {t('First_Name') || 'First Name'}
                     </p>
-                    <p className='text-base font-semibold text-primary sm:text-lg'>
+                    <p className='text-sm font-semibold text-primary sm:text-base'>
                       {data.user.first_name || 'N/A'}
                     </p>
                   </div>
-                  <div className='rounded-xl border border-gray-100 bg-gray-50 p-4'>
+                  <div className='rounded-xl border border-gray-200 bg-gray-50/80 p-4'>
                     <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary'>
                       {t('Last_Name') || 'Last Name'}
                     </p>
-                    <p className='text-base font-semibold text-primary sm:text-lg'>
+                    <p className='text-sm font-semibold text-primary sm:text-base'>
                       {data.user.last_name || 'N/A'}
                     </p>
                   </div>
                 </div>
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-                  <div className='rounded-xl border border-gray-100 bg-gray-50 p-4'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                  <div className='rounded-xl border border-gray-200 bg-gray-50/80 p-4'>
                     <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary'>
                       {t('Email_Address') || 'Email Address'}
                     </p>
-                    <p className='break-all text-base font-semibold text-primary sm:text-lg'>
+                    <p className='break-all text-sm font-semibold text-primary sm:text-base'>
                       {data.user.email || 'N/A'}
                     </p>
                   </div>
-                  <div className='rounded-xl border border-gray-100 bg-gray-50 p-4'>
+                  <div className='rounded-xl border border-gray-200 bg-gray-50/80 p-4'>
                     <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary'>
                       {t('Phone_Number') || 'Phone Number'}
                     </p>
-                    <p className='text-base font-semibold text-primary sm:text-lg'>
+                    <p className='text-sm font-semibold text-primary sm:text-base'>
                       {data.user.phone || 'N/A'}
                     </p>
                   </div>
                 </div>
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-                  <div className='rounded-xl border border-gray-100 bg-gray-50 p-4'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                  <div className='rounded-xl border border-gray-200 bg-gray-50/80 p-4'>
                     <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary'>
                       {t('Date_of_Birth') || 'Date of Birth'}
                     </p>
-                    <p className='text-base font-semibold text-primary sm:text-lg'>
+                    <p className='text-sm font-semibold text-primary sm:text-base'>
                       {formatDate(data.user.date_of_birth)}
                     </p>
                   </div>
-                  <div className='rounded-xl border border-gray-100 bg-gray-50 p-4'>
+                  <div className='rounded-xl border border-gray-200 bg-gray-50/80 p-4'>
                     <p className='mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary'>
                       {t('Your_Language') || 'Preferred Language'}
                     </p>
-                    <p className='text-base font-semibold text-primary sm:text-lg'>
+                    <p className='text-sm font-semibold text-primary sm:text-base'>
                       {data.user.preferred_language === 'fr'
                         ? t('French') || 'French'
                         : t('English') || 'English'}
@@ -852,70 +884,59 @@ export default function ClientDashboardPage() {
             )}
           </div>
         </div>
+        )}
 
-        {/* ID Documents Section */}
-        <div className='mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm'>
-          <div className='from-primary/5 to-secondary/5 border-b border-gray-200 bg-gradient-to-r px-4 py-4 sm:px-6'>
-            <div className='flex items-center justify-between'>
-              <div className='flex items-center gap-3'>
-                <div className='bg-primary/20 flex h-10 w-10 items-center justify-center rounded-lg'>
-                  <svg
-                    className='h-6 w-6 text-primary'
-                    fill='none'
-                    viewBox='0 0 24 24'
-                    stroke='currentColor'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
-                    />
-                  </svg>
-                </div>
-                <h2 className='text-lg font-bold text-primary sm:text-xl'>
-                  {t('ID_Documents') || 'ID Documents'}
-                </h2>
-              </div>
-              {!showUploadForm && (
-                <Button
-                  variant='primary'
-                  size='small'
-                  onClick={() => setShowUploadForm(true)}
-                  className='min-h-[44px] px-4'
-                >
-                  <svg
-                    className='mr-2 h-5 w-5'
-                    fill='none'
-                    viewBox='0 0 24 24'
-                    stroke='currentColor'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12'
-                    />
-                  </svg>
-                  <span className='hidden sm:inline'>
-                    {t('Upload_ID_Document') || 'Upload ID Document'}
-                  </span>
-                  <span className='sm:hidden'>{t('Upload') || 'Upload'}</span>
-                </Button>
-              )}
+        {activeSection === 'documents' && (
+          <div className='mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm'>
+          <div className='flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-6'>
+            <div className='flex items-center gap-3'>
+              <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary'>
+                <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
+                  />
+                </svg>
+              </span>
+              <h2 className='text-base font-semibold text-primary sm:text-lg'>
+                {t('ID_Documents') || 'ID Documents'}
+              </h2>
             </div>
+            {!showUploadForm && (
+              <Button
+                variant='primary'
+                size='small'
+                onClick={() => setShowUploadForm(true)}
+                className='min-h-[40px] rounded-xl px-3 text-sm'
+              >
+                <svg className='mr-1.5 h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12'
+                  />
+                </svg>
+                <span className='hidden sm:inline'>
+                  {t('Upload_ID_Document') || 'Upload ID Document'}
+                </span>
+                <span className='sm:hidden'>{t('Upload') || 'Upload'}</span>
+              </Button>
+            )}
           </div>
           <div className='p-4 sm:p-6'>
             {showUploadForm && (
               <form
                 onSubmit={handleFileUpload}
-                className='mb-6 space-y-5 rounded-xl border-2 border-gray-200 bg-gray-50 p-4 sm:p-6'
+                className='mb-6 space-y-4 rounded-xl border border-gray-200 bg-gray-50/80 p-4 sm:p-6'
               >
                 <h3 className='mb-2 text-base font-semibold text-primary sm:text-lg'>
                   {t('Upload_New_Document') || 'Upload New Document'}
                 </h3>
 
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                   <div>
                     <label className='mb-2 block text-sm font-semibold text-primary'>
                       {t('Document_Type') || 'Document Type'}{' '}
@@ -985,7 +1006,7 @@ export default function ClientDashboardPage() {
                           document_name: e.target.value
                         })
                       }
-                      className='focus:ring-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-gray-100'
+                      className='focus:ring-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-gray-100'
                       placeholder={
                         uploadForm.document_type === 'other'
                           ? t('Enter_Document_Name') ||
@@ -1008,7 +1029,7 @@ export default function ClientDashboardPage() {
                   </div>
                 </div>
 
-                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                   <div>
                     <label className='mb-2 block text-sm font-semibold text-primary'>
                       {t('File') || 'File'}{' '}
@@ -1030,7 +1051,7 @@ export default function ClientDashboardPage() {
                           setUploadForm({ ...uploadForm, file })
                         }
                       }}
-                      className='focus:ring-primary/20 file:bg-primary/10 hover:file:bg-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 file:bg-primary/10 hover:file:bg-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all file:mr-4 file:rounded-lg file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary focus:border-primary focus:outline-none focus:ring-2'
                       required
                     />
                     <p className='mt-2 text-xs text-text-secondary'>
@@ -1058,7 +1079,7 @@ export default function ClientDashboardPage() {
                     )}
                   </div>
 
-                  <div>
+                  <div className='grid gap-3'>
                     <label className='mb-2 block text-sm font-semibold text-primary'>
                       {t('Expiration_Date') || 'Expiration Date'}{' '}
                       <span className='text-xs text-gray-400'>
@@ -1074,7 +1095,7 @@ export default function ClientDashboardPage() {
                           expires_at: e.target.value
                         })
                       }
-                      className='focus:ring-primary/20 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
+                      className='focus:ring-primary/20 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base transition-all focus:border-primary focus:outline-none focus:ring-2'
                     />
                   </div>
                 </div>
@@ -1085,7 +1106,7 @@ export default function ClientDashboardPage() {
                     variant='primary'
                     size='medium'
                     disabled={uploadingDocument}
-                    className='min-h-[48px] flex-1 sm:flex-none'
+                    className='min-h-[40px] flex-1 rounded-xl sm:flex-none'
                   >
                     {uploadingDocument
                       ? t('Uploading') || 'Uploading...'
@@ -1105,7 +1126,7 @@ export default function ClientDashboardPage() {
                       })
                     }}
                     disabled={uploadingDocument}
-                    className='min-h-[48px] flex-1 sm:flex-none'
+                    className='min-h-[40px] flex-1 rounded-xl sm:flex-none'
                   >
                     {t('Cancel') || 'Cancel'}
                   </Button>
@@ -1152,20 +1173,20 @@ export default function ClientDashboardPage() {
                 {idDocuments.map(doc => (
                   <div
                     key={doc.id}
-                    className='hover:border-primary/50 rounded-xl border-2 border-gray-200 bg-white p-4 shadow-sm transition-all'
+                    className='rounded-2xl border border-gray-200/80 bg-white p-4 shadow-sm transition-colors hover:border-primary/60'
                   >
-                    <div className='mb-3 flex items-start justify-between gap-4'>
-                      <div className='min-w-0 flex-1'>
-                        <div className='mb-2 flex items-center gap-2'>
-                          <h3 className='truncate text-base font-semibold text-primary'>
+                    <div className='mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+                      <div className='min-w-0 flex-1 space-y-2'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                          <h3 className='truncate text-sm font-semibold text-primary sm:text-base'>
                             {getDocumentTypeLabel(doc.document_type)}
                           </h3>
                           {getDocumentStatusBadge(doc.status)}
                         </div>
-                        <p className='mb-1 text-sm font-medium text-gray-700'>
+                        <p className='text-sm font-medium text-gray-700'>
                           {doc.document_name}
                         </p>
-                        <div className='flex items-center gap-2 text-xs text-text-secondary'>
+                        <div className='flex flex-wrap items-center gap-2 text-xs text-text-secondary'>
                           <svg
                             className='h-4 w-4'
                             fill='none'
@@ -1183,19 +1204,19 @@ export default function ClientDashboardPage() {
                           <span>•</span>
                           <span>{formatFileSize(doc.file_size)}</span>
                         </div>
-                        <p className='mt-2 text-xs text-text-secondary'>
+                        <p className='text-xs text-text-secondary'>
                           {t('Uploaded_On') || 'Uploaded On'}:{' '}
                           {formatDate(doc.created_at)}
                         </p>
                       </div>
                     </div>
-                    <div className='flex gap-2 border-t border-gray-100 pt-3'>
+                    <div className='flex flex-col gap-2 border-t border-gray-100 pt-3 sm:flex-row'>
                       {doc.signed_url && (
                         <a
                           href={doc.signed_url}
                           target='_blank'
                           rel='noopener noreferrer'
-                          className='bg-primary/10 hover:bg-primary/20 flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg text-sm font-semibold text-primary transition-colors'
+                          className='flex min-h-[38px] flex-1 items-center justify-center gap-2 rounded-xl bg-primary/10 text-sm font-semibold text-primary transition-colors hover:bg-primary/20'
                         >
                           <svg
                             className='h-5 w-5'
@@ -1222,7 +1243,7 @@ export default function ClientDashboardPage() {
                       {doc.status === 'pending' && (
                         <button
                           onClick={() => handleDeleteDocument(doc.id)}
-                          className='flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg bg-red-50 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100'
+                          className='flex min-h-[38px] flex-1 items-center justify-center gap-2 rounded-xl bg-red-50 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100'
                         >
                           <svg
                             className='h-5 w-5'
@@ -1246,61 +1267,51 @@ export default function ClientDashboardPage() {
               </div>
             )}
           </div>
+          </div>
+        )}
 
-          {/* Loan Applications Section */}
-          <div className='overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm'>
-            <div className='from-primary/5 to-secondary/5 border-b border-gray-200 bg-gradient-to-r px-4 py-4 sm:px-6'>
-              <div className='flex items-center justify-between'>
-                <div className='flex items-center gap-3'>
-                  <div className='bg-primary/20 flex h-10 w-10 items-center justify-center rounded-lg'>
-                    <svg
-                      className='h-6 w-6 text-primary'
-                      fill='none'
-                      viewBox='0 0 24 24'
-                      stroke='currentColor'
-                    >
-                      <path
-                        strokeLinecap='round'
-                        strokeLinejoin='round'
-                        strokeWidth={2}
-                        d='M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
-                      />
-                    </svg>
-                  </div>
-                  <h2 className='text-lg font-bold text-primary sm:text-xl'>
-                    {t('My_Loan_Applications') || 'My Loan Applications'}
-                  </h2>
-                </div>
-                <Link href='/apply'>
-                  <Button
-                    variant='primary'
-                    size='small'
-                    className='min-h-[44px] px-4'
-                  >
-                    <svg
-                      className='mr-2 h-5 w-5'
-                      fill='none'
-                      viewBox='0 0 24 24'
-                      stroke='currentColor'
-                    >
-                      <path
-                        strokeLinecap='round'
-                        strokeLinejoin='round'
-                        strokeWidth={2}
-                        d='M12 4v16m8-8H4'
-                      />
-                    </svg>
-                    <span className='hidden sm:inline'>
-                      {t('Apply_Now') || 'Apply Now'}
-                    </span>
-                    <span className='sm:hidden'>{t('Apply') || 'Apply'}</span>
-                  </Button>
-                </Link>
+        {activeSection === 'applications' && (
+          <section className='overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm'>
+            <div className='flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-6'>
+              <div className='flex items-center gap-3'>
+                <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary'>
+                  <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                    />
+                  </svg>
+                </span>
+                <h2 className='text-base font-semibold text-primary sm:text-lg'>
+                  {t('My_Loan_Applications') || 'My Loan Applications'}
+                </h2>
               </div>
+              <Link href='/apply'>
+                <Button
+                  variant='primary'
+                  size='small'
+                  className='min-h-[40px] rounded-xl px-3 text-sm'
+                >
+                  <svg className='mr-1.5 h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M12 4v16m8-8H4'
+                    />
+                  </svg>
+                  <span className='hidden sm:inline'>
+                    {t('Apply_Now') || 'Apply Now'}
+                  </span>
+                  <span className='sm:hidden'>{t('Apply') || 'Apply'}</span>
+                </Button>
+              </Link>
             </div>
             <div className='p-4 sm:p-6'>
               {data.loanApplications.length === 0 ? (
-                <div className='py-12 text-center'>
+                <div className='py-10 text-center'>
                   <div className='mb-4 flex justify-center'>
                     <div className='from-primary/10 to-secondary/10 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br'>
                       <svg
@@ -1340,18 +1351,18 @@ export default function ClientDashboardPage() {
                   {data.loanApplications.map(application => (
                     <div
                       key={application.id}
-                      className='hover:border-primary/50 rounded-xl border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50 p-5 transition-all hover:shadow-md'
+                      className='rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:border-primary/60 hover:shadow-md'
                     >
-                      <div className='mb-4 flex items-start justify-between gap-4'>
-                        <div className='flex-1'>
-                          <div className='mb-3 flex flex-col gap-3 sm:flex-row sm:items-center'>
-                            <h3 className='text-2xl font-bold text-primary sm:text-3xl'>
+                      <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+                        <div className='flex-1 space-y-3'>
+                          <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                            <h3 className='text-2xl font-semibold text-primary sm:text-3xl'>
                               {formatCurrency(application.loan_amount)}
                             </h3>
                             {getStatusBadge(application.application_status)}
                           </div>
-                          <div className='space-y-2'>
-                            <div className='flex items-center gap-2 text-sm'>
+                          <div className='space-y-2 text-sm text-text-secondary'>
+                            <div className='flex items-center gap-2'>
                               <svg
                                 className='h-4 w-4 text-text-secondary'
                                 fill='none'
@@ -1365,14 +1376,14 @@ export default function ClientDashboardPage() {
                                   d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
                                 />
                               </svg>
-                              <span className='text-text-secondary'>
+                              <span>
                                 {t('Income_Source') || 'Income Source'}:{' '}
-                              </span>
-                              <span className='font-semibold text-primary'>
-                                {formatIncomeSource(application.income_source)}
+                                <span className='font-semibold text-primary'>
+                                  {formatIncomeSource(application.income_source)}
+                                </span>
                               </span>
                             </div>
-                            <div className='flex items-center gap-2 text-sm'>
+                            <div className='flex items-center gap-2'>
                               <svg
                                 className='h-4 w-4 text-text-secondary'
                                 fill='none'
@@ -1386,14 +1397,14 @@ export default function ClientDashboardPage() {
                                   d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'
                                 />
                               </svg>
-                              <span className='text-text-secondary'>
+                              <span>
                                 {t('Submitted_On') || 'Submitted On'}:{' '}
-                              </span>
-                              <span className='font-semibold text-primary'>
-                                {formatDate(
-                                  application.submitted_at ||
-                                    application.created_at
-                                )}
+                                <span className='font-semibold text-primary'>
+                                  {formatDate(
+                                    application.submitted_at ||
+                                      application.created_at
+                                  )}
+                                </span>
                               </span>
                             </div>
                           </div>
@@ -1404,8 +1415,8 @@ export default function ClientDashboardPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+          </section>
+        )}
       </div>
     </div>
   )
