@@ -1,23 +1,28 @@
 'use client'
 import { useTranslations } from 'next-intl'
+import type {
+  QuickApplyFormData,
+  QuickApplyUpdateHandler
+} from '../types'
 
 interface Step4ConfirmationProps {
-  formData: {
-    firstName: string
-    lastName: string
-    email: string
-    phone: string
-    streetNumber: string
-    streetName: string
-    apartmentNumber?: string
-    city: string
-    province: string
-    postalCode: string
-    movingDate: string
-    loanAmount: string
-    confirmInformation: boolean
-  }
-  onUpdate: (field: string, value: string | boolean) => void
+  formData: Pick<
+    QuickApplyFormData,
+    | 'firstName'
+    | 'lastName'
+    | 'email'
+    | 'phone'
+    | 'streetNumber'
+    | 'streetName'
+    | 'apartmentNumber'
+    | 'city'
+    | 'province'
+    | 'postalCode'
+    | 'movingDate'
+    | 'loanAmount'
+    | 'confirmInformation'
+  >
+  onUpdate: QuickApplyUpdateHandler
 }
 
 export default function Step4Confirmation({ formData, onUpdate }: Step4ConfirmationProps) {

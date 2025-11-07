@@ -4,6 +4,10 @@ import AddressAutocomplete, {
   type ParsedAddress
 } from '../../components/AddressAutocomplete'
 import Select from '../../components/Select'
+import type {
+  QuickApplyFormData,
+  QuickApplyUpdateHandler
+} from '../types'
 
 const CANADIAN_PROVINCES = [
   'Alberta',
@@ -22,17 +26,18 @@ const CANADIAN_PROVINCES = [
 ]
 
 interface Step2AddressProps {
-  formData: {
-    streetNumber: string
-    streetName: string
-    apartmentNumber?: string
-    city: string
-    province: string
-    postalCode: string
-    movingDate: string
-    country: string
-  }
-  onUpdate: (field: string, value: string | boolean) => void
+  formData: Pick<
+    QuickApplyFormData,
+    | 'streetNumber'
+    | 'streetName'
+    | 'apartmentNumber'
+    | 'city'
+    | 'province'
+    | 'postalCode'
+    | 'movingDate'
+    | 'country'
+  >
+  onUpdate: QuickApplyUpdateHandler
 }
 
 export default function Step2Address({

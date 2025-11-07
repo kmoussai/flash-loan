@@ -16,33 +16,18 @@ import Step2Address from './components/Step2Address'
 import Step3LoanDetails from './components/Step3LoanDetails'
 import Step4Confirmation from './components/Step4Confirmation'
 import Step5BankVerification from './components/Step5BankVerification'
-
-interface MicroLoanFormData {
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  dateOfBirth: string
-  preferredLanguage: string
-  streetNumber: string
-  streetName: string
-  apartmentNumber: string
-  city: string
-  province: string
-  postalCode: string
-  movingDate: string
-  country: string
-  loanAmount: string
-  confirmInformation: boolean
-}
+import type {
+  QuickApplyFormData,
+  QuickApplyUpdateHandler
+} from './types'
 
 export default function MicroLoanApplicationPage() {
   const t = useTranslations('')
   const params = useParams()
   const locale = params.locale as string
 
-  const [formData, setFormData] = useState<MicroLoanFormData>(() => {
-    const defaults: MicroLoanFormData = {
+  const [formData, setFormData] = useState<QuickApplyFormData>(() => {
+    const defaults: QuickApplyFormData = {
       firstName: '',
       lastName: '',
       email: '',
@@ -182,9 +167,9 @@ export default function MicroLoanApplicationPage() {
     }
   }, [formData])
 
-  const updateFormData = (
-    field: keyof MicroLoanFormData,
-    value: string | boolean
+  const updateFormData: QuickApplyUpdateHandler = (
+    field,
+    value
   ) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
@@ -294,7 +279,7 @@ export default function MicroLoanApplicationPage() {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
 
-    const randomData: MicroLoanFormData = {
+    const randomData: QuickApplyFormData = {
       firstName: randomFirstName,
       lastName: randomLastName,
       email: `${cleanFirstName.toLowerCase()}.${cleanLastName.toLowerCase()}${Math.floor(Math.random() * 999)}@email.com`,

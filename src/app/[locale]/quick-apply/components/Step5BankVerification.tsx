@@ -5,15 +5,11 @@ import {
   getInveriteIframeConfig,
   initializeInveriteSession
 } from '@/src/lib/ibv/inverite'
+import type { QuickApplyFormData } from '../types'
 
 interface Step5BankVerificationProps {
   ibvVerified: boolean
-  formData: {
-    firstName: string
-    lastName: string
-    email: string
-    phone: string
-  }
+  formData: Pick<QuickApplyFormData, 'firstName' | 'lastName' | 'email' | 'phone'>
   onRequestGuidReceived?: (requestGuid: string) => void
 }
 

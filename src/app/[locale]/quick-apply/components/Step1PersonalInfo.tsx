@@ -1,15 +1,16 @@
 'use client'
 import { useTranslations } from 'next-intl'
+import type {
+  QuickApplyFormData,
+  QuickApplyUpdateHandler
+} from '../types'
 
 interface Step1PersonalInfoProps {
-  formData: {
-    firstName: string
-    lastName: string
-    email: string
-    phone: string
-    dateOfBirth: string
-  }
-  onUpdate: (field: string, value: string | boolean) => void
+  formData: Pick<
+    QuickApplyFormData,
+    'firstName' | 'lastName' | 'email' | 'phone' | 'dateOfBirth'
+  >
+  onUpdate: QuickApplyUpdateHandler
 }
 
 export default function Step1PersonalInfo({
