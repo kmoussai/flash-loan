@@ -303,6 +303,8 @@ const OverviewTab = ({
                 return Math.max(1, Math.ceil(numberOfPayments / 4))
               case 'bi-weekly':
                 return Math.max(1, Math.ceil(numberOfPayments / 2))
+              case 'twice-monthly':
+                return Math.max(1, Math.ceil(numberOfPayments / 2))
               default:
                 return Math.max(1, numberOfPayments)
             }

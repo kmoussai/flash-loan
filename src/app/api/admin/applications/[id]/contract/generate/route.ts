@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { createLoanContract, getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
 import type { ContractTerms, PaymentFrequency } from '@/src/lib/supabase/types'
+import { getPaymentsPerMonth, assertFrequency } from '@/src/lib/utils/frequency'
 
 export async function POST(
   request: NextRequest,
@@ -104,15 +105,10 @@ export async function POST(
       return Math.round(parsed)
     }
 
-    const allowedPaymentFrequencies: PaymentFrequency[] = ['monthly', 'bi-weekly', 'weekly']
-    const normalizePaymentFrequency = (rawValue: unknown, fallback: PaymentFrequency = 'monthly'): PaymentFrequency => {
-      if (typeof rawValue !== 'string') {
-        return fallback
-      }
-
-      const normalized = rawValue.trim().toLowerCase() as PaymentFrequency
-      return allowedPaymentFrequencies.includes(normalized) ? normalized : fallback
-    }
+    const normalizePaymentFrequency = (
+      rawValue: unknown,
+      fallback: PaymentFrequency = 'monthly'
+    ): PaymentFrequency => assertFrequency(rawValue, fallback)
 
     const normalizeNumberOfPayments = (rawValue: unknown): number | null => {
       const parsed = Number(rawValue)
@@ -149,16 +145,8 @@ export async function POST(
       return null
     }
 
-    const calculateNumberOfPayments = (months: number, frequency: PaymentFrequency): number => {
-      switch (frequency) {
-        case 'weekly':
-          return months * 4
-        case 'bi-weekly':
-          return months * 2
-        default:
-          return months
-      }
-    }
+    const calculateNumberOfPayments = (months: number, frequency: PaymentFrequency): number =>
+      Math.max(1, Math.round(months * getPaymentsPerMonth(frequency)))
 
     const calculateDueDate = (startDate: Date, index: number, frequency: PaymentFrequency): Date => {
       const dueDate = new Date(startDate)
@@ -169,6 +157,9 @@ export async function POST(
           break
         case 'bi-weekly':
           dueDate.setDate(startDate.getDate() + index * 14)
+          break
+        case 'twice-monthly':
+          dueDate.setDate(startDate.getDate() + index * 15)
           break
         default:
           dueDate.setMonth(startDate.getMonth() + index)
@@ -185,13 +176,7 @@ export async function POST(
     const providedNumberOfPayments = normalizeNumberOfPayments(payload?.numberOfPayments)
     const fallbackTermMonths = normalizeTermMonths(payload?.termMonths)
 
-    const paymentsPerMonthMap: Record<PaymentFrequency, number> = {
-      weekly: 4,
-      'bi-weekly': 2,
-      monthly: 1
-    }
-
-    const paymentsPerMonth = paymentsPerMonthMap[paymentFrequency] ?? 1
+    const paymentsPerMonth = getPaymentsPerMonth(paymentFrequency)
 
     const numberOfPayments = providedNumberOfPayments ?? Math.max(1, calculateNumberOfPayments(fallbackTermMonths, paymentFrequency))
 

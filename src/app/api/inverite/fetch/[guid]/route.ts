@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { normalizeFrequency } from '@/src/lib/utils/frequency'
 import type { IBVSummary } from './types'
 
 // Build a compact summary from Inverite raw data with safe fallbacks
@@ -29,12 +30,25 @@ function extractSummary(rawData: any, requestGuid: string): IBVSummary {
       },
       bank_pdf_statements: account.bank_pdf_statements,
       total_transactions: (account.transactions ?? []).length,
-      income: account.payschedules.map((pay: any) => ({
-        frequency: pay.frequency,
-        details: pay.details,
-        monthly_income: pay.monthly_income,
-        future_payments: pay.future_payments
-      }))
+      income: (account.payschedules || []).map((pay: any) => {
+        const normalizedFrequency = normalizeFrequency(pay?.frequency)
+        const futurePayments = Array.isArray(pay?.future_payments)
+          ? pay.future_payments
+              .map((value: any) => {
+                const parsed = new Date(value)
+                return Number.isNaN(parsed.getTime()) ? null : parsed
+              })
+              .filter((entry: Date | null): entry is Date => entry !== null)
+          : []
+
+        return {
+          frequency: normalizedFrequency,
+          raw_frequency: typeof pay?.frequency === 'string' ? pay.frequency : pay?.frequency ? String(pay.frequency) : null,
+          details: pay?.details ?? '',
+          monthly_income: Number(pay?.monthly_income) || 0,
+          future_payments: futurePayments
+        }
+      })
     }))
   }
 }

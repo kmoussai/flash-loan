@@ -15,7 +15,8 @@ export type DocumentType = 'drivers_license' | 'passport' | 'health_card' | 'soc
 export type DocumentStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'expired'
 export type LoanStatus = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
-export type PaymentFrequency = 'monthly' | 'bi-weekly' | 'weekly'
+export type Frequency = 'weekly' | 'bi-weekly' | 'twice-monthly' | 'monthly'
+export type PaymentFrequency = Frequency
 export type DocumentRequestStatus = 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
 export type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
 export type IncomeSourceType = 
@@ -36,7 +37,7 @@ export interface EmployedIncomeFields {
   supervisor_name: string
   work_phone: string
   post: string
-  payroll_frequency: 'weekly' | 'bi-weekly' | 'monthly'
+  payroll_frequency: Frequency
   date_hired: string
   next_pay_date: string
 }
@@ -49,7 +50,7 @@ export interface EmploymentInsuranceIncomeFields {
 export interface SelfEmployedIncomeFields {
   paid_by_direct_deposit: 'yes' | 'no'
   self_employed_phone: string
-  deposits_frequency: 'weekly' | 'bi-weekly' | 'monthly'
+  deposits_frequency: Frequency
   self_employed_start_date: string
   next_deposit_date: string
 }

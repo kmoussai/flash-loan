@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import Button from '@/src/app/[locale]/components/Button'
+import type { Frequency } from '@/src/lib/supabase/types'
 
 type LoanStatusDB = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
 type LoanStatusUI = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
@@ -30,7 +31,7 @@ interface LoanDetail {
   remaining_balance: number
   interest_rate: number
   term_months: number
-  payment_frequency: 'weekly' | 'biweekly' | 'monthly'
+  payment_frequency: Frequency
   payment_amount: number
   origination_date: string
   status: LoanStatusUI
@@ -169,7 +170,7 @@ const transformLoanDetails = (apiData: LoanDetailsResponse): LoanDetail => {
     remaining_balance: parseFloat(loan.remaining_balance.toString()),
     interest_rate: parseFloat(loan.interest_rate.toString()),
     term_months: loan.term_months,
-    payment_frequency: 'monthly', // Default, could be enhanced to use actual frequency
+    payment_frequency: 'monthly' as Frequency, // Default, could be enhanced to use actual frequency
     payment_amount: Math.round(monthlyPayment * 100) / 100,
     origination_date: loan.created_at,
     status: mapStatusToUI(loan.status),
