@@ -293,6 +293,7 @@ export interface Loan {
   id: string
   application_id: string
   user_id: string
+  loan_number: number
   principal_amount: number
   interest_rate: number
   term_months: number
@@ -339,6 +340,17 @@ export interface ContractTerms {
   terms_and_conditions?: string
   effective_date?: string
   maturity_date?: string
+  // Optional borrower information for rendering the contract
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  phone?: string | null
+  street_number?: string | null
+  street_name?: string | null
+  apartment_number?: string | null
+  city?: string | null
+  province?: string | null
+  postal_code?: string | null
 }
 
 export interface ClientSignatureData {

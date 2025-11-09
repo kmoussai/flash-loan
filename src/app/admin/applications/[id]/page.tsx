@@ -26,6 +26,7 @@ export default function ApplicationDetailsPage() {
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [preApproveAmount, setPreApproveAmount] = useState<number | ''>('')
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [selectedAccountIndex, setSelectedAccountIndex] = useState<
     number | undefined
@@ -347,8 +348,16 @@ export default function ApplicationDetailsPage() {
     
     setProcessing(true)
     try {
+      const payload: { loanAmount?: number } = {}
+      const numericAmount =
+        typeof preApproveAmount === 'string' ? Number(preApproveAmount) : preApproveAmount
+      if (Number.isFinite(numericAmount) && numericAmount! > 0) {
+        payload.loanAmount = Math.round((numericAmount as number) * 100) / 100
+      }
       const response = await fetch(`/api/admin/applications/${applicationId}/approve`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
 
       if (!response.ok) {
@@ -359,7 +368,13 @@ export default function ApplicationDetailsPage() {
       const data = await response.json()
       setProcessing(false)
       setShowApproveModal(false)
-      alert('Application approved successfully! You can now generate a contract.')
+      alert('Application pre-approved and pending loan created.')
+      
+      // Navigate to the newly created loan if present
+      if (data?.loan?.id) {
+        router.push(`/admin/loan/${data.loan.id}`)
+        return
+      }
       
       // Refresh application details to show updated status
       await fetchApplicationDetails()
@@ -686,7 +701,10 @@ export default function ApplicationDetailsPage() {
                 loadingContract={loadingContract}
                 onGenerateContract={options => handleGenerateContract(options)}
                 onViewContract={handleViewContract}
-                onOpenApproveModal={() => setShowApproveModal(true)}
+                onOpenApproveModal={() => {
+                  setPreApproveAmount(application.loan_amount)
+                  setShowApproveModal(true)
+                }}
                 onOpenRejectModal={() => setShowRejectModal(true)}
               />
             )}
@@ -728,11 +746,28 @@ export default function ApplicationDetailsPage() {
             <div className='mx-4 w-full max-w-md rounded-lg border border-gray-200 bg-white p-6'>
               <div className='mb-6'>
                 <h3 className='text-lg font-semibold text-gray-900'>
-                  Approve Application
+                  Pre-Approve Application
                 </h3>
                 <p className='mt-2 text-sm text-gray-600'>
-                  Are you sure you want to approve this application?
+                  Set the pre-approved amount. A pending loan will be created.
                 </p>
+                <div className='mt-4'>
+                  <label className='mb-1 block text-xs font-medium text-gray-700'>Amount (CAD)</label>
+                  <input
+                    type='number'
+                    min={1}
+                    step='0.01'
+                    value={preApproveAmount === '' ? '' : preApproveAmount}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setPreApproveAmount(v === '' ? '' : Number(v))
+                    }}
+                    className='w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500'
+                  />
+                  <p className='mt-1 text-[10px] text-gray-500'>
+                    Defaults to requested amount: {application ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(application.loan_amount) : '-'}
+                  </p>
+                </div>
                 {application?.ibv_results && (
                   <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
                     <p className='mb-1 font-medium'>Based on IBV Analysis:</p>
@@ -770,7 +805,7 @@ export default function ApplicationDetailsPage() {
                   disabled={processing}
                   className='flex-1 rounded border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50'
                 >
-                  {processing ? 'Processing...' : 'Confirm Approval'}
+                  {processing ? 'Processing...' : 'Confirm Pre-Approval'}
                 </button>
               </div>
             </div>
