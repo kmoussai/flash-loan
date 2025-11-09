@@ -5,6 +5,64 @@ import { signRequestToken } from '@/src/lib/security/token'
 import { sendEmail } from '@/src/lib/email/smtp'
 import { generateDocumentRequestEmail } from '@/src/lib/email/templates/document-request'
 
+const EMPLOYMENT_DEFAULT_FORM_SCHEMA = {
+  title: 'Employment Verification',
+  description:
+    'Provide your employer contact information so our team can confirm your employment details.',
+  submit_label: 'Submit Employment Details',
+  fields: [
+    {
+      id: 'employer_name',
+      label: 'Employer Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Company or organization'
+    },
+    {
+      id: 'supervisor_name',
+      label: 'Supervisor or HR Contact',
+      type: 'text',
+      required: true,
+      placeholder: 'Contact person full name'
+    },
+    {
+      id: 'work_phone',
+      label: 'Work Phone Number',
+      type: 'phone',
+      required: true,
+      placeholder: '(555) 555-5555'
+    },
+    {
+      id: 'work_email',
+      label: 'Work Email (optional)',
+      type: 'text',
+      required: false,
+      placeholder: 'contact@example.com'
+    },
+    {
+      id: 'job_title',
+      label: 'Job Title',
+      type: 'text',
+      required: false
+    },
+    {
+      id: 'start_date',
+      label: 'Employment Start Date',
+      type: 'date',
+      required: false
+    },
+    {
+      id: 'additional_notes',
+      label: 'Additional Notes (optional)',
+      type: 'textarea',
+      required: false,
+      maxLength: 500,
+      helperText:
+        'Include any other information that will help us reach your employer, such as the best time to call.'
+    }
+  ]
+}
+
 // POST /api/admin/loan-apps/:id/request-docs
 // Body: {
 //   requests?: Array<{ document_type_id: string, request_kind?: 'document' | 'address' | 'reference' | 'employment' | 'other', form_schema?: Record<string, any> }>,
@@ -71,15 +129,22 @@ export async function POST(
         ? (rawKind as 'document' | 'address' | 'reference' | 'employment' | 'other')
         : 'document'
 
-      const formSchema =
+      const providedFormSchema =
         item && typeof item.form_schema === 'object' && item.form_schema !== null && !Array.isArray(item.form_schema)
           ? (item.form_schema as Record<string, any>)
           : {}
 
+      const normalizedFormSchema =
+        Object.keys(providedFormSchema).length > 0
+          ? providedFormSchema
+          : requestKind === 'employment'
+            ? EMPLOYMENT_DEFAULT_FORM_SCHEMA
+            : {}
+
       normalizedRequests.push({
         document_type_id: documentTypeId,
         request_kind: requestKind,
-        form_schema: formSchema
+        form_schema: normalizedFormSchema
       })
     })
 

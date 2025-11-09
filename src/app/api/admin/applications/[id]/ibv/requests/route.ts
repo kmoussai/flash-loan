@@ -123,7 +123,7 @@ export async function POST(
       siteID: siteId,
       firstname: client.first_name,
       lastname: client.last_name,
-      email: client.email,
+      // email: client.email,
       phone: client.phone
     }
 
