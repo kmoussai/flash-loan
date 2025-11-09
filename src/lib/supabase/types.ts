@@ -233,6 +233,24 @@ export interface LoanApplication {
   flinks_connected_at: string | null
 }
 
+export interface LoanApplicationIbvRequest {
+  id: string
+  loan_application_id: string
+  client_id: string
+  provider: IbvProvider
+  status: IbvStatus
+  request_guid: string | null
+  request_url: string | null
+  provider_data: Record<string, any> | null
+  results: Record<string, any> | null
+  error_details: Record<string, any> | null
+  note: string | null
+  requested_at: string
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Reference {
   id: string
   loan_application_id: string
@@ -439,6 +457,21 @@ export interface LoanApplicationInsert {
   interest_rate?: number
 }
 
+export interface LoanApplicationIbvRequestInsert {
+  loan_application_id: string
+  client_id: string
+  provider: IbvProvider
+  status?: IbvStatus
+  request_guid?: string | null
+  request_url?: string | null
+  provider_data?: Record<string, any> | null
+  results?: Record<string, any> | null
+  error_details?: Record<string, any> | null
+  note?: string | null
+  requested_at?: string
+  completed_at?: string | null
+}
+
 export interface ReferenceInsert {
   loan_application_id: string
   first_name: string
@@ -510,6 +543,19 @@ export interface LoanApplicationUpdate {
   ibv_status?: IbvStatus | null
   ibv_provider_data?: IbvProviderData | null
   ibv_verified_at?: string | null
+}
+
+export interface LoanApplicationIbvRequestUpdate {
+  client_id?: string
+  status?: IbvStatus
+  request_guid?: string | null
+  request_url?: string | null
+  provider_data?: Record<string, any> | null
+  results?: Record<string, any> | null
+  error_details?: Record<string, any> | null
+  note?: string | null
+  requested_at?: string
+  completed_at?: string | null
 }
 
 export interface ReferenceUpdate {
@@ -678,6 +724,11 @@ export interface Database {
         Row: LoanApplication
         Insert: LoanApplicationInsert
         Update: LoanApplicationUpdate
+      }
+      loan_application_ibv_requests: {
+        Row: LoanApplicationIbvRequest
+        Insert: LoanApplicationIbvRequestInsert
+        Update: LoanApplicationIbvRequestUpdate
       }
       references: {
         Row: Reference
