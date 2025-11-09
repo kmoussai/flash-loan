@@ -3,6 +3,27 @@
 import { useEffect, useState } from 'react'
 import { IBVSummary } from '../../api/inverite/fetch/[guid]/types'
 
+const PENDING_MESSAGE =
+  'Inverite is still processing this bank verification request. Try again in a few minutes.'
+
+interface IbvRequestHistory {
+  id: string
+  loan_application_id: string
+  client_id: string
+  provider: string
+  status: string
+  request_guid: string | null
+  request_url: string | null
+  provider_data: Record<string, any> | null
+  results: Record<string, any> | null
+  error_details: Record<string, any> | null
+  note: string | null
+  requested_at: string
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 interface IbvApiResponse {
   application_id: string
   ibv_provider: string | null
@@ -24,29 +45,72 @@ export default function IbvCard({
   const [data, setData] = useState<IbvApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [fetchingInveriteData, setFetchingInveriteData] = useState(false)
+  const [reRequesting, setReRequesting] = useState(false)
+  const [history, setHistory] = useState<IbvRequestHistory[]>([])
+  const [notifyingId, setNotifyingId] = useState<string | null>(null)
 
   const load = async () => {
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch(
-        `/api/admin/applications/${applicationId}/ibv/summary`
-      )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to load IBV data')
-      }
-      const json = (await res.json()) as IbvApiResponse
-      // Backfill request_guid from ibv_results for convenience
-      ;(json as any).request_guid =
-        (json as any)?.ibv_results?.request_guid || null
+      const [summaryResponse, historyResponse] = await Promise.all([
+        fetch(`/api/admin/applications/${applicationId}/ibv/summary`),
+        fetch(`/api/admin/applications/${applicationId}/ibv/requests`)
+      ])
 
-      setData(json)
+      if (!summaryResponse.ok) {
+        const err = await summaryResponse.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to load IBV summary')
+      }
+
+      if (!historyResponse.ok) {
+        const err = await historyResponse.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to load IBV history')
+      }
+
+      const summaryJson = (await summaryResponse.json()) as IbvApiResponse
+      ;(summaryJson as any).request_guid =
+        (summaryJson as any)?.ibv_results?.request_guid || null
+
+      const historyJson = (await historyResponse.json()) as {
+        requests: IbvRequestHistory[]
+      }
+
+      setData(summaryJson)
+      setHistory(historyJson.requests || [])
+      setInfoMessage(prev => {
+        const accounts = Array.isArray(summaryJson?.ibv_results?.accounts)
+          ? summaryJson.ibv_results.accounts
+          : []
+
+        if (accounts.length > 0) {
+          return null
+        }
+
+        const normalizedStatus =
+          typeof summaryJson?.ibv_status === 'string'
+            ? summaryJson.ibv_status.toLowerCase()
+            : null
+
+        if (
+          normalizedStatus &&
+          (normalizedStatus === 'pending' || normalizedStatus === 'processing')
+        ) {
+          return prev && prev.length > 0
+            ? prev
+            : PENDING_MESSAGE
+        }
+
+        return normalizedStatus ? null : prev
+      })
     } catch (e: any) {
       console.error('[IbvCard] Error loading data:', e)
       setError(e.message || 'Failed to load IBV data')
       setData(null)
+      setHistory([])
+      setInfoMessage(null)
     } finally {
       setLoading(false)
     }
@@ -64,6 +128,15 @@ export default function IbvCard({
       style: 'currency',
       currency: 'CAD'
     }).format(amount)
+
+  const formatDateTime = (value: string | null | undefined) => {
+    if (!value) return null
+    try {
+      return new Date(value).toLocaleString()
+    } catch {
+      return value
+    }
+  }
 
   const fetchInveriteAndRefresh = async () => {
     const requestGuid = summary?.request_guid || data?.request_guid
@@ -83,10 +156,19 @@ export default function IbvCard({
         throw new Error(err.error || 'Failed to fetch Inverite data')
       }
       const fetchResult = await res.json()
+      if (fetchResult?.pending) {
+        setInfoMessage(fetchResult.message || PENDING_MESSAGE)
+      } else if (fetchResult?.success === false) {
+        throw new Error(fetchResult.error || fetchResult.message || 'Failed to fetch Inverite data')
+      } else if (fetchResult?.success === true) {
+        setInfoMessage(null)
+      }
+
       console.log('[IbvCard] Fetch completed:', {
         success: fetchResult.success,
         hasIbvResults: !!fetchResult.ibv_results,
-        accountsCount: fetchResult.ibv_results?.accounts_summary?.length || 0
+        accountsCount: fetchResult.ibv_results?.accounts?.length || 0,
+        pending: fetchResult?.pending || false
       })
       // Small delay to ensure database write is complete
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -96,6 +178,59 @@ export default function IbvCard({
       setError(e.message || 'Failed to fetch Inverite data')
     } finally {
       setFetchingInveriteData(false)
+    }
+  }
+
+  const sendNotification = async (requestId: string) => {
+    try {
+      setNotifyingId(requestId)
+      setError(null)
+
+      const res = await fetch(
+        `/api/admin/applications/${applicationId}/ibv/requests/${requestId}/notify`,
+        { method: 'POST' }
+      )
+
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(json.error || json.message || 'Failed to send notification')
+      }
+
+      await load()
+      setInfoMessage(prev => prev || json.message || null)
+    } catch (e: any) {
+      console.error('[IbvCard] Error sending notification:', e)
+      setError(e.message || 'Failed to send notification')
+    } finally {
+      setNotifyingId(null)
+    }
+  }
+  const initiateNewRequest = async () => {
+    try {
+      setReRequesting(true)
+      setError(null)
+      const res = await fetch(
+        `/api/admin/applications/${applicationId}/ibv/requests`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        }
+      )
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to create new IBV request')
+      }
+
+      await load()
+      alert('New bank verification request generated successfully.')
+    } catch (e: any) {
+      console.error('[IbvCard] Error creating IBV request:', e)
+      setError(e.message || 'Failed to create IBV request')
+    } finally {
+      setReRequesting(false)
     }
   }
 
@@ -126,50 +261,113 @@ export default function IbvCard({
               <p className='mt-0.5 text-sm text-white/90'>Identity & Bank Verification</p>
             </div>
           </div>
-          <button
-            onClick={fetchInveriteAndRefresh}
-            disabled={!summary?.request_guid || fetchingInveriteData}
-            className='rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50'
-            title={
-              summary?.request_guid
-                ? 'Fetch latest IBV data'
-                : 'No request GUID yet'
-            }
-          >
-            {fetchingInveriteData ? (
-              <span className='flex items-center gap-2'>
-                <svg
-                  className='h-4 w-4 animate-spin'
-                  fill='none'
-                  viewBox='0 0 24 24'
-                >
-                  <circle
-                    className='opacity-25'
-                    cx='12'
-                    cy='12'
-                    r='10'
-                    stroke='currentColor'
-                    strokeWidth='4'
-                  />
-                  <path
-                    className='opacity-75'
-                    fill='currentColor'
-                    d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                  />
-                </svg>
-                Fetching...
-              </span>
-            ) : (
-              <span className='flex items-center gap-1.5'>
-                <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                </svg>
-                Refresh
-              </span>
-            )}
-          </button>
+          <div className='flex items-center gap-2'>
+            <button
+              onClick={fetchInveriteAndRefresh}
+              disabled={!summary?.request_guid || fetchingInveriteData}
+              className='rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50'
+              title={
+                summary?.request_guid
+                  ? 'Fetch latest IBV data'
+                  : 'No request GUID yet'
+              }
+            >
+              {fetchingInveriteData ? (
+                <span className='flex items-center gap-2'>
+                  <svg
+                    className='h-4 w-4 animate-spin'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                  >
+                    <circle
+                      className='opacity-25'
+                      cx='12'
+                      cy='12'
+                      r='10'
+                      stroke='currentColor'
+                      strokeWidth='4'
+                    />
+                    <path
+                      className='opacity-75'
+                      fill='currentColor'
+                      d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                    />
+                  </svg>
+                  Fetching...
+                </span>
+              ) : (
+                <span className='flex items-center gap-1.5'>
+                  <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                  </svg>
+                  Refresh
+                </span>
+              )}
+            </button>
+            <button
+              onClick={async () => {
+                if (reRequesting) return
+                await initiateNewRequest()
+              }}
+              disabled={reRequesting}
+              className='rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50'
+              title='Generate a new bank verification request'
+            >
+              {reRequesting ? (
+                <span className='flex items-center gap-2'>
+                  <svg
+                    className='h-4 w-4 animate-spin'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                  >
+                    <circle
+                      className='opacity-25'
+                      cx='12'
+                      cy='12'
+                      r='10'
+                      stroke='currentColor'
+                      strokeWidth='4'
+                    />
+                    <path
+                      className='opacity-75'
+                      fill='currentColor'
+                      d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                    />
+                  </svg>
+                  Requesting...
+                </span>
+              ) : (
+                <span className='flex items-center gap-1.5'>
+                  <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 4v16m8-8H4' />
+                  </svg>
+                  Re-request IBV
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
+
+      {infoMessage && !error && (
+        <div className='border-b border-amber-100 bg-amber-50 px-6 py-4'>
+          <div className='flex items-start gap-3 text-amber-700'>
+            <div className='flex h-9 w-9 items-center justify-center rounded-full bg-amber-100'>
+              <svg className='h-5 w-5 text-amber-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 16h-1v-4h-1m1-4h.01M12 22a10 10 0 110-20 10 10 0 010 20z' />
+              </svg>
+            </div>
+            <div>
+              <p className='text-sm font-semibold text-amber-800'>
+                Verification Pending
+              </p>
+              <p className='mt-1 text-sm text-amber-700/90'>
+                {infoMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className='flex items-center justify-center p-12'>
@@ -510,6 +708,124 @@ export default function IbvCard({
               </details>
             )}
           </div>
+        </div>
+      )}
+      {history.length > 0 && (
+        <div className='border-t border-gray-100 bg-gray-50 px-6 py-5'>
+          <h3 className='text-sm font-semibold text-gray-700'>
+            Verification History
+          </h3>
+          <ul className='mt-4 space-y-3'>
+            {history.map(entry => (
+              <li
+                key={entry.id}
+                className='rounded-lg border border-gray-200 bg-white p-4 shadow-sm'
+              >
+                <div className='flex flex-wrap items-center justify-between gap-3'>
+                  <div>
+                    <p className='text-sm font-medium text-gray-800'>
+                      {entry.status.toUpperCase()}
+                    </p>
+                    <p className='text-xs text-gray-500'>
+                      Requested {new Date(entry.requested_at).toLocaleString()}
+                      {entry.completed_at
+                        ? ` • Completed ${new Date(entry.completed_at).toLocaleString()}`
+                        : ' • Pending'}
+                    </p>
+                  </div>
+                  {entry.request_guid && (
+                    <p className='text-xs text-gray-500'>
+                      GUID:{' '}
+                      <span className='font-mono'>
+                        {entry.request_guid}
+                      </span>
+                    </p>
+                  )}
+                </div>
+                {entry.note && (
+                  <p className='mt-2 text-xs text-gray-600'>
+                    Note: {entry.note}
+                  </p>
+                )}
+                {(entry.provider_data?.last_notification_at ||
+                  entry.provider_data?.last_notification_to) && (
+                  <p className='mt-2 text-xs text-gray-500'>
+                    Last notification:{' '}
+                    {formatDateTime(entry.provider_data?.last_notification_at) || 'Unknown'}
+                    {entry.provider_data?.last_notification_to
+                      ? ` • ${entry.provider_data.last_notification_to}`
+                      : ''}
+                  </p>
+                )}
+                <div className='mt-3 flex flex-wrap items-center gap-2'>
+                  {(() => {
+                    const verificationUrl =
+                      entry.request_url ||
+                      entry.provider_data?.start_url ||
+                      entry.provider_data?.iframe_url
+                    if (!verificationUrl) return null
+                    return (
+                      <a
+                        href={verificationUrl}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-all hover:border-indigo-300 hover:bg-indigo-100'
+                      >
+                        Open Verification
+                      </a>
+                    )
+                  })()}
+                  <button
+                    onClick={() => sendNotification(entry.id)}
+                    disabled={
+                      notifyingId === entry.id ||
+                      entry.status?.toLowerCase() === 'verified'
+                    }
+                    className='inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-all hover:border-amber-300 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60'
+                  >
+                    {notifyingId === entry.id ? (
+                      <>
+                        <svg
+                          className='h-4 w-4 animate-spin text-amber-600'
+                          fill='none'
+                          viewBox='0 0 24 24'
+                        >
+                          <circle
+                            className='opacity-25'
+                            cx='12'
+                            cy='12'
+                            r='10'
+                            stroke='currentColor'
+                            strokeWidth='4'
+                          />
+                          <path
+                            className='opacity-75'
+                            fill='currentColor'
+                            d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                          />
+                        </svg>
+                        Sending...
+                      </>
+                    ) : entry.status?.toLowerCase() === 'verified' ? (
+                      <>
+                        <svg className='h-4 w-4 text-emerald-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
+                        </svg>
+                        Already Verified
+                      </>
+                    ) : (
+                      <>
+                        <svg className='h-4 w-4 text-amber-600' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' />
+                        </svg>
+                        Send Notification
+                      </>
+                    )}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

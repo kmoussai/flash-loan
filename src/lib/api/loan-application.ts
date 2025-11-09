@@ -4,6 +4,8 @@
  * This file contains helper functions to interact with the loan application API
  */
 
+import type { Frequency } from '@/src/lib/supabase/types'
+
 export interface SubmitLoanApplicationData {
   // Personal Information
   firstName: string
@@ -47,13 +49,13 @@ export interface SubmitLoanApplicationData {
   supervisorName?: string
   workPhone?: string
   post?: string
-  payrollFrequency?: string
+  payrollFrequency?: Frequency | ''
   dateHired?: string
   nextPayDate?: string
   employmentInsuranceStartDate?: string
   paidByDirectDeposit?: string
   selfEmployedPhone?: string
-  depositsFrequency?: string
+  depositsFrequency?: Frequency | ''
   selfEmployedStartDate?: string
   nextDepositDate?: string
   

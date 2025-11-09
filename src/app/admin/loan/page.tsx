@@ -12,6 +12,7 @@ type LoanStatusUI = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
 // API response interface
 interface LoanFromAPI {
   id: string
+  loan_number?: number
   application_id: string
   user_id: string
   principal_amount: number
@@ -97,7 +98,9 @@ const transformLoan = (apiLoan: LoanFromAPI, index: number): Loan => {
   
   return {
     id: apiLoan.id,
-    loan_number: `LN-${String(index + 1).padStart(6, '0')}`, // Generate loan number from index
+    loan_number: apiLoan.loan_number !== undefined && apiLoan.loan_number !== null
+      ? `LN-${String(apiLoan.loan_number).padStart(6, '0')}`
+      : `LN-${String(index + 1).padStart(6, '0')}`,
     borrower_name: borrowerName,
     borrower_email: apiLoan.users?.email || 'N/A',
     borrower_phone: apiLoan.users?.phone || 'N/A',

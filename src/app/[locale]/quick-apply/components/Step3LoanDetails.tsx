@@ -1,18 +1,17 @@
 'use client'
 import { useTranslations } from 'next-intl'
 import Select from '../../components/Select'
+import type {
+  QuickApplyFormData,
+  QuickApplyUpdateHandler
+} from '../types'
 
-interface Step2LoanDetailsProps {
-  formData: {
-    loanAmount: string
-  }
-  onUpdate: any
+interface Step3LoanDetailsProps {
+  formData: Pick<QuickApplyFormData, 'loanAmount'>
+  onUpdate: QuickApplyUpdateHandler
 }
 
-export default function Step2LoanDetails({
-  formData,
-  onUpdate
-}: Step2LoanDetailsProps) {
+export default function Step3LoanDetails({ formData, onUpdate }: Step3LoanDetailsProps) {
   const t = useTranslations('')
 
   const loanAmountOptions = [

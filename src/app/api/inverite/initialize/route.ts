@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         const locale = pathMatch ? pathMatch[1] : 'en' // Default to 'en' if not found
         
         // Build redirect URL with query parameters
-        const baseUrl = `${refererUrl.origin}/${locale}/apply1/inverite/callback`
+        const baseUrl = `${refererUrl.origin}/${locale}/quick-apply/inverite/callback`
         const urlObj = new URL(baseUrl)
         
         // Add any custom redirect params from request body
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         // Fallback: try to get locale from request if available
         const fallbackLocale = 'en'
         const origin = new URL(referer).origin
-        const fallbackUrl = new URL(`${origin}/${fallbackLocale}/apply1/inverite/callback`)
+        const fallbackUrl = new URL(`${origin}/${fallbackLocale}/quick-apply/inverite/callback`)
         if (body.redirectParams) {
           Object.entries(body.redirectParams).forEach(([key, value]) => {
             if (value) fallbackUrl.searchParams.set(key, String(value))

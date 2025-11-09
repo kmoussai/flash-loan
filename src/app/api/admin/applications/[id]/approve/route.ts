@@ -24,10 +24,18 @@ export async function POST(
 
     const supabase = createServerSupabaseAdminClient()
 
+    // Parse payload (loan amount is optional; defaults to application.loan_amount)
+    let payload: any = {}
+    try {
+      payload = await request.json()
+    } catch {
+      payload = {}
+    }
+
     // First, fetch the application details
     const { data: application, error: appError } = await supabase
       .from('loan_applications')
-      .select('id, loan_amount, client_id, application_status')
+      .select('id, loan_amount, client_id, application_status, interest_rate')
       .eq('id', applicationId)
       .single()
 
@@ -45,6 +53,7 @@ export async function POST(
       loan_amount: number
       client_id: string
       application_status: string
+      interest_rate: number | null
     }
 
     // Check if application is already pre-approved
@@ -56,8 +65,6 @@ export async function POST(
     }
 
     // Update application status to pre_approved and set approved_at timestamp
-    // Note: Loan will be created after contract is signed, not here
-    // 'approved' status is reserved for when contract is signed AND loan is created
     const updateData: LoanApplicationUpdate = {
       application_status: 'pre_approved',
       approved_at: new Date().toISOString()
@@ -76,13 +83,48 @@ export async function POST(
       )
     }
 
+    // Create a pending loan immediately upon pre-approval
+    const normalizeAmount = (raw: unknown, fallback: number) => {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n <= 0) return fallback
+      return Math.round(n * 100) / 100
+    }
+    const principalAmount = normalizeAmount(payload?.loanAmount, app.loan_amount)
+    const interestRate = Number.isFinite(app.interest_rate ?? NaN) ? (app.interest_rate as number) : 29
+    const termMonths = 3
+
+    const { data: createdLoan, error: loanError } = await (supabase
+      .from('loans') as any)
+      .insert({
+        application_id: app.id,
+        user_id: app.client_id,
+        principal_amount: principalAmount,
+        interest_rate: interestRate,
+        term_months: termMonths,
+        disbursement_date: null,
+        due_date: null,
+        remaining_balance: principalAmount,
+        status: 'pending_disbursement'
+      })
+      .select('*')
+      .single()
+
+    if (loanError) {
+      console.error('Error creating pending loan:', loanError)
+      return NextResponse.json(
+        { error: 'Failed to create loan', details: loanError.message },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Application pre-approved successfully. Next step: Generate contract.',
+      message: 'Application pre-approved and pending loan created.',
       application: {
         id: applicationId,
         status: 'pre_approved'
-      }
+      },
+      loan: createdLoan
     })
   } catch (error: any) {
     console.error('Error in approve application API:', error)

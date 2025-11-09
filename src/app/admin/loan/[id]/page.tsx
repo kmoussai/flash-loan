@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import Button from '@/src/app/[locale]/components/Button'
+import type { Frequency, PaymentFrequency, ApplicationStatus, LoanContract } from '@/src/lib/supabase/types'
+import GenerateContractModal from '../../applications/[id]/components/GenerateContractModal'
+import ContractViewer from '../../components/ContractViewer'
 
 type LoanStatusDB = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
 type LoanStatusUI = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
@@ -30,7 +33,7 @@ interface LoanDetail {
   remaining_balance: number
   interest_rate: number
   term_months: number
-  payment_frequency: 'weekly' | 'biweekly' | 'monthly'
+  payment_frequency: Frequency
   payment_amount: number
   origination_date: string
   status: LoanStatusUI
@@ -42,6 +45,7 @@ interface LoanDetail {
 // API Response interfaces
 interface LoanFromAPI {
   id: string
+  loan_number?: number
   application_id: string
   user_id: string
   principal_amount: number
@@ -157,7 +161,9 @@ const transformLoanDetails = (apiData: LoanDetailsResponse): LoanDetail => {
 
   return {
     id: loan.id,
-    loan_number: `LN-${loan.id.replace(/[^0-9]/g, '').padStart(6, '0').slice(0, 6)}`,
+    loan_number: loan.loan_number !== undefined && loan.loan_number !== null
+      ? `LN-${String(loan.loan_number).padStart(6, '0')}`
+      : `LN-${loan.id.replace(/[^0-9]/g, '').padStart(6, '0').slice(0, 6)}`,
     borrower: {
       id: loan.users?.id || loan.user_id,
       name: borrowerName,
@@ -169,7 +175,7 @@ const transformLoanDetails = (apiData: LoanDetailsResponse): LoanDetail => {
     remaining_balance: parseFloat(loan.remaining_balance.toString()),
     interest_rate: parseFloat(loan.interest_rate.toString()),
     term_months: loan.term_months,
-    payment_frequency: 'monthly', // Default, could be enhanced to use actual frequency
+    payment_frequency: 'monthly' as Frequency, // Default, could be enhanced to use actual frequency
     payment_amount: Math.round(monthlyPayment * 100) / 100,
     origination_date: loan.created_at,
     status: mapStatusToUI(loan.status),
@@ -189,6 +195,14 @@ export default function LoanDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'schedule' | 'borrower'>('overview')
+  const [applicationId, setApplicationId] = useState<string | null>(null)
+  const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus | null>(null)
+  const [showContractModal, setShowContractModal] = useState(false)
+  const [loadingContract, setLoadingContract] = useState(false)
+  const [showContractViewer, setShowContractViewer] = useState(false)
+  const [contract, setContract] = useState<LoanContract | null>(null)
+  const [hasContract, setHasContract] = useState<boolean>(false)
+  const [contractStatus, setContractStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (!loanId) return
@@ -206,6 +220,8 @@ export default function LoanDetailsPage() {
         }
 
         const data: LoanDetailsResponse = await response.json()
+        setApplicationId(data.loan.application_id)
+        setApplicationStatus((data.loan.loan_applications?.application_status as ApplicationStatus) || null)
         const transformedLoan = transformLoanDetails(data)
         setLoan(transformedLoan)
         setStatistics(data.statistics)
@@ -219,6 +235,63 @@ export default function LoanDetailsPage() {
 
     fetchLoanDetails()
   }, [loanId])
+
+  useEffect(() => {
+    if (!applicationId) return
+    let isCancelled = false
+    const checkContract = async () => {
+      try {
+        const response = await fetch(`/api/admin/applications/${applicationId}/contract`)
+        if (isCancelled) return
+        if (response.ok) {
+          const data = await response.json()
+          setHasContract(true)
+          setContractStatus(data?.contract?.contract_status ?? null)
+          setContract(data?.contract ?? null)
+        } else if (response.status === 404) {
+          setHasContract(false)
+          setContractStatus(null)
+        } else {
+          setHasContract(false)
+          setContractStatus(null)
+        }
+      } catch {
+        if (!isCancelled) {
+          setHasContract(false)
+          setContractStatus(null)
+        }
+      }
+    }
+    checkContract()
+    return () => {
+      isCancelled = true
+    }
+  }, [applicationId])
+
+  const handleViewContract = async () => {
+    if (!applicationId) return
+    setLoadingContract(true)
+    try {
+      const response = await fetch(`/api/admin/applications/${applicationId}/contract`)
+      if (!response.ok) {
+        if (response.status === 404) {
+          setContract(null)
+          setShowContractViewer(true)
+          return
+        }
+        const err = await response.json()
+        throw new Error(err.error || 'Failed to fetch contract')
+      }
+      const result = await response.json()
+      setContract(result.contract as LoanContract)
+      setShowContractViewer(true)
+    } catch (e: any) {
+      console.error('Error fetching contract:', e)
+      alert(e.message || 'Failed to fetch contract')
+    } finally {
+      setLoadingContract(false)
+    }
+  }
 
   const statusBadge = useMemo(() => {
     const base = 'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold '
@@ -376,6 +449,49 @@ export default function LoanDetailsPage() {
                 {/* Actions */}
                 <div className='rounded-xl border border-gray-200 bg-white p-6'>
                   <div className='flex items-center justify-center gap-4'>
+                    {!hasContract && (
+                      <div className='flex flex-col items-center gap-2'>
+                        <Button
+                          onClick={() => {
+                            if (applicationStatus !== 'pre_approved') {
+                              return
+                            }
+                            setShowContractModal(true)
+                          }}
+                          disabled={
+                            loadingContract ||
+                            !applicationId ||
+                            applicationStatus !== 'pre_approved'
+                          }
+                          className='rounded-lg border border-blue-600 bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
+                        >
+                          {loadingContract ? 'Generating...' : 'Generate Contract'}
+                        </Button>
+                        {applicationStatus !== 'pre_approved' && (
+                          <p className='text-xs text-gray-500'>
+                            Application must be pre-approved before generating a contract.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {hasContract && contractStatus !== 'signed' && (
+                      <div className='flex flex-col items-center gap-2'>
+                        <Button
+                          onClick={() => setShowContractModal(true)}
+                          disabled={loadingContract || !applicationId}
+                          className='rounded-lg border border-blue-600 bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
+                        >
+                          {loadingContract ? 'Regenerating...' : 'Regenerate Contract'}
+                        </Button>
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleViewContract}
+                      disabled={loadingContract || !applicationId}
+                      className='rounded-lg border border-indigo-600 bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50'
+                    >
+                      {loadingContract ? 'Loading...' : 'View Contract'}
+                    </Button>
                     <Button className='rounded-lg border border-gray-300 bg-white px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50'>Record Payment</Button>
                     <Button className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white hover:shadow-lg'>Export Statement</Button>
                   </div>
@@ -488,6 +604,102 @@ export default function LoanDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Generate Contract Modal */}
+      {showContractModal && applicationId && (
+        <GenerateContractModal
+          open={showContractModal}
+          loadingContract={loadingContract}
+          applicationId={applicationId}
+          onSubmit={async ({ paymentFrequency, numberOfPayments, loanAmount, nextPaymentDate }) => {
+            if (!applicationId) return
+            setLoadingContract(true)
+            try {
+              const termMonths = (() => {
+                switch (paymentFrequency) {
+                  case 'weekly':
+                    return Math.max(1, Math.ceil(numberOfPayments / 4))
+                  case 'bi-weekly':
+                    return Math.max(1, Math.ceil(numberOfPayments / 2))
+                  case 'twice-monthly':
+                    return Math.max(1, Math.ceil(numberOfPayments / 2))
+                  default:
+                    return Math.max(1, numberOfPayments)
+                }
+              })()
+              const payload: {
+                termMonths: number
+                paymentFrequency: PaymentFrequency
+                numberOfPayments: number
+                loanAmount: number
+                firstPaymentDate?: string
+              } = {
+                termMonths,
+                paymentFrequency,
+                numberOfPayments,
+                loanAmount
+              }
+              if (nextPaymentDate) {
+                const parsed = new Date(nextPaymentDate)
+                if (!Number.isNaN(parsed.getTime())) {
+                  payload.firstPaymentDate = parsed.toISOString().split('T')[0]
+                }
+              }
+              const response = await fetch(`/api/admin/applications/${applicationId}/contract/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              })
+              if (!response.ok) {
+                const err = await response.json()
+                throw new Error(err.error || 'Failed to generate contract')
+              }
+              setShowContractModal(false)
+               setHasContract(true)
+              setContractStatus('generated')
+            } catch (e: any) {
+              console.error(e)
+              alert(e.message || 'Failed to generate contract')
+            } finally {
+              setLoadingContract(false)
+            }
+          }}
+          onClose={() => setShowContractModal(false)}
+        />
+      )}
+      {/* View Contract Modal */}
+      {showContractViewer && applicationId && (
+        <ContractViewer
+          contract={contract}
+          applicationId={applicationId}
+          onClose={() => {
+            setShowContractViewer(false)
+            setContract(null)
+          }}
+          onGenerate={() => setShowContractModal(true)}
+          onSend={async () => {
+            if (!applicationId) return
+            try {
+              setLoadingContract(true)
+              const response = await fetch(`/api/admin/applications/${applicationId}/contract/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ method: 'email' })
+              })
+              if (!response.ok) {
+                const err = await response.json()
+                throw new Error(err.error || 'Failed to send contract')
+              }
+              alert('Contract sent successfully!')
+            } catch (e: any) {
+              console.error('Error sending contract:', e)
+              alert(e.message || 'Failed to send contract')
+            } finally {
+              setLoadingContract(false)
+            }
+          }}
+        />
+      )}
     </AdminDashboardLayout>
   )
 }

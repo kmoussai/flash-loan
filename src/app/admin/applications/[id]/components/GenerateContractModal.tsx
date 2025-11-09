@@ -8,6 +8,7 @@ import type { PaymentFrequency } from '@/src/lib/supabase/types'
 const paymentFrequencyOptions = [
   { value: 'monthly', label: 'Monthly' },
   { value: 'bi-weekly', label: 'Bi-Weekly' },
+  { value: 'twice-monthly', label: 'Twice per Month' },
   { value: 'weekly', label: 'Weekly' }
 ]
 

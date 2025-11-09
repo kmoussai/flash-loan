@@ -268,15 +268,6 @@ const OverviewTab = ({
             </p>
           </div>
           <div className='flex items-center gap-3'>
-            {application.application_status === 'pre_approved' && (
-              <Button
-                onClick={handleOpenModal}
-                disabled={loadingContract}
-                className='rounded-lg border border-blue-600 bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
-              >
-                {loadingContract ? 'Generating...' : 'Generate Contract'}
-              </Button>
-            )}
             {(application.application_status === 'contract_pending' ||
               application.application_status === 'contract_signed' ||
               application.application_status === 'approved') && (
@@ -292,33 +283,7 @@ const OverviewTab = ({
         </div>
       )}
 
-      <GenerateContractModal
-        open={showContractModal}
-        loadingContract={loadingContract}
-        applicationId={application.id}
-        onSubmit={async ({ paymentFrequency, numberOfPayments, loanAmount, nextPaymentDate }) => {
-          const termMonths = (() => {
-            switch (paymentFrequency) {
-              case 'weekly':
-                return Math.max(1, Math.ceil(numberOfPayments / 4))
-              case 'bi-weekly':
-                return Math.max(1, Math.ceil(numberOfPayments / 2))
-              default:
-                return Math.max(1, numberOfPayments)
-            }
-          })()
-
-          await onGenerateContract({
-            termMonths,
-            paymentFrequency,
-            numberOfPayments,
-            loanAmount,
-            nextPaymentDate
-          })
-          setShowContractModal(false)
-        }}
-        onClose={handleCloseModal}
-      />
+      
     </div>
   )
 }
