@@ -94,6 +94,7 @@ export {
   updateReference,
   deleteReference,
   getDocumentRequestsForApplication,
+  getClientDocumentRequests,
   getDocumentRequestById,
   updateDocumentRequest,
   createRequestFormSubmission,

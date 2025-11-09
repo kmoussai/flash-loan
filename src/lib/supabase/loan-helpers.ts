@@ -12,12 +12,65 @@ import type {
   ReferenceUpdate,
   ApplicationStatus,
   DocumentRequest,
+  DocumentRequestStatus,
   DocumentRequestUpdate,
+  RequestKind,
   RequestFormSubmission,
   RequestFormSubmissionInsert,
   RequestFormSubmissionUpdate
 } from './types'
 import { createClient } from './client'
+
+interface DocumentRequestRow extends DocumentRequest {
+  loan_applications?: {
+    id: string
+    loan_amount: number | null
+    application_status: ApplicationStatus
+    created_at: string
+  } | null
+  document_types?: {
+    id: string
+    name: string | null
+    slug?: string | null
+  } | null
+  form_schema?: Record<string, any> | null
+  request_form_submissions?: Array<{
+    id: string
+    form_data: Record<string, any> | null
+    submitted_at: string
+    submitted_by?: string | null
+  }>
+}
+
+export interface ClientDocumentRequestSummary {
+  id: string
+  loan_application_id: string
+  document_type_id: string | null
+  request_kind: RequestKind
+  status: DocumentRequestStatus
+  expires_at: string | null
+  requested_by: string | null
+  created_at: string
+  magic_link_sent_at: string | null
+  form_schema: Record<string, any> | null
+  request_form_submissions: Array<{
+    id: string
+    form_data: Record<string, any>
+    submitted_at: string
+    submitted_by?: string | null
+  }>
+  application: {
+    id: string
+    loan_amount: number | null
+    application_status: ApplicationStatus
+    created_at: string
+  } | null
+  document_type: {
+    id: string
+    name: string | null
+    slug?: string | null
+  } | null
+}
 
 // ===========================
 // ADDRESS OPERATIONS
@@ -456,6 +509,88 @@ export async function getDocumentRequestsForApplication(
   }
 
   return (data || []) as DocumentRequest[]
+}
+
+export async function getClientDocumentRequests(
+  clientId: string,
+  isServer = false
+): Promise<ClientDocumentRequestSummary[]> {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('document_requests')
+    .select(
+      `
+        *,
+        request_form_submissions (
+          id,
+          form_data,
+          submitted_at,
+          submitted_by
+        ),
+        loan_applications!inner (
+          id,
+          loan_amount,
+          application_status,
+          created_at
+        ),
+        document_types (
+          id,
+          name,
+          slug
+        )
+      `
+    )
+    .eq('loan_applications.client_id', clientId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching client document requests:', error)
+    return []
+  }
+
+  const rows = (data || []) as DocumentRequestRow[]
+
+  return rows.map(row => ({
+    id: row.id,
+    loan_application_id: row.loan_application_id,
+    document_type_id: row.document_type_id ?? null,
+    request_kind: row.request_kind as RequestKind,
+    status: row.status as DocumentRequestStatus,
+    expires_at: row.expires_at ?? null,
+    requested_by: row.requested_by ?? null,
+    created_at: row.created_at,
+    magic_link_sent_at: row.magic_link_sent_at ?? null,
+    form_schema:
+      row.form_schema && typeof row.form_schema === 'object'
+        ? row.form_schema
+        : null,
+    request_form_submissions: Array.isArray(row.request_form_submissions)
+      ? row.request_form_submissions.map(sub => ({
+          id: sub.id,
+          form_data: sub.form_data ?? {},
+          submitted_at: sub.submitted_at,
+          submitted_by: sub.submitted_by ?? null
+        }))
+      : [],
+    application: row.loan_applications
+      ? {
+          id: row.loan_applications.id,
+          loan_amount: row.loan_applications.loan_amount ?? null,
+          application_status: row.loan_applications.application_status,
+          created_at: row.loan_applications.created_at
+        }
+      : null,
+    document_type: row.document_types
+      ? {
+          id: row.document_types.id,
+          name: row.document_types.name ?? null,
+          slug: row.document_types.slug ?? null
+        }
+      : null
+  }))
 }
 
 export async function getDocumentRequestById(
