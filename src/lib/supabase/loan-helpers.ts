@@ -33,7 +33,7 @@ interface DocumentRequestRow extends DocumentRequest {
     name: string | null
     slug?: string | null
   } | null
-  form_schema?: Record<string, any> | null
+  form_schema: Record<string, any>
   request_form_submissions?: Array<{
     id: string
     form_data: Record<string, any> | null
