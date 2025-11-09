@@ -667,7 +667,6 @@ export default function LoanDetailsPage() {
           onClose={() => setShowContractModal(false)}
         />
       )}
-      <pre>{JSON.stringify({contract}, null, 2)}</pre>
       {/* View Contract Modal */}
       {showContractViewer && applicationId && (
         <ContractViewer

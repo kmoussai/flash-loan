@@ -318,8 +318,6 @@ export default function ContractViewer({
       <div class="header">
         <img src="${flashLoanLogo}" alt="Flash-Loan Logo" class="logo-image" />
       </div>
- <pre>${JSON.stringify(contractData, null, 2)}</pre>
-
       <div class="title-block">
         <h1>Flash-Loan</h1>
         <hr class="divider" />

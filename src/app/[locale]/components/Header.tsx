@@ -151,7 +151,7 @@ export const Header: FC<Props> = ({ locale }) => {
           {!loading && (
             <>
               {isAuthenticated && isClient ? (
-                <Link lang={locale} href='/dashboard'>
+                <Link lang={locale} href='/client/dashboard'>
                   <Button
                     variant='secondary'
                     size='small'
