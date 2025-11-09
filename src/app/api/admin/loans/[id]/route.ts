@@ -29,6 +29,7 @@ export async function GET(
       .from('loans')
       .select(`
         id,
+        loan_number,
         application_id,
         user_id,
         principal_amount,

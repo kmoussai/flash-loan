@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { createLoanContract, getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
 import type { ContractTerms, PaymentFrequency } from '@/src/lib/supabase/types'
+import { getPaymentsPerMonth, assertFrequency } from '@/src/lib/utils/frequency'
+import { buildContractTermsFromApplication } from '@/src/lib/contracts/terms'
 
 export async function POST(
   request: NextRequest,
@@ -49,7 +51,18 @@ export async function POST(
           id,
           first_name,
           last_name,
-          email
+          email,
+          phone,
+          preferred_language
+        ),
+        address_id,
+        addresses!loan_applications_address_id_fkey (
+          street_number,
+          street_name,
+          apartment_number,
+          city,
+          province,
+          postal_code
         )
       `)
       .eq('id', applicationId)
@@ -72,210 +85,118 @@ export async function POST(
         first_name: string | null
         last_name: string | null
         email: string | null
+        phone: string | null
+        preferred_language: string | null
+      } | null
+      addresses?: {
+        street_number: string | null
+        street_name: string | null
+        apartment_number: string | null
+        city: string | null
+        province: string | null
+        postal_code: string | null
       } | null
     }
 
-    // Check if application is pre-approved
-    if (app.application_status !== 'pre_approved') {
+    // Allow generation when application is pre-approved OR already in contract flow (pending)
+    const applicationStatus = String(app.application_status || '')
+    const canGenerateInitial = applicationStatus === 'pre_approved'
+    const canRegenerate = applicationStatus === 'contract_pending'
+
+    // Get existing contract (if any)
+    const existingContract = await getContractByApplicationId(applicationId, true)
+    const existing = existingContract.success ? existingContract.data : null
+
+    // Guard rails:
+    // 1) If a contract exists and is signed, block regeneration
+    if (existing && existing.contract_status === 'signed') {
+      return NextResponse.json(
+        { error: 'Contract already signed; regeneration is not allowed' },
+        { status: 400 }
+      )
+    }
+    // 2) If no contract exists yet, require application to be pre-approved
+    if (!existing && !canGenerateInitial) {
       return NextResponse.json(
         { error: 'Application must be pre-approved before generating contract' },
         { status: 400 }
       )
     }
 
-    // Check if contract already exists
-    const existingContract = await getContractByApplicationId(applicationId, true)
-    if (existingContract.success && existingContract.data) {
-      return NextResponse.json(
-        { 
-          error: 'Contract already exists for this application',
-          contract: existingContract.data
-        },
-        { status: 400 }
-      )
-    }
-
-    const normalizeTermMonths = (rawValue: unknown, fallback = 3): number => {
-      const parsed = Number(rawValue)
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        return fallback
-      }
-
-      return Math.round(parsed)
-    }
-
-    const allowedPaymentFrequencies: PaymentFrequency[] = ['monthly', 'bi-weekly', 'weekly']
-    const normalizePaymentFrequency = (rawValue: unknown, fallback: PaymentFrequency = 'monthly'): PaymentFrequency => {
-      if (typeof rawValue !== 'string') {
-        return fallback
-      }
-
-      const normalized = rawValue.trim().toLowerCase() as PaymentFrequency
-      return allowedPaymentFrequencies.includes(normalized) ? normalized : fallback
-    }
-
-    const normalizeNumberOfPayments = (rawValue: unknown): number | null => {
-      const parsed = Number(rawValue)
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        return null
-      }
-
-      return Math.max(1, Math.round(parsed))
-    }
-
-    const normalizeLoanAmount = (rawValue: unknown, fallback: number): number => {
-      const parsed = Number(rawValue)
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        return fallback
-      }
-
-      return Math.round(parsed * 100) / 100
-    }
-
-    const normalizeFirstPaymentDate = (rawValue: unknown): Date | null => {
-      if (!rawValue) {
-        return null
-      }
-
-      if (rawValue instanceof Date) {
-        return Number.isNaN(rawValue.getTime()) ? null : rawValue
-      }
-
-      if (typeof rawValue === 'string' || typeof rawValue === 'number') {
-        const parsed = new Date(rawValue)
-        return Number.isNaN(parsed.getTime()) ? null : parsed
-      }
-
-      return null
-    }
-
-    const calculateNumberOfPayments = (months: number, frequency: PaymentFrequency): number => {
-      switch (frequency) {
-        case 'weekly':
-          return months * 4
-        case 'bi-weekly':
-          return months * 2
-        default:
-          return months
-      }
-    }
-
-    const calculateDueDate = (startDate: Date, index: number, frequency: PaymentFrequency): Date => {
-      const dueDate = new Date(startDate)
-
-      switch (frequency) {
-        case 'weekly':
-          dueDate.setDate(startDate.getDate() + index * 7)
-          break
-        case 'bi-weekly':
-          dueDate.setDate(startDate.getDate() + index * 14)
-          break
-        default:
-          dueDate.setMonth(startDate.getMonth() + index)
-          break
-      }
-
-      return dueDate
-    }
-
-    // Calculate contract terms (simplified - you may want to add more sophisticated calculations)
-    const loanAmount = normalizeLoanAmount(payload?.loanAmount, parseFloat(String(app.loan_amount)))
-    const interestRate = app.interest_rate ?? 29.0
-    const paymentFrequency = normalizePaymentFrequency(payload?.paymentFrequency)
-    const providedNumberOfPayments = normalizeNumberOfPayments(payload?.numberOfPayments)
-    const fallbackTermMonths = normalizeTermMonths(payload?.termMonths)
-
-    const paymentsPerMonthMap: Record<PaymentFrequency, number> = {
-      weekly: 4,
-      'bi-weekly': 2,
-      monthly: 1
-    }
-
-    const paymentsPerMonth = paymentsPerMonthMap[paymentFrequency] ?? 1
-
-    const numberOfPayments = providedNumberOfPayments ?? Math.max(1, calculateNumberOfPayments(fallbackTermMonths, paymentFrequency))
-
-    const durationInMonths = providedNumberOfPayments
-      ? Math.max(providedNumberOfPayments / paymentsPerMonth, 1 / paymentsPerMonth)
-      : fallbackTermMonths
-
-    const termMonths = Math.max(1, Math.ceil(durationInMonths))
-    const monthsForInterest = Math.max(durationInMonths, 1)
-
-    // Calculate total with interest
-    const monthlyInterestPortion = (loanAmount * interestRate) / 100 / 12
-    const totalInterest = monthlyInterestPortion * monthsForInterest
-    const totalAmount = loanAmount + totalInterest
-    const paymentAmount = totalAmount / numberOfPayments
-    const principalPerPayment = loanAmount / numberOfPayments
-    const interestPerPayment = totalInterest / numberOfPayments
-
-    // Generate payment schedule
-    const paymentSchedule = [] as NonNullable<ContractTerms['payment_schedule']>
-    const scheduleStartDate = normalizeFirstPaymentDate(payload?.firstPaymentDate) ?? new Date()
-    const startDate = new Date(scheduleStartDate)
-    startDate.setHours(0, 0, 0, 0)
-    for (let i = 0; i < numberOfPayments; i++) {
-      const dueDate = calculateDueDate(startDate, i, paymentFrequency)
-      paymentSchedule.push({
-        due_date: dueDate.toISOString().split('T')[0],
-        amount: paymentAmount,
-        principal: principalPerPayment,
-        interest: interestPerPayment
-      })
-    }
-
-    const maturityDate = paymentSchedule.length > 0
-      ? paymentSchedule[paymentSchedule.length - 1].due_date
-      : new Date(startDate).toISOString().split('T')[0]
-
-    const contractTerms: ContractTerms = {
-      interest_rate: interestRate,
-      term_months: termMonths,
-      principal_amount: loanAmount,
-      total_amount: totalAmount,
-      payment_frequency: paymentFrequency,
-      number_of_payments: numberOfPayments,
-      fees: {
-        origination_fee: 0,
-        processing_fee: 0,
-        other_fees: 0
+    // Build contract terms (calculation + borrower details + viewer aliases)
+    const contractTerms = buildContractTermsFromApplication(
+      {
+        id: app.id,
+        loan_amount: app.loan_amount,
+        interest_rate: app.interest_rate,
+        users: app.users,
+        addresses: app.addresses ?? null
       },
-      payment_schedule: paymentSchedule,
-      terms_and_conditions: 'Standard loan terms and conditions apply. Please review carefully before signing.',
-      effective_date: startDate.toISOString(),
-      maturity_date: maturityDate
-    }
+      {
+        loanAmount: payload?.loanAmount,
+        paymentFrequency: payload?.paymentFrequency,
+        numberOfPayments: payload?.numberOfPayments,
+        termMonths: payload?.termMonths,
+        firstPaymentDate: payload?.firstPaymentDate
+      }
+    )
 
-    // Create contract
-    const contractResult = await createLoanContract({
-      loan_application_id: applicationId,
-      contract_version: 1,
-      contract_terms: contractTerms,
-      contract_status: 'generated',
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days from now
-    }, true)
+    // Create or update contract
+    if (!existing) {
+      // Create new
+      const contractResult = await createLoanContract({
+        loan_application_id: applicationId,
+        contract_version: 1,
+        contract_terms: contractTerms,
+        contract_status: 'generated',
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+      }, true)
 
-    if (!contractResult.success) {
-      return NextResponse.json(
-        { error: contractResult.error || 'Failed to create contract' },
-        { status: 500 }
-      )
-    }
+      if (!contractResult.success) {
+        return NextResponse.json(
+          { error: contractResult.error || 'Failed to create contract' },
+          { status: 500 }
+        )
+      }
 
-    // Update application status to contract_pending
-    await (supabase
-      .from('loan_applications') as any)
-      .update({ 
-        application_status: 'contract_pending',
-        contract_generated_at: new Date().toISOString()
+      // Move application into contract flow
+      await (supabase
+        .from('loan_applications') as any)
+        .update({ 
+          application_status: 'contract_pending',
+          contract_generated_at: new Date().toISOString()
+        })
+        .eq('id', applicationId)
+
+      return NextResponse.json({
+        success: true,
+        contract: contractResult.data
       })
-      .eq('id', applicationId)
-
-    return NextResponse.json({
-      success: true,
-      contract: contractResult.data
-    })
+    } else {
+      // Regenerate (update existing, bump version)
+      const nextVersion = (existing.contract_version ?? 1) + 1
+      const { updateLoanContract } = await import('@/src/lib/supabase/contract-helpers')
+      const updateResult = await updateLoanContract(
+        existing.id,
+        {
+          contract_terms: contractTerms,
+          contract_version: nextVersion,
+          contract_status: 'generated',
+          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        true
+      )
+      if (!updateResult.success) {
+        return NextResponse.json(
+          { error: updateResult.error || 'Failed to regenerate contract' },
+          { status: 500 }
+        )
+      }
+      return NextResponse.json({
+        success: true,
+        contract: updateResult.data
+      })
+    }
   } catch (error: any) {
     console.error('Error generating contract:', error)
     return NextResponse.json(

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import { Link } from '@/src/navigation'
+import type { Frequency } from '@/src/lib/supabase/types'
 import Button from './Button'
 import Select from './Select'
 
@@ -61,7 +62,7 @@ interface FormData {
   supervisorName: string
   workPhone: string
   post: string
-  payrollFrequency: string
+  payrollFrequency: Frequency | ''
   dateHired: string
   nextPayDate: string
   // For Employment Insurance
@@ -69,7 +70,7 @@ interface FormData {
   // For Self-Employed
   paidByDirectDeposit: string
   selfEmployedPhone: string
-  depositsFrequency: string
+  depositsFrequency: Frequency | ''
   selfEmployedStartDate: string
   // For all others (common field)
   nextDepositDate: string
@@ -78,7 +79,7 @@ interface FormData {
   loanAmount: string
   loanPurpose: string
   repaymentPeriod: string
-  paymentFrequency: string
+  paymentFrequency: Frequency | ''
 
   // Confirmation & Submission
   confirmInformation: boolean
@@ -649,7 +650,9 @@ export default function LoanApplicationForm() {
       supervisorName: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
       workPhone: `514-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
       post: ['Full-time', 'Part-time', 'Contract'][Math.floor(Math.random() * 3)],
-      payrollFrequency: ['weekly', 'bi-weekly', 'monthly'][Math.floor(Math.random() * 3)],
+      payrollFrequency: (['weekly', 'bi-weekly', 'twice-monthly', 'monthly'] as Frequency[])[
+        Math.floor(Math.random() * 4)
+      ],
       dateHired: `20${Math.floor(Math.random() * 10 + 10)}-${String(Math.floor(Math.random() * 12 + 1)).padStart(2, '0')}-15`,
       nextPayDate: `2025-${String(Math.floor(Math.random() * 2 + 1)).padStart(2, '0')}-${String(Math.floor(Math.random() * 28 + 1)).padStart(2, '0')}`,
       employmentInsuranceStartDate: '',
@@ -889,7 +892,7 @@ export default function LoanApplicationForm() {
                 
                 <div className='grid gap-3 sm:gap-4 md:grid-cols-2'>
                   {/* Quick Apply - Compact Design */}
-                  <Link href='/apply1' className='group block'>
+                  <Link href='/quick-apply' className='group block'>
                     <div className='relative h-full overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-5 sm:p-6 shadow-md transition-all duration-300 hover:scale-[1.02] hover:border-green-400 hover:shadow-lg'>
                       {/* Top Badge */}
                       <div className='mb-3 inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 sm:px-3 py-1'>
@@ -1623,6 +1626,7 @@ export default function LoanApplicationForm() {
                       options={[
                         { value: 'weekly', label: t('Weekly') },
                         { value: 'bi-weekly', label: t('Bi_Weekly') },
+                        { value: 'twice-monthly', label: t('Twice_Monthly') },
                         { value: 'monthly', label: t('Monthly') }
                       ]}
                     />
@@ -1740,6 +1744,7 @@ export default function LoanApplicationForm() {
                       options={[
                         { value: 'weekly', label: t('Weekly') },
                         { value: 'bi-weekly', label: t('Bi_Weekly') },
+                        { value: 'twice-monthly', label: t('Twice_Monthly') },
                         { value: 'monthly', label: t('Monthly') }
                       ]}
                     />

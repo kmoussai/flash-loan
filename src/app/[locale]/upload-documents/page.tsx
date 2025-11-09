@@ -6,7 +6,7 @@ import Button from '../components/Button'
 import { createClient } from '@/src/lib/supabase/client'
 
 type DocumentRequestStatus = 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
-type RequestKind = 'document' | 'address' | 'reference' | 'other'
+type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
 
 type FormSchemaOption = {
   label: string

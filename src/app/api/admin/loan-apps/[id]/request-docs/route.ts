@@ -7,7 +7,7 @@ import { generateDocumentRequestEmail } from '@/src/lib/email/templates/document
 
 // POST /api/admin/loan-apps/:id/request-docs
 // Body: {
-//   requests?: Array<{ document_type_id: string, request_kind?: 'document' | 'address' | 'reference' | 'other', form_schema?: Record<string, any> }>,
+//   requests?: Array<{ document_type_id: string, request_kind?: 'document' | 'address' | 'reference' | 'employment' | 'other', form_schema?: Record<string, any> }>,
 //   document_type_ids?: string[] // legacy support
 //   expires_at?: string,
 //   requested_by?: string
@@ -42,11 +42,11 @@ export async function POST(
     const requestedBy: string | null =
       typeof body?.requested_by === 'string' ? body.requested_by : null
 
-    const allowedKinds = new Set(['document', 'address', 'reference', 'other'])
+    const allowedKinds = new Set(['document', 'address', 'reference', 'employment', 'other'])
 
     const normalizedRequests: Array<{
       document_type_id: string
-      request_kind: 'document' | 'address' | 'reference' | 'other'
+      request_kind: 'document' | 'address' | 'reference' | 'employment' | 'other'
       form_schema: Record<string, any>
     }> = []
     const invalidRequestIndexes: number[] = []
@@ -68,7 +68,7 @@ export async function POST(
           : 'document'
 
       const requestKind = allowedKinds.has(rawKind)
-        ? (rawKind as 'document' | 'address' | 'reference' | 'other')
+        ? (rawKind as 'document' | 'address' | 'reference' | 'employment' | 'other')
         : 'document'
 
       const formSchema =

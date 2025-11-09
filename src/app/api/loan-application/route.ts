@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { 
+import {
   IncomeSourceType,
   EmployedIncomeFields,
   EmploymentInsuranceIncomeFields,
   SelfEmployedIncomeFields,
-  OtherIncomeFields
+  OtherIncomeFields,
+  Frequency
 } from '@/src/lib/supabase/types'
+import { assertFrequency } from '@/src/lib/utils/frequency'
 
 // ===========================
 // TYPE DEFINITIONS
@@ -31,6 +33,7 @@ interface LoanApplicationRequestBody {
   city?: string
   province?: string
   postalCode?: string
+  country?: string
   movingDate?: string
   
   // Financial Obligations (Quebec only)
@@ -59,7 +62,7 @@ interface LoanApplicationRequestBody {
   supervisorName?: string
   workPhone?: string
   post?: string
-  payrollFrequency?: 'weekly' | 'bi-weekly' | 'monthly'
+  payrollFrequency?: Frequency
   dateHired?: string
   nextPayDate?: string
   // Employment Insurance fields
@@ -67,7 +70,7 @@ interface LoanApplicationRequestBody {
   // Self-Employed fields
   paidByDirectDeposit?: 'yes' | 'no'
   selfEmployedPhone?: string
-  depositsFrequency?: 'weekly' | 'bi-weekly' | 'monthly'
+  depositsFrequency?: Frequency
   selfEmployedStartDate?: string
   // Common field for most income types
   nextDepositDate?: string
@@ -242,7 +245,7 @@ function buildIncomeFields(
         supervisor_name: body.supervisorName!,
         work_phone: body.workPhone!,
         post: body.post!,
-        payroll_frequency: body.payrollFrequency!,
+        payroll_frequency: assertFrequency(body.payrollFrequency, 'monthly'),
         date_hired: body.dateHired!,
         next_pay_date: body.nextPayDate!
       } as EmployedIncomeFields
@@ -257,7 +260,7 @@ function buildIncomeFields(
       return {
         paid_by_direct_deposit: body.paidByDirectDeposit!,
         self_employed_phone: body.selfEmployedPhone!,
-        deposits_frequency: body.depositsFrequency!,
+        deposits_frequency: assertFrequency(body.depositsFrequency, 'monthly'),
         self_employed_start_date: body.selfEmployedStartDate!,
         next_deposit_date: body.nextDepositDate!
       } as SelfEmployedIncomeFields

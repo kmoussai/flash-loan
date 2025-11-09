@@ -1,3 +1,5 @@
+import type { Frequency } from '@/src/lib/supabase/types'
+
 export interface IBVSummary {
   accounts: {
     bank_name: string
@@ -6,14 +8,13 @@ export interface IBVSummary {
     transit: string
     institution: string
     routing_code: string
-    income: [
-      {
-        frequency: string
-        details: string
-        monthly_income: number
-        future_payments: Date[]
-      }
-    ]
+    income: Array<{
+      frequency: Frequency | null
+      raw_frequency: string | null
+      details: string
+      monthly_income: number
+      future_payments: Date[]
+    }>
     statistics: {
       income_net: number
       nsf: {

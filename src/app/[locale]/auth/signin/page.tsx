@@ -37,7 +37,8 @@ export default function SignInPage() {
             .single()
           
           if (userData) {
-            router.push('/dashboard')
+            router.push('/client/dashboard')
+            router.refresh()
           }
         }
       }
@@ -86,7 +87,7 @@ export default function SignInPage() {
           .single()
         
         if (userData) {
-          router.push('/dashboard')
+          router.push('/client/dashboard')
           router.refresh()
         } else {
           setError(t('Invalid_Client_Account') || 'This account is not registered as a client.')

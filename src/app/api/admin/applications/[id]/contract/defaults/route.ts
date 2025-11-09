@@ -3,62 +3,12 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
 import type { PaymentFrequency, ContractTerms } from '@/src/lib/supabase/types'
 import { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
-
-const PAYMENT_FREQUENCY_OPTIONS: PaymentFrequency[] = ['monthly', 'bi-weekly', 'weekly']
-const PAYMENT_FREQUENCY_PRIORITY: PaymentFrequency[] = ['weekly', 'bi-weekly', 'monthly']
-
-const normalizePaymentFrequency = (value: unknown): PaymentFrequency | null => {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const canonicalize = (input: string) =>
-    input
-      .trim()
-      .toLowerCase()
-      .replace(/[_\s]+/g, '-')
-      .replace(/-+/g, '-')
-
-  const normalizedValue = canonicalize(value)
-  const candidateSegments = Array.from(
-    new Set(
-      [
-        normalizedValue,
-        normalizedValue.split(':')[0],
-        normalizedValue.split('|')[0],
-        normalizedValue.split(';')[0],
-        ...normalizedValue.split(/[:|;,]+/g)
-      ]
-        .map((segment) => segment?.trim())
-        .filter((segment): segment is string => Boolean(segment))
-    )
-  )
-
-  const frequencyAliases: Record<PaymentFrequency, string[]> = {
-    weekly: ['weekly', 'week', 'once-a-week', 'one-week', '1w', 'hebdomadaire'],
-    'bi-weekly': [
-      'bi-weekly',
-      'biweekly',
-      'every-two-weeks',
-      '2w',
-      'semi-monthly',
-      'semimonthly',
-      'twice-monthly',
-      'fortnightly'
-    ],
-    monthly: ['monthly', 'month', 'once-a-month', '1m', 'mensuel']
-  } 
-
-  for (const [frequency, aliases] of Object.entries(frequencyAliases)) {
-    const canonicalAliases = aliases.map((alias) => canonicalize(alias))
-
-    if (candidateSegments.some((segment) => canonicalAliases.includes(segment))) {
-      return frequency as PaymentFrequency
-    }
-  }
-
-  return null
-}
+import {
+  FREQUENCY_OPTIONS,
+  FREQUENCY_PRIORITY,
+  getPaymentsPerMonth,
+  normalizeFrequency
+} from '@/src/lib/utils/frequency'
 
 const getLowestPaymentFrequencyFromIbv = (ibvResults?: IBVSummary | null): PaymentFrequency | null => {
   if (!ibvResults || !Array.isArray(ibvResults.accounts)) {
@@ -72,13 +22,14 @@ const getLowestPaymentFrequencyFromIbv = (ibvResults?: IBVSummary | null): Payme
     const incomes = Array.isArray(account?.income) ? account.income : []
 
     for (const income of incomes) {
-      const normalized = normalizePaymentFrequency(income?.frequency)
+      const normalized =
+        normalizeFrequency(income?.frequency) ?? normalizeFrequency(income?.raw_frequency)
 
       if (!normalized) {
         continue
       }
 
-      const rank = PAYMENT_FREQUENCY_PRIORITY.indexOf(normalized)
+      const rank = FREQUENCY_PRIORITY.indexOf(normalized)
 
       if (rank === -1 || rank >= bestRank) {
         continue
@@ -206,7 +157,7 @@ const resolvePaymentFrequency = (
   terms: ContractTerms | null | undefined,
   ibvResults?: IBVSummary | null
 ): PaymentFrequency => {
-  const fromTerms = normalizePaymentFrequency(terms?.payment_frequency)
+  const fromTerms = normalizeFrequency(terms?.payment_frequency) as PaymentFrequency | null
 
   if (fromTerms) {
     return fromTerms
@@ -295,7 +246,7 @@ export async function GET(
         numberOfPayments,
         nextPaymentDate,
         source: 'existing_contract',
-        frequencyOptions: PAYMENT_FREQUENCY_OPTIONS,
+        frequencyOptions: FREQUENCY_OPTIONS,
         generatedAt: new Date().toISOString()
       }
     } else {
@@ -313,7 +264,7 @@ export async function GET(
         numberOfPayments: calculateNumberOfPayments(termMonths, paymentFrequency),
         nextPaymentDate,
         source: 'application_defaults',
-        frequencyOptions: PAYMENT_FREQUENCY_OPTIONS,
+        frequencyOptions: FREQUENCY_OPTIONS,
         generatedAt: new Date().toISOString()
       }
     }
@@ -329,14 +280,8 @@ export async function GET(
 }
 
 const calculateNumberOfPayments = (termMonths: number, frequency: PaymentFrequency): number => {
-  switch (frequency) {
-    case 'weekly':
-      return termMonths * 4
-    case 'bi-weekly':
-      return termMonths * 2
-    default:
-      return termMonths
-  }
+  const paymentsPerMonth = getPaymentsPerMonth(frequency)
+  return Math.max(1, Math.round(termMonths * paymentsPerMonth))
 }
 
 

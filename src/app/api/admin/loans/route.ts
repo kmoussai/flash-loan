@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       .from('loans')
       .select(`
         id,
+        loan_number,
         application_id,
         user_id,
         principal_amount,

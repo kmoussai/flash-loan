@@ -15,9 +15,10 @@ export type DocumentType = 'drivers_license' | 'passport' | 'health_card' | 'soc
 export type DocumentStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'expired'
 export type LoanStatus = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
-export type PaymentFrequency = 'monthly' | 'bi-weekly' | 'weekly'
+export type Frequency = 'weekly' | 'bi-weekly' | 'twice-monthly' | 'monthly'
+export type PaymentFrequency = Frequency
 export type DocumentRequestStatus = 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
-export type RequestKind = 'document' | 'address' | 'reference' | 'other'
+export type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
 export type IncomeSourceType = 
   | 'employed' 
   | 'employment-insurance' 
@@ -36,7 +37,7 @@ export interface EmployedIncomeFields {
   supervisor_name: string
   work_phone: string
   post: string
-  payroll_frequency: 'weekly' | 'bi-weekly' | 'monthly'
+  payroll_frequency: Frequency
   date_hired: string
   next_pay_date: string
 }
@@ -49,7 +50,7 @@ export interface EmploymentInsuranceIncomeFields {
 export interface SelfEmployedIncomeFields {
   paid_by_direct_deposit: 'yes' | 'no'
   self_employed_phone: string
-  deposits_frequency: 'weekly' | 'bi-weekly' | 'monthly'
+  deposits_frequency: Frequency
   self_employed_start_date: string
   next_deposit_date: string
 }
@@ -232,6 +233,24 @@ export interface LoanApplication {
   flinks_connected_at: string | null
 }
 
+export interface LoanApplicationIbvRequest {
+  id: string
+  loan_application_id: string
+  client_id: string
+  provider: IbvProvider
+  status: IbvStatus
+  request_guid: string | null
+  request_url: string | null
+  provider_data: Record<string, any> | null
+  results: Record<string, any> | null
+  error_details: Record<string, any> | null
+  note: string | null
+  requested_at: string
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Reference {
   id: string
   loan_application_id: string
@@ -292,6 +311,7 @@ export interface Loan {
   id: string
   application_id: string
   user_id: string
+  loan_number: number
   principal_amount: number
   interest_rate: number
   term_months: number
@@ -338,6 +358,17 @@ export interface ContractTerms {
   terms_and_conditions?: string
   effective_date?: string
   maturity_date?: string
+  // Optional borrower information for rendering the contract
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  phone?: string | null
+  street_number?: string | null
+  street_name?: string | null
+  apartment_number?: string | null
+  city?: string | null
+  province?: string | null
+  postal_code?: string | null
 }
 
 export interface ClientSignatureData {
@@ -426,6 +457,21 @@ export interface LoanApplicationInsert {
   interest_rate?: number
 }
 
+export interface LoanApplicationIbvRequestInsert {
+  loan_application_id: string
+  client_id: string
+  provider: IbvProvider
+  status?: IbvStatus
+  request_guid?: string | null
+  request_url?: string | null
+  provider_data?: Record<string, any> | null
+  results?: Record<string, any> | null
+  error_details?: Record<string, any> | null
+  note?: string | null
+  requested_at?: string
+  completed_at?: string | null
+}
+
 export interface ReferenceInsert {
   loan_application_id: string
   first_name: string
@@ -497,6 +543,19 @@ export interface LoanApplicationUpdate {
   ibv_status?: IbvStatus | null
   ibv_provider_data?: IbvProviderData | null
   ibv_verified_at?: string | null
+}
+
+export interface LoanApplicationIbvRequestUpdate {
+  client_id?: string
+  status?: IbvStatus
+  request_guid?: string | null
+  request_url?: string | null
+  provider_data?: Record<string, any> | null
+  results?: Record<string, any> | null
+  error_details?: Record<string, any> | null
+  note?: string | null
+  requested_at?: string
+  completed_at?: string | null
 }
 
 export interface ReferenceUpdate {
@@ -665,6 +724,11 @@ export interface Database {
         Row: LoanApplication
         Insert: LoanApplicationInsert
         Update: LoanApplicationUpdate
+      }
+      loan_application_ibv_requests: {
+        Row: LoanApplicationIbvRequest
+        Insert: LoanApplicationIbvRequestInsert
+        Update: LoanApplicationIbvRequestUpdate
       }
       references: {
         Row: Reference
