@@ -5,292 +5,288 @@ import Button from '@/src/app/[locale]/components/Button'
 import Select from '@/src/app/[locale]/components/Select'
 import type { PaymentFrequency } from '@/src/lib/supabase/types'
 
-const paymentFrequencyOptions = [
+import useSWR from 'swr'
+import { calculateLoanSchedule, fetcher } from '@/lib/utils'
+import { ContractDefaultsResponse, GenerateContractPayload } from '@/src/app/types/contract'
+
+const frequencyOptions = [
   { value: 'monthly', label: 'Monthly' },
   { value: 'bi-weekly', label: 'Bi-Weekly' },
   { value: 'twice-monthly', label: 'Twice per Month' },
   { value: 'weekly', label: 'Weekly' }
 ]
 
+interface BankAccount {
+  id: string
+  bank_name: string
+  account_number: string
+  transit_number: string
+  institution_number: string
+  account_name: string
+  account_holder: string
+  display_name: string
+}
+
 interface GenerateContractModalProps {
   applicationId: string
   open: boolean
   loadingContract: boolean
-  onSubmit: (options: {
-    paymentFrequency: PaymentFrequency
-    numberOfPayments: number
-    loanAmount: number
-    nextPaymentDate: string
-  }) => Promise<void> | void
+  onSubmit: (payload: GenerateContractPayload) => Promise<void> | void
   onClose: () => void
-}
-
-interface ContractDefaultsResponse {
-  success: boolean
-  defaults: {
-    termMonths: number
-    paymentFrequency: PaymentFrequency
-    numberOfPayments?: number
-    loanAmount?: number
-    nextPaymentDate?: string
-  }
-}
-
-const DEFAULT_PAYMENT_FREQUENCY: PaymentFrequency = 'monthly'
-const DEFAULT_NUMBER_OF_PAYMENTS = 3
-const DEFAULT_LOAN_AMOUNT = 0
-const DEFAULT_NEXT_PAYMENT_DATE = new Date().toISOString().split('T')[0]
-
-const normalizeDateInput = (value: unknown): string | null => {
-  if (!value) {
-    return null
-  }
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value.toISOString().split('T')[0]
-  }
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value)
-
-    if (Number.isNaN(parsed.getTime())) {
-      return null
-    }
-
-    return parsed.toISOString().split('T')[0]
-  }
-
-  return null
 }
 
 export const GenerateContractModal = ({
   applicationId,
   open,
-  loadingContract,
   onSubmit,
   onClose
 }: GenerateContractModalProps) => {
-  const [paymentFrequency, setPaymentFrequency] = useState<PaymentFrequency>(DEFAULT_PAYMENT_FREQUENCY)
-  const [numberOfPayments, setNumberOfPayments] = useState(DEFAULT_NUMBER_OF_PAYMENTS)
-  const [loanAmount, setLoanAmount] = useState<number | ''>(DEFAULT_LOAN_AMOUNT)
-  const [nextPaymentDate, setNextPaymentDate] = useState<string>(DEFAULT_NEXT_PAYMENT_DATE)
+  const { data, error, isLoading } = useSWR<ContractDefaultsResponse>(
+    `/api/admin/applications/${applicationId}/contract/defaults`,
+    fetcher
+  )
+  const [loanAmount, setLoanAmount] = useState<number | ''>('')
+  const [paymentFrequency, setPaymentFrequency] =
+    useState<PaymentFrequency>('monthly')
+  const [numberOfPayments, setNumberOfPayments] = useState<number>(0)
+  const [paymentAmount, setPaymentAmount] = useState<number | ''>('')
+  const [nextPaymentDate, setNextPaymentDate] = useState('')
+  const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [interestRate, setInterestRate] = useState(29)
   const [formError, setFormError] = useState<string | null>(null)
-  const [defaultsLoading, setDefaultsLoading] = useState(false)
+  const [loadingContract, setLoadingContract] = useState(false)
 
-  const frequencyOptions = useMemo(() => paymentFrequencyOptions, [])
+  // Accounts
+  const accounts = useMemo(() => data?.defaults.accountOptions ?? [], [data])
 
+  // Initialize defaults when data loads
   useEffect(() => {
-    if (!open) {
-      return
-    }
+    if (!data?.defaults) return
+    const defaults = data.defaults
+    setLoanAmount(defaults.loanAmount ?? 0)
+    setPaymentFrequency(defaults.paymentFrequency)
+    setNumberOfPayments(defaults.numberOfPayments ?? 0)
+    setNextPaymentDate(defaults.nextPaymentDate ?? '')
+    setPaymentAmount(defaults.paymentAmount ?? 0)
+    if (defaults.accountOptions?.[0])
+      setSelectedAccountId(defaults.accountOptions[0].account_number)
+  }, [data])
 
-    const controller = new AbortController()
-
-    const loadDefaults = async () => {
-      setDefaultsLoading(true)
-      setFormError(null)
-
-      try {
-        const response = await fetch(
-          `/api/admin/applications/${applicationId}/contract/defaults`,
-          {
-            method: 'GET',
-            signal: controller.signal
-          }
-        )
-
-        if (!response.ok) {
-          throw new Error(`Failed to load defaults (${response.status})`)
-        }
-
-        const data = (await response.json()) as ContractDefaultsResponse
-
-        const rawNumberOfPayments = Number(
-          data.defaults?.numberOfPayments ?? data.defaults?.termMonths ?? DEFAULT_NUMBER_OF_PAYMENTS
-        )
-        const resolvedNumberOfPayments =
-          Number.isFinite(rawNumberOfPayments) && rawNumberOfPayments > 0
-            ? Math.round(rawNumberOfPayments)
-            : DEFAULT_NUMBER_OF_PAYMENTS
-
-        const rawLoanAmount = Number(data.defaults?.loanAmount ?? DEFAULT_LOAN_AMOUNT)
-        const resolvedLoanAmount =
-          Number.isFinite(rawLoanAmount) && rawLoanAmount > 0
-            ? Math.round(rawLoanAmount * 100) / 100
-            : DEFAULT_LOAN_AMOUNT
-
-        const resolvedNextPaymentDate =
-          normalizeDateInput(data.defaults?.nextPaymentDate) ?? DEFAULT_NEXT_PAYMENT_DATE
-
-        setNumberOfPayments(resolvedNumberOfPayments)
-        setLoanAmount(resolvedLoanAmount)
-        setPaymentFrequency(data.defaults?.paymentFrequency ?? DEFAULT_PAYMENT_FREQUENCY)
-        setNextPaymentDate(resolvedNextPaymentDate)
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return
-        }
-
-        console.error('Failed to load contract defaults:', error)
-        setFormError('Unable to load defaults. Please adjust values manually.')
-        setNumberOfPayments(DEFAULT_NUMBER_OF_PAYMENTS)
-        setLoanAmount(DEFAULT_LOAN_AMOUNT)
-        setPaymentFrequency(DEFAULT_PAYMENT_FREQUENCY)
-        setNextPaymentDate(DEFAULT_NEXT_PAYMENT_DATE)
-      } finally {
-        if (!controller.signal.aborted) {
-          setDefaultsLoading(false)
-        }
-      }
-    }
-
-    void loadDefaults()
-
-    return () => {
-      controller.abort()
-    }
-  }, [applicationId, open])
-
-  if (!open) {
-    return null
-  }
-
-  const handleClose = () => {
-    if (!loadingContract) {
-      onClose()
-    }
-  }
-
-  const handleSubmit = async () => {
-    const sanitizedNumberOfPayments = Number(numberOfPayments)
-    const sanitizedLoanAmount = typeof loanAmount === 'string' ? Number(loanAmount) : loanAmount
-    const sanitizedNextPaymentDate = normalizeDateInput(nextPaymentDate)
-
-    if (!Number.isFinite(sanitizedNumberOfPayments) || sanitizedNumberOfPayments <= 0) {
-      setFormError('Please enter a valid number of payments greater than 0.')
-      return
-    }
-
-    if (!Number.isFinite(sanitizedLoanAmount) || sanitizedLoanAmount <= 0) {
-      setFormError('Please enter a valid loan amount greater than 0.')
-      return
-    }
-
-    if (!sanitizedNextPaymentDate) {
-      setFormError('Please select a valid next payment date.')
-      return
-    }
-
+  // === Submit handler ===
+  const handleSubmit = () => {
     setFormError(null)
 
-    try {
-      await onSubmit({
-        paymentFrequency,
-        numberOfPayments: Math.round(sanitizedNumberOfPayments),
-        loanAmount: Math.round(sanitizedLoanAmount * 100) / 100,
-        nextPaymentDate: sanitizedNextPaymentDate
-      })
-      onClose()
-    } catch (error) {
-      console.error('Failed to generate contract:', error)
-      setFormError('Failed to generate contract. Please try again.')
+    if (!loanAmount || !paymentAmount || !selectedAccountId) {
+      setFormError('Please fill all required fields.')
+      return
     }
+
+    setLoadingContract(true)
+    const payload: GenerateContractPayload = {
+      loanAmount: Number(loanAmount),
+      paymentFrequency,
+      numberOfPayments: Number(numberOfPayments),
+      nextPaymentDate,
+      account: accounts.find(acc => acc.account_number === selectedAccountId),
+      interestRate: Number(interestRate),
+    }
+
+    // Simulate async
+    setTimeout(() => {
+      setLoadingContract(false)
+      onSubmit(payload)
+      onClose()
+    }, 800)
   }
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4'>
-      <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl'>
-        <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4'>
+      <div className='flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl'>
+        {/* Header */}
+        <div className='flex flex-shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4'>
           <div>
-            <h3 className='text-lg font-semibold text-gray-900'>Generate Contract</h3>
-            <p className='text-sm text-gray-600'>Specify the repayment term and frequency.</p>
+            <h3 className='text-lg font-semibold text-gray-900'>
+              Generate Contract
+            </h3>
+            <p className='text-sm text-gray-600'>
+              Specify repayment terms, payment schedule, and bank account.
+            </p>
           </div>
           <button
             type='button'
-            onClick={handleClose}
+            onClick={onClose}
             className='rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600'
             aria-label='Close generate contract modal'
           >
-            <svg className='h-5 w-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+            <svg
+              className='h-5 w-5'
+              fill='none'
+              viewBox='0 0 24 24'
+              stroke='currentColor'
+            >
+              <path
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                strokeWidth={2}
+                d='M6 18L18 6M6 6l12 12'
+              />
             </svg>
           </button>
         </div>
 
-        <div className='space-y-4 px-6 py-5'>
-          <div>
-            <label className='mb-1 block text-sm font-medium text-gray-700'>Number of Payments</label>
-            <input
-              type='number'
-              min={1}
-              value={Number.isFinite(numberOfPayments) ? numberOfPayments : ''}
-              onChange={event => setNumberOfPayments(Number(event.target.value))}
-              disabled={defaultsLoading}
-              className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50'
-            />
-            <p className='mt-1 text-xs text-gray-500'>Calculated from the contract schedule. Enter a positive integer.</p>
-          </div>
+        {/* Body */}
+        <div className='flex-1 overflow-y-auto px-6 py-5'>
+          <div className='space-y-4'>
+            {/* Loan amount + Frequency */}
+            <div className='grid grid-cols-2 gap-4'>
+              <div>
+                <label className='mb-1 block text-sm font-medium text-gray-700'>
+                  Loan Amount (CAD)
+                </label>
+                <input
+                  type='number'
+                  min={0}
+                  step='0.01'
+                  value={loanAmount === '' ? '' : loanAmount}
+                  onChange={e => {
+                    const value = e.target.value
+                    setLoanAmount(value === '' ? '' : Number(value))
+                  }}
+                  disabled={isLoading}
+                  className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50'
+                />
+              </div>
 
-          <div>
-            <label className='mb-1 block text-sm font-medium text-gray-700'>Payment Frequency</label>
-            <Select
-              value={paymentFrequency}
-              onValueChange={value => setPaymentFrequency(value as PaymentFrequency)}
-              options={frequencyOptions}
-              disabled={defaultsLoading}
-              className='bg-white'
-            />
-          </div>
+              <div>
+                <label className='mb-1 block text-sm font-medium text-gray-700'>
+                  Payment Frequency
+                </label>
+                <Select
+                  value={paymentFrequency}
+                  onValueChange={e =>
+                    setPaymentFrequency(e as PaymentFrequency)
+                  }
+                  options={frequencyOptions}
+                  disabled={isLoading}
+                  className='w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
+                />
+              </div>
+            </div>
 
-          <div>
-            <label className='mb-1 block text-sm font-medium text-gray-700'>Loan Amount (CAD)</label>
-            <input
-              type='number'
-              min={0}
-              step='0.01'
-              value={loanAmount === '' ? '' : loanAmount}
-              onChange={event => {
-                const value = event.target.value
-                setLoanAmount(value === '' ? '' : Number(value))
-              }}
-              disabled={defaultsLoading}
-              className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50'
-            />
-            <p className='mt-1 text-xs text-gray-500'>Defaults to the application loan amount.</p>
-          </div>
+            {/* Payments + amount */}
+            <div className='grid grid-cols-2 gap-4'>
+              <div>
+                <label className='mb-1 block text-sm font-medium text-gray-700'>
+                  Number of Payments
+                </label>
+                <input
+                  type='number'
+                  min={1}
+                  value={
+                    Number.isFinite(numberOfPayments) ? numberOfPayments : ''
+                  }
+                  onChange={e => setNumberOfPayments(Number(e.target.value))}
+                  disabled={isLoading}
+                  className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
+                />
+              </div>
 
-          <div>
-            <label className='mb-1 block text-sm font-medium text-gray-700'>Next Payment Date</label>
-            <input
-              type='date'
-              value={nextPaymentDate}
-              onChange={event => setNextPaymentDate(event.target.value)}
-              disabled={defaultsLoading}
-              className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50'
-            />
-            <p className='mt-1 text-xs text-gray-500'>Defaults to the next pay date detected from IBV data.</p>
-          </div>
+              <div>
+                <label className='mb-1 block text-sm font-medium text-gray-700'>
+                  Payment Amount (CAD)
+                </label>
+                <input
+                  type='number'
+                  min={0}
+                  step='0.01'
+                  value={paymentAmount === '' ? '' : paymentAmount}
+                  onChange={e => {
+                    const value = e.target.value
+                    setPaymentAmount(value === '' ? '' : Number(value))
+                  }}
+                  disabled={isLoading}
+                  className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
+                />
+              </div>
+            </div>
 
-          {defaultsLoading && <p className='text-sm text-gray-500'>Loading default values…</p>}
-          {formError && <p className='text-sm text-red-600'>{formError}</p>}
+            {/* Interest + next payment */}
+            <div className='grid grid-cols-2 gap-4'>
+              <div className='hidden'>
+                <label className='mb-1 block text-sm font-medium text-gray-700'>
+                  Interest Rate (%)
+                </label>
+                <input
+                  type='number'
+                  min={0}
+                  step='0.01'
+                  value={interestRate}
+                  onChange={e => setInterestRate(Number(e.target.value))}
+                  className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
+                />
+              </div>
+
+              <div>
+                <label className='mb-1 block text-sm font-medium text-gray-700'>
+                  Next Payment Date
+                </label>
+                <input
+                  type='date'
+                  value={nextPaymentDate}
+                  onChange={e => setNextPaymentDate(e.target.value)}
+                  disabled={isLoading}
+                  className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
+                />
+              </div>
+            </div>
+
+            {/* Account select */}
+            <div>
+              <label className='mb-1 block text-sm font-medium text-gray-700'>
+                Bank Account
+              </label>
+              <Select
+                value={selectedAccountId}
+                onValueChange={e => setSelectedAccountId(e as string)}
+                disabled={isLoading}
+                className='w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
+                options={
+                  data?.defaults.accountOptions?.map(acc => ({
+                    value: acc.account_number,
+                    label: `${acc.account_number} - ${acc.bank_name}`
+                  })) ?? []
+                }
+              />
+
+              <p className='mt-1 text-xs text-gray-500'>
+                Select the account that will be used for loan payments.
+              </p>
+            </div>
+
+            {isLoading && (
+              <p className='text-sm text-gray-500'>Loading default values…</p>
+            )}
+            {formError && <p className='text-sm text-red-600'>{formError}</p>}
+          </div>
         </div>
 
-        <div className='flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4'>
+        {/* Footer */}
+        <div className='flex flex-shrink-0 items-center justify-end gap-3 border-t border-gray-200 px-6 py-4'>
           <button
             type='button'
-            onClick={handleClose}
+            onClick={onClose}
             disabled={loadingContract}
-            className='rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50'
+            className='rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
           >
             Cancel
           </button>
-          <Button
+          <button
             onClick={handleSubmit}
             disabled={loadingContract}
-            className='rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
+            className='rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
           >
-            {loadingContract ? 'Generating...' : 'Generate'}
-          </Button>
+            {loadingContract ? 'Generating…' : 'Generate'}
+          </button>
         </div>
       </div>
     </div>
@@ -298,4 +294,3 @@ export const GenerateContractModal = ({
 }
 
 export default GenerateContractModal
-

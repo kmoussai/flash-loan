@@ -1,3 +1,4 @@
+import { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
 import type { LoanApplication } from '@/src/lib/supabase/types'
 
 export interface IbvResults {
@@ -38,7 +39,7 @@ export interface IbvResults {
 }
 
 export interface ApplicationWithDetails extends LoanApplication {
-  ibv_results?: IbvResults | null
+  ibv_results: IBVSummary | null
   users: {
     id: string
     first_name: string | null

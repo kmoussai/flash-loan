@@ -15,10 +15,9 @@ import {
   getDocumentStatusBadgeClass,
   getApplicationStatusBadgeClass
 } from '../../utils/formatters'
+
 import useSWR from 'swr'
-
-const fetcher = (url: string) => fetch(url).then(res => res.json())
-
+import { fetcher } from '@/lib/utils'
 interface RequestFormSubmission {
   id: string
   form_data: Record<string, any>
