@@ -292,6 +292,281 @@ export default function DocumentsSection({
     return JSON.stringify(value)
   }
 
+  const formatDateValue = (dateString: string | null | undefined) => {
+    if (!dateString) return null
+    try {
+      return new Date(dateString).toLocaleDateString('en-CA', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    } catch {
+      return dateString
+    }
+  }
+
+  const formatEmploymentOverview = (formData: Record<string, any>) => {
+    const incomeSource = formData.incomeSource
+    if (!incomeSource) return 'No employment information provided.'
+
+    const parts: (string | JSX.Element)[] = []
+
+    switch (incomeSource) {
+      case 'employed':
+        parts.push(
+          <>
+            The applicant is <strong>employed</strong>
+          </>
+        )
+        if (formData.occupation) {
+          parts.push(
+            <>
+              {' '}as a <strong>{formData.occupation}</strong>
+            </>
+          )
+        }
+        if (formData.companyName) {
+          parts.push(
+            <>
+              {' '}at <strong>{formData.companyName}</strong>
+            </>
+          )
+        }
+        if (formData.post) {
+          parts.push(` (Post: ${formData.post})`)
+        }
+        if (formData.supervisorName) {
+          parts.push(
+            <>
+              {' '}under supervisor <strong>{formData.supervisorName}</strong>
+            </>
+          )
+        }
+        if (formData.workPhone) {
+          parts.push(` (Phone: ${formData.workPhone})`)
+        }
+        if (formData.payrollFrequency) {
+          const freq = formData.payrollFrequency.replace('-', ' ')
+          parts.push(
+            <>
+              {' '}with <strong>{freq}</strong> payroll
+            </>
+          )
+        }
+        if (formData.dateHired) {
+          const date = formatDateValue(formData.dateHired)
+          if (date) {
+            parts.push(
+              <>
+                . Hired on <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        if (formData.nextPayDate) {
+          const date = formatDateValue(formData.nextPayDate)
+          if (date) {
+            parts.push(
+              <>
+                . Next pay date: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        break
+
+      case 'employment-insurance':
+        parts.push(
+          <>
+            The applicant receives <strong>Employment Insurance</strong> benefits
+          </>
+        )
+        if (formData.employmentInsuranceStartDate) {
+          const date = formatDateValue(formData.employmentInsuranceStartDate)
+          if (date) {
+            parts.push(
+              <>
+                {' '}starting <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        if (formData.nextDepositDate) {
+          const date = formatDateValue(formData.nextDepositDate)
+          if (date) {
+            parts.push(
+              <>
+                . Next deposit: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        break
+
+      case 'self-employed':
+        parts.push(
+          <>
+            The applicant is <strong>self-employed</strong>
+          </>
+        )
+        if (formData.paidByDirectDeposit) {
+          const paid = formData.paidByDirectDeposit === 'yes' ? 'Yes' : 'No'
+          parts.push(
+            <>
+              . Paid by direct deposit: <strong>{paid}</strong>
+            </>
+          )
+        }
+        if (formData.selfEmployedPhone) {
+          parts.push(
+            <>
+              {' '}Contact: <strong>{formData.selfEmployedPhone}</strong>
+            </>
+          )
+        }
+        if (formData.depositsFrequency) {
+          const freq = formData.depositsFrequency.replace('-', ' ')
+          parts.push(
+            <>
+              {' '}Deposits frequency: <strong>{freq}</strong>
+            </>
+          )
+        }
+        if (formData.selfEmployedStartDate) {
+          const date = formatDateValue(formData.selfEmployedStartDate)
+          if (date) {
+            parts.push(
+              <>
+                . Started: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        if (formData.nextDepositDate) {
+          const date = formatDateValue(formData.nextDepositDate)
+          if (date) {
+            parts.push(
+              <>
+                . Next deposit: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        break
+
+      case 'retirement-plan':
+        parts.push(
+          <>
+            The applicant receives <strong>Retirement Plan</strong> benefits
+          </>
+        )
+        if (formData.nextDepositDate) {
+          const date = formatDateValue(formData.nextDepositDate)
+          if (date) {
+            parts.push(
+              <>
+                . Next deposit: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        break
+
+      case 'csst-saaq':
+        parts.push(
+          <>
+            The applicant receives <strong>CSST/SAAQ disability benefits</strong>
+          </>
+        )
+        if (formData.nextDepositDate) {
+          const date = formatDateValue(formData.nextDepositDate)
+          if (date) {
+            parts.push(
+              <>
+                . Next deposit: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        break
+
+      case 'parental-insurance':
+        parts.push(
+          <>
+            The applicant receives <strong>Parental Insurance</strong> benefits
+          </>
+        )
+        if (formData.nextDepositDate) {
+          const date = formatDateValue(formData.nextDepositDate)
+          if (date) {
+            parts.push(
+              <>
+                . Next deposit: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        break
+
+      default:
+        return <>Unknown employment type.</>
+    }
+
+    return parts.length > 0 ? <>{parts}</> : <>No employment details provided.</>
+  }
+
+  const formatReferenceOverview = (references: Array<any>) => {
+    if (!Array.isArray(references) || references.length === 0) {
+      return <>No references provided.</>
+    }
+
+    return (
+      <div className='space-y-4'>
+        {references.map((ref: any, idx: number) => {
+          const fullName = [ref?.first_name, ref?.last_name].filter(Boolean).join(' ')
+          const relationship = ref?.relationship ? ref.relationship.charAt(0).toUpperCase() + ref.relationship.slice(1) : null
+          
+          return (
+            <div key={idx} className='rounded-lg border border-gray-200 bg-white p-4 shadow-sm'>
+              <div className='mb-2 flex items-start justify-between'>
+                <h4 className='text-sm font-semibold text-gray-900'>
+                  Reference #{idx + 1}
+                </h4>
+                {relationship && (
+                  <span className='inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700'>
+                    {relationship}
+                  </span>
+                )}
+              </div>
+              <div className='space-y-2 text-sm text-gray-700'>
+                {fullName && (
+                  <div className='flex items-start gap-2'>
+                    <svg className='mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' />
+                    </svg>
+                    <span className='text-gray-900'>
+                      <strong>{fullName}</strong>
+                    </span>
+                  </div>
+                )}
+                {ref?.phone && (
+                  <div className='flex items-start gap-2'>
+                    <svg className='mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z' />
+                    </svg>
+                    <a href={`tel:${ref.phone}`} className='text-blue-600 hover:text-blue-800 hover:underline'>
+                      {ref.phone}
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   const openPreview = (file: DocumentItem) => {
     if (!file.signed_url) return
     setPreviewUrl(file.signed_url)
@@ -696,33 +971,40 @@ export default function DocumentsSection({
 
                                   {!isDocumentRequest && latestSubmission && (
                                     <div className='mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700'>
-                                      <p className='mb-2 text-xs uppercase tracking-wide text-gray-500'>
+                                      <p className='mb-3 text-xs uppercase tracking-wide text-gray-500'>
                                         Submitted details
                                       </p>
-                                      <dl className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-                                        {Object.entries(
-                                          latestSubmission.form_data || {}
-                                        ).map(([key, value]) => (
-                                          <div
-                                            key={key}
-                                            className='rounded bg-white p-3 shadow-sm'
-                                          >
-                                            <dt className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                                              {getFieldLabel(r.form_schema, key)}
-                                            </dt>
-                                            <dd className='mt-1 text-sm text-gray-900 break-words'>
-                                              {formatSubmissionValue(value)}
-                                            </dd>
-                                          </div>
-                                        ))}
-                                        {Object.keys(
-                                          latestSubmission.form_data || {}
-                                        ).length === 0 && (
-                                          <div className='col-span-full text-sm text-gray-500'>
-                                            No fields were provided.
-                                          </div>
-                                        )}
-                                      </dl>
+                                      
+                                      {r.request_kind === 'employment' ? (
+                                        <div className='rounded-lg bg-white p-4 shadow-sm'>
+                                          <p className='text-sm leading-relaxed text-gray-900'>
+                                            {formatEmploymentOverview(latestSubmission.form_data || {})}
+                                          </p>
+                                        </div>
+                                      ) : r.request_kind === 'reference' &&
+                                        Array.isArray(latestSubmission.form_data?.references) ? (
+                                        <div>
+                                          {formatReferenceOverview(latestSubmission.form_data.references)}
+                                        </div>
+                                      ) : (
+                                        <dl className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                                          {Object.entries(latestSubmission.form_data || {}).map(([key, value]) => (
+                                            <div key={key} className='rounded bg-white p-3 shadow-sm'>
+                                              <dt className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                                                {getFieldLabel(r.form_schema, key)}
+                                              </dt>
+                                              <dd className='mt-1 break-words text-sm text-gray-900'>
+                                                {formatSubmissionValue(value)}
+                                              </dd>
+                                            </div>
+                                          ))}
+                                          {Object.keys(latestSubmission.form_data || {}).length === 0 && (
+                                            <div className='col-span-full text-sm text-gray-500'>
+                                              No fields were provided.
+                                            </div>
+                                          )}
+                                        </dl>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -966,7 +1248,7 @@ export default function DocumentsSection({
           onClick={() => setRequestModalOpen(false)}
         >
           <div
-            className='mx-4 w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl'
+            className='mx-4 flex h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl max-h-[90vh]'
             onClick={e => e.stopPropagation()}
           >
             <div className='flex items-center justify-between bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4'>
@@ -1007,7 +1289,7 @@ export default function DocumentsSection({
                 </svg>
               </button>
             </div>
-            <div className='space-y-5 p-6'>
+            <div className='flex-1 space-y-5 overflow-y-auto p-6'>
               <div>
                 <p className='mb-3 text-sm font-semibold text-gray-900'>
                   Select items to request:
@@ -1140,7 +1422,7 @@ export default function DocumentsSection({
                 ></textarea>
               </div>
             </div>
-            <div className='flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4'>
+            <div className='flex shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4'>
               <button
                 onClick={() => setRequestModalOpen(false)}
                 className='rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50'
