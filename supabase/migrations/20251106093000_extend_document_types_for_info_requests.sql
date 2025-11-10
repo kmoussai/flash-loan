@@ -27,46 +27,6 @@ INSERT INTO public.document_types (
 )
 VALUES
   (
-    'Updated Address Information',
-    'address-information',
-    '[]'::jsonb,
-    0,
-    'address',
-    '{
-      "title": "Update Address Information",
-      "description": "Collect the applicant''s current residential address details.",
-      "submit_label": "Submit Address",
-      "fields": [
-        { "id": "street_number", "label": "Street Number", "type": "text", "required": true },
-        { "id": "street_name", "label": "Street Name", "type": "text", "required": true },
-        { "id": "apartment_number", "label": "Apartment or Unit", "type": "text", "required": false, "placeholder": "Optional" },
-        { "id": "city", "label": "City", "type": "text", "required": true },
-        {
-          "id": "province",
-          "label": "Province",
-          "type": "select",
-          "required": true,
-          "placeholder": "Select province",
-          "options": [
-            { "label": "Alberta", "value": "AB" },
-            { "label": "British Columbia", "value": "BC" },
-            { "label": "Manitoba", "value": "MB" },
-            { "label": "New Brunswick", "value": "NB" },
-            { "label": "Newfoundland and Labrador", "value": "NL" },
-            { "label": "Nova Scotia", "value": "NS" },
-            { "label": "Ontario", "value": "ON" },
-            { "label": "Prince Edward Island", "value": "PE" },
-            { "label": "Quebec", "value": "QC" },
-            { "label": "Saskatchewan", "value": "SK" }
-          ]
-        },
-        { "id": "postal_code", "label": "Postal Code", "type": "text", "required": true, "placeholder": "A1A 1A1" },
-        { "id": "moving_date", "label": "Move-in Date", "type": "date", "required": false }
-      ]
-    }'::jsonb,
-    'Request updated address details from the applicant.'
-  ),
-  (
     'Reference Contact Details',
     'reference-contact',
     '[]'::jsonb,

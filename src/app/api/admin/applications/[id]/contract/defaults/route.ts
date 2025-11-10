@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
-import type { PaymentFrequency, ContractTerms } from '@/src/lib/supabase/types'
+import type {
+  PaymentFrequency,
+  ContractTerms,
+  IncomeSourceType
+} from '@/src/lib/supabase/types'
 import { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
 import {
   FREQUENCY_OPTIONS,
@@ -9,8 +13,16 @@ import {
   getPaymentsPerMonth,
   normalizeFrequency
 } from '@/src/lib/utils/frequency'
+import { buildContractTermsFromApplication } from '@/src/lib/contracts/terms'
+import { BankAccount, ContractDefaultsResponse } from '@/src/app/types/contract'
+import {
+  getLoanApplicationById,
+  getLoanByApplicationId
+} from '@/src/lib/supabase/loan-helpers'
 
-const getLowestPaymentFrequencyFromIbv = (ibvResults?: IBVSummary | null): PaymentFrequency | null => {
+const getLowestPaymentFrequencyFromIbv = (
+  ibvResults?: IBVSummary | null
+): PaymentFrequency | null => {
   if (!ibvResults || !Array.isArray(ibvResults.accounts)) {
     return null
   }
@@ -23,7 +35,8 @@ const getLowestPaymentFrequencyFromIbv = (ibvResults?: IBVSummary | null): Payme
 
     for (const income of incomes) {
       const normalized =
-        normalizeFrequency(income?.frequency) ?? normalizeFrequency(income?.raw_frequency)
+        normalizeFrequency(income?.frequency) ??
+        normalizeFrequency(income?.raw_frequency)
 
       if (!normalized) {
         continue
@@ -74,7 +87,9 @@ const getEarliestDate = (dates: Date[]): Date | null => {
   return dates.sort((a, b) => a.getTime() - b.getTime())[0]
 }
 
-const getNextPayDateFromIbv = (ibvResults?: IBVSummary | null): string | null => {
+const getNextPayDateFromIbv = (
+  ibvResults?: IBVSummary | null
+): string | null => {
   if (!ibvResults || !Array.isArray(ibvResults.accounts)) {
     return null
   }
@@ -89,7 +104,9 @@ const getNextPayDateFromIbv = (ibvResults?: IBVSummary | null): string | null =>
     const incomes = Array.isArray(account?.income) ? account.income : []
 
     for (const income of incomes) {
-      const futurePayments = Array.isArray(income?.future_payments) ? income.future_payments : []
+      const futurePayments = Array.isArray(income?.future_payments)
+        ? income.future_payments
+        : []
 
       for (const futurePayment of futurePayments) {
         const parsedDate = parseDateValue(futurePayment)
@@ -120,11 +137,13 @@ const resolveNextPaymentDate = (
 ): string => {
   const todayIso = toIsoDate(new Date())
 
-  const scheduleEntries = Array.isArray(terms?.payment_schedule) ? terms?.payment_schedule : []
+  const scheduleEntries = Array.isArray(terms?.payment_schedule)
+    ? terms?.payment_schedule
+    : []
   const scheduleDates = scheduleEntries
-    .map((entry) => parseDateValue(entry?.due_date))
+    .map(entry => parseDateValue(entry?.due_date))
     .filter((date): date is Date => Boolean(date))
-    .map((date) => {
+    .map(date => {
       const normalized = new Date(date)
       normalized.setHours(0, 0, 0, 0)
       return normalized
@@ -133,7 +152,9 @@ const resolveNextPaymentDate = (
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const upcomingScheduleDate = getEarliestDate(scheduleDates.filter((date) => date.getTime() >= today.getTime()))
+  const upcomingScheduleDate = getEarliestDate(
+    scheduleDates.filter(date => date.getTime() >= today.getTime())
+  )
   const fallbackScheduleDate = getEarliestDate(scheduleDates)
 
   if (upcomingScheduleDate || fallbackScheduleDate) {
@@ -157,7 +178,9 @@ const resolvePaymentFrequency = (
   terms: ContractTerms | null | undefined,
   ibvResults?: IBVSummary | null
 ): PaymentFrequency => {
-  const fromTerms = normalizeFrequency(terms?.payment_frequency) as PaymentFrequency | null
+  const fromTerms = normalizeFrequency(
+    terms?.payment_frequency
+  ) as PaymentFrequency | null
 
   if (fromTerms) {
     return fromTerms
@@ -172,17 +195,19 @@ const resolvePaymentFrequency = (
   return 'monthly'
 }
 
-interface ContractDefaultsResponse {
-  applicationId: string
-  termMonths: number
-  paymentFrequency: PaymentFrequency
-  interestRate: number
-  loanAmount: number
-  numberOfPayments: number
-  nextPaymentDate: string
-  source: 'existing_contract' | 'application_defaults'
-  frequencyOptions: PaymentFrequency[]
-  generatedAt: string
+const extractAccountsFromIbv = (
+  ibvResults?: IBVSummary | null
+): BankAccount[] => {
+  if (!ibvResults || !Array.isArray(ibvResults.accounts)) {
+    return []
+  }
+  return ibvResults.accounts.map(account => ({
+    account_name: account?.bank_name ?? '',
+    account_number: account?.number ?? '',
+    transit_number: account?.transit ?? '',
+    institution_number: account?.institution ?? '',
+    bank_name: account?.bank_name ?? ''
+  }))
 }
 
 export async function GET(
@@ -199,77 +224,44 @@ export async function GET(
   }
 
   try {
-    const supabase = await createServerSupabaseAdminClient()
+    const [contractResult, loanResponse, loanApplicationResponse] =
+      await Promise.all([
+        getContractByApplicationId(applicationId, true),
+        getLoanByApplicationId(applicationId, true),
+        getLoanApplicationById(applicationId, true)
+      ])
 
-    const [applicationResponse, contractResult] = await Promise.all([
-      supabase
-        .from('loan_applications')
-        .select('id, loan_amount, interest_rate, application_status, ibv_results')
-        .eq('id', applicationId)
-        .single(),
-      getContractByApplicationId(applicationId, true)
-    ])
+    const contractData = contractResult.data
+    const loanData = loanResponse.data
+    const loanApplicationData = loanApplicationResponse.data
+    const tmpAccounts = extractAccountsFromIbv(loanApplicationData?.ibv_results)
+    const paymentFrequency =
+      contractData?.contract_terms.payment_frequency ??
+      loanApplicationData?.ibv_results?.accounts?.[0]?.income?.[0]?.frequency ??
+      'monthly'
+    const numberOfPayments =
+      contractData?.contract_terms.number_of_payments ?? 0
+    const loanAmount =
+      contractData?.contract_terms?.principal_amount ??
+      loanData?.principal_amount
 
-    const { data: applicationData, error: applicationError } = applicationResponse
-
-    if (applicationError || !applicationData) {
-      return NextResponse.json(
-        { error: 'Application not found' },
-        { status: 404 }
-      )
-    }
-
-    const application = applicationData as {
-      id: string
-      loan_amount: number
-      interest_rate: number | null
-      ibv_results: IBVSummary
-    }
-
-    const existingContract = contractResult.success ? contractResult.data : null
-
-    let defaults: ContractDefaultsResponse
-
-    if (existingContract?.contract_terms) {
-      const terms = existingContract.contract_terms as ContractTerms
-      const paymentFrequency = resolvePaymentFrequency(terms, application.ibv_results)
-      const termMonths = terms.term_months ?? 3
-      const numberOfPayments = terms.number_of_payments ?? calculateNumberOfPayments(termMonths, paymentFrequency)
-      const nextPaymentDate = resolveNextPaymentDate(terms, application.ibv_results)
-
-      defaults = {
-        applicationId,
-        termMonths,
-        paymentFrequency,
-        interestRate: terms.interest_rate ?? application.interest_rate ?? 29,
-        loanAmount: terms.principal_amount ?? application.loan_amount,
+    const defaultsresponse: ContractDefaultsResponse = {
+      success: true,
+      defaults: {
+        loanAmount,
+        account: contractData?.bank_account ?? tmpAccounts[0] ?? null,
+        accountOptions: tmpAccounts,
         numberOfPayments,
-        nextPaymentDate,
-        source: 'existing_contract',
-        frequencyOptions: FREQUENCY_OPTIONS,
-        generatedAt: new Date().toISOString()
-      }
-    } else {
-      const interestRate = application.interest_rate ?? 29
-      const termMonths = 3
-      const paymentFrequency = resolvePaymentFrequency(null, application.ibv_results)
-      const nextPaymentDate = resolveNextPaymentDate(null, application.ibv_results)
-
-      defaults = {
-        applicationId,
-        termMonths,
         paymentFrequency,
-        interestRate,
-        loanAmount: application.loan_amount,
-        numberOfPayments: calculateNumberOfPayments(termMonths, paymentFrequency),
-        nextPaymentDate,
-        source: 'application_defaults',
-        frequencyOptions: FREQUENCY_OPTIONS,
-        generatedAt: new Date().toISOString()
+        nextPaymentDate: resolveNextPaymentDate(
+          contractData?.contract_terms,
+          loanApplicationData?.ibv_results
+        ),
+        paymentAmount: contractData?.contract_terms?.payment_amount ?? calculatePaymentAmount(paymentFrequency, loanAmount ?? 0, 29, numberOfPayments) ?? 0
       }
     }
 
-    return NextResponse.json({ success: true, defaults })
+    return NextResponse.json(defaultsresponse)
   } catch (error: any) {
     console.error('Error fetching contract defaults:', error)
     return NextResponse.json(
@@ -279,9 +271,38 @@ export async function GET(
   }
 }
 
-const calculateNumberOfPayments = (termMonths: number, frequency: PaymentFrequency): number => {
-  const paymentsPerMonth = getPaymentsPerMonth(frequency)
-  return Math.max(1, Math.round(termMonths * paymentsPerMonth))
+function calculatePaymentAmount(
+  payment_frequency: PaymentFrequency,
+  loan_amount: number,
+  interest_rate: number, // annual rate in percent, e.g. 24
+  num_payments: number
+): number | undefined {
+  if (
+    !payment_frequency ||
+    loan_amount <= 0 ||
+    interest_rate < 0 ||
+    num_payments <= 0
+  ) {
+    return undefined
+  }
+
+  const paymentsPerYearMap: Record<PaymentFrequency, number> = {
+    weekly: 52,
+    'bi-weekly': 26,
+    'twice-monthly': 24,
+    monthly: 12
+  }
+
+  const paymentsPerYear = paymentsPerYearMap[payment_frequency]
+  const periodicRate = (interest_rate / 100) / paymentsPerYear
+
+  // amortized payment formula
+  const payment =
+    periodicRate === 0
+      ? loan_amount / num_payments
+      : (loan_amount *
+          (periodicRate * Math.pow(1 + periodicRate, num_payments))) /
+        (Math.pow(1 + periodicRate, num_payments) - 1)
+
+  return Number(payment.toFixed(2))
 }
-
-

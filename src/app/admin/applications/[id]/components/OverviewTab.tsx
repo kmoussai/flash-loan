@@ -116,7 +116,7 @@ const OverviewTab = ({
             </p>
           </div>
         )}
-        {application.ibv_results?.aggregates?.total_deposits && (
+        {/* {application.ibv_results?.aggregates?.total_deposits && (
           <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5'>
             <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
               Avg Deposits
@@ -125,7 +125,7 @@ const OverviewTab = ({
               {formatCurrencyCompact(application.ibv_results.aggregates.total_deposits)}
             </p>
           </div>
-        )}
+        )} */}
       </div>
 
       <div className='grid gap-6 lg:grid-cols-2'>
@@ -236,25 +236,6 @@ const OverviewTab = ({
           </div>
         </div>
       </div>
-
-      {application.application_status === 'pending' && (
-        <div className='rounded-xl border border-gray-200 bg-white p-6'>
-          <div className='flex items-center justify-center gap-4'>
-            <Button
-              onClick={onOpenRejectModal}
-              className='rounded-lg border border-red-300 bg-white px-6 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50'
-            >
-              Reject Application
-            </Button>
-            <Button
-              onClick={onOpenApproveModal}
-              className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg'
-            >
-              Approve Application
-            </Button>
-          </div>
-        </div>
-      )}
 
       {(application.application_status === 'pre_approved' ||
         application.application_status === 'contract_pending' ||

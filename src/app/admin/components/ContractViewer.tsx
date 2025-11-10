@@ -108,18 +108,33 @@ export default function ContractViewer({
     const province = terms.province ?? ''
     const postal = terms.postal_code ?? ''
 
-    const streetLineComputed = [streetNumber, streetName].filter(Boolean).join(' ')
+    const streetLineComputed = [streetNumber, streetName]
+      .filter(Boolean)
+      .join(' ')
 
     // Basic dates and schedule
-    const dateCreated = formatDate(contractData.created_at) || formatDate(new Date().toISOString())
-    const schedule = Array.isArray(terms.payment_schedule) ? terms.payment_schedule : []
+    const dateCreated =
+      formatDate(contractData.created_at) ||
+      formatDate(new Date().toISOString())
+    const schedule = Array.isArray(terms.payment_schedule)
+      ? terms.payment_schedule
+      : []
     const numberOfPayments = terms.number_of_payments ?? schedule.length ?? 0
-    const principalAmount = typeof terms.principal_amount === 'number' ? terms.principal_amount : 0
-    const totalAmount = typeof terms.total_amount === 'number' ? terms.total_amount : principalAmount
-    const interestRate = typeof terms.interest_rate === 'number' ? terms.interest_rate : 0
-    const paymentAmount = schedule[0]?.amount ?? (numberOfPayments ? totalAmount / numberOfPayments : 0)
-    const firstPaymentDue = schedule[0]?.due_date ?? terms.effective_date ?? null
-    const lastPaymentDue = schedule[schedule.length - 1]?.due_date ?? terms.maturity_date ?? null
+    const principalAmount =
+      typeof terms.principal_amount === 'number' ? terms.principal_amount : 0
+    const totalAmount =
+      typeof terms.total_amount === 'number'
+        ? terms.total_amount
+        : principalAmount
+    const interestRate =
+      typeof terms.interest_rate === 'number' ? terms.interest_rate : 0
+    const paymentAmount =
+      schedule[0]?.amount ??
+      (numberOfPayments ? totalAmount / numberOfPayments : 0)
+    const firstPaymentDue =
+      schedule[0]?.due_date ?? terms.effective_date ?? null
+    const lastPaymentDue =
+      schedule[schedule.length - 1]?.due_date ?? terms.maturity_date ?? null
 
     // Fees
     const returnedPaymentFee = terms.fees?.origination_fee ?? 55
@@ -127,7 +142,10 @@ export default function ContractViewer({
     const postponeFee = terms.fees?.other_fees ?? 35
 
     // Contract meta
-    const loanNumber = contractData.loan_id ?? contractData.loan_application_id ?? contractData.id
+    const loanNumber =
+      contractData.loan_id ??
+      contractData.loan_application_id ??
+      contractData.id
     const signatureDateClient = formatDate(contractData.client_signed_at)
     const signatureDateStaff = formatDate(contractData.staff_signed_at)
     const signatureMethod = contractData.client_signature_data?.signature_method
@@ -138,19 +156,25 @@ export default function ContractViewer({
 
     const borrowerFullName =
       [terms.first_name, terms.last_name].filter(Boolean).join(' ').trim() ||
-      (typeof (terms as any).borrowerName === 'string' ? (terms as any).borrowerName : '') ||
-      [ (terms as any).borrowerFirstName, (terms as any).borrowerLastName ].filter(Boolean).join(' ').trim()
+      (typeof (terms as any).borrowerName === 'string'
+        ? (terms as any).borrowerName
+        : '') ||
+      [(terms as any).borrowerFirstName, (terms as any).borrowerLastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim()
 
-    // Banking placeholders (not provided in LoanContract)
-    const bankingInstitution = ''
-    const bankingAddress = ''
-    const bankingCity = ''
-    const bankingProvince = ''
-    const bankingPostal = ''
-    const bankingInstitutionNumber = ''
-    const bankingTransit = ''
-    const bankingAccount = ''
-  const withFallback = (
+    // Banking information from contract terms
+    const bankAccount = terms.bank_account
+    const bankingInstitution = bankAccount?.bank_name ?? ''
+    const bankingAddress = '' // Not stored in contract terms
+    const bankingCity = '' // Not stored in contract terms
+    const bankingProvince = '' // Not stored in contract terms
+    const bankingPostal = '' // Not stored in contract terms
+    const bankingInstitutionNumber = bankAccount?.institution_number ?? ''
+    const bankingTransit = bankAccount?.transit_number ?? ''
+    const bankingAccountNumber = bankAccount?.account_number ?? ''
+    const withFallback = (
       value: string | number | null | undefined,
       fallback = '___________________________'
     ) => {
@@ -395,14 +419,14 @@ export default function ContractViewer({
       <p class="checkbox-line">Type of service: Personal ${personalService ? '☑' : '☐'} &nbsp;&nbsp;&nbsp; Business ${businessService ? '☑' : '☐'}</p>
 
       <p class="emphasis">Banking Information</p>
-      <p>Banking institution name: ${withFallback(bankingInstitution)}</p>
+     
       <p>Address: ${withFallback(bankingAddress)}</p>
       <p>City: ${withFallback(bankingCity)}</p>
       <p>Province: ${withFallback(bankingProvince)}</p>
       <p>Postal code: ${withFallback(bankingPostal)}</p>
-      <p>Banking number (institution): ${withFallback(bankingInstitutionNumber)}</p>
-      <p>Transit number: ${withFallback(bankingTransit)}</p>
-      <p>Account number: ${withFallback(bankingAccount)}</p>
+      <p>Banking number: ${contractData.bank_account?.institution_number}</p>
+      <p>Bransit number: ${contractData.bank_account?.transit_number}</p>
+      <p>account number: ${contractData.bank_account?.account_number}</p>
 
       <p class="emphasis">Details of the Preauthorize</p>
       <p>

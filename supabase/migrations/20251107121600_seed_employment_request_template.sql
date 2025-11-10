@@ -20,28 +20,72 @@ VALUES (
     "description": "Collect employment details for the applicant.",
     "submit_label": "Submit Employment Info",
     "fields": [
-      { "id": "occupation", "label": "Occupation", "type": "text", "required": true },
-      { "id": "company_name", "label": "Company Name", "type": "text", "required": true },
-      { "id": "supervisor_name", "label": "Supervisor Name", "type": "text", "required": true },
-      { "id": "work_phone", "label": "Work Phone", "type": "phone", "required": true, "placeholder": "(###) ###-####" },
-      { "id": "post", "label": "Post", "type": "text", "required": true },
       {
-        "id": "payroll_frequency",
-        "label": "Payroll Frequency",
+        "id": "incomeSource",
+        "label": "What Is Main Income Source",
         "type": "select",
         "required": true,
-        "placeholder": "Select frequency",
+        "placeholder": "Select income source",
+        "options": [
+          { "label": "Employed", "value": "employed" },
+          { "label": "Employment Insurance", "value": "employment-insurance" },
+          { "label": "Retirement Plan", "value": "retirement-plan" },
+          { "label": "Self-Employed", "value": "self-employed" },
+          { "label": "CSST and SAAQ disability benefits", "value": "csst-saaq" },
+          { "label": "Parental insurance plan", "value": "parental-insurance" }
+        ]
+      },
+      { "id": "occupation", "label": "Occupation", "type": "text", "required": false, "placeholder": "What is your position" },
+      { "id": "companyName", "label": "Company Name", "type": "text", "required": false, "placeholder": "Name of your employer" },
+      { "id": "supervisorName", "label": "Supervisor Name", "type": "text", "required": false, "placeholder": "Name of your supervisor" },
+      { "id": "workPhone", "label": "Phone No", "type": "phone", "required": false, "placeholder": "514-555-1234" },
+      { "id": "post", "label": "Post", "type": "text", "required": false, "placeholder": "Post Number" },
+      {
+        "id": "payrollFrequency",
+        "label": "Payroll Frequency",
+        "type": "select",
+        "required": false,
+        "placeholder": "Choose the frequency",
         "options": [
           { "label": "Weekly", "value": "weekly" },
           { "label": "Bi-Weekly", "value": "bi-weekly" },
+          { "label": "Twice Monthly", "value": "twice-monthly" },
           { "label": "Monthly", "value": "monthly" }
         ]
       },
-      { "id": "date_hired", "label": "Date Hired", "type": "date", "required": true },
-      { "id": "next_pay_date", "label": "Next Pay Date", "type": "date", "required": true }
+      { "id": "dateHired", "label": "Date Hired (Approximate)", "type": "date", "required": false },
+      { "id": "nextPayDate", "label": "Next Pay Date", "type": "date", "required": false },
+      { "id": "employmentInsuranceStartDate", "label": "When did your employment insurance benefits started?", "type": "date", "required": false },
+      {
+        "id": "paidByDirectDeposit",
+        "label": "Are you paid by direct deposit?",
+        "type": "select",
+        "required": false,
+        "placeholder": "Select option",
+        "options": [
+          { "label": "Yes", "value": "yes" },
+          { "label": "No", "value": "no" }
+        ]
+      },
+      { "id": "selfEmployedPhone", "label": "Phone No", "type": "phone", "required": false, "placeholder": "514-555-1234" },
+      {
+        "id": "depositsFrequency",
+        "label": "Deposits Frequency",
+        "type": "select",
+        "required": false,
+        "placeholder": "Choose the frequency",
+        "options": [
+          { "label": "Weekly", "value": "weekly" },
+          { "label": "Bi-Weekly", "value": "bi-weekly" },
+          { "label": "Twice Monthly", "value": "twice-monthly" },
+          { "label": "Monthly", "value": "monthly" }
+        ]
+      },
+      { "id": "selfEmployedStartDate", "label": "Start date as self-employed worker", "type": "date", "required": false },
+      { "id": "nextDepositDate", "label": "Next Deposit Date", "type": "date", "required": false }
     ]
   }'::jsonb,
-  'Collect detailed employment information including supervisor and payroll schedule.'
+  'Collect detailed employment information based on income source type.'
 )
 ON CONFLICT (slug) DO UPDATE
 SET
