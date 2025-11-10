@@ -159,100 +159,6 @@ export default function ApplicationDetailsPage() {
     return []
   }
 
-  // Calculate risk score from IBV results data
-  const calculateRiskScore = (
-    results: IbvResults | null | undefined
-  ): number => {
-    if (!results) return 0
-    const summary = results // Keep using 'summary' variable name for clarity in the function
-    if (!summary?.accounts_summary || summary.accounts_summary.length === 0) {
-      return 0 // Unknown risk if no data
-    }
-
-    let riskScore = 50 // Start with neutral score
-
-    const accountsWithData = summary.accounts_summary.filter(
-      acc => acc.quarter_all_time
-    )
-
-    if (accountsWithData.length === 0) return 0
-
-    // Calculate average metrics across all accounts
-    let totalOverdrafts = 0
-    let totalNegativeDays = 0
-    let totalNegativeCount = 0
-    let avgBalance = 0
-    let hasNegativeBalance = false
-    let totalDeposits = 0
-    let depositCount = 0
-
-    accountsWithData.forEach(acc => {
-      const qat = acc.quarter_all_time
-      if (qat) {
-        totalOverdrafts += qat.overdraft_count || 0
-        totalNegativeDays += qat.negative_balance_days || 0
-        totalNegativeCount += qat.negative_balance_count || 0
-        if (qat.average_balance !== null && qat.average_balance !== undefined) {
-          avgBalance += qat.average_balance
-        }
-        if (
-          qat.lowest_balance !== null &&
-          qat.lowest_balance !== undefined &&
-          qat.lowest_balance < 0
-        ) {
-          hasNegativeBalance = true
-        }
-        if (
-          qat.amount_of_deposits !== null &&
-          qat.amount_of_deposits !== undefined
-        ) {
-          totalDeposits += qat.amount_of_deposits
-          depositCount++
-        }
-      }
-    })
-
-    const avgOverdrafts = totalOverdrafts / accountsWithData.length
-    const avgNegativeDays = totalNegativeDays / accountsWithData.length
-    const avgNegativeCount = totalNegativeCount / accountsWithData.length
-    avgBalance = avgBalance / accountsWithData.length
-
-    // Adjust risk score based on factors
-    // Overdrafts: -10 per overdraft (max -30)
-    riskScore -= Math.min(avgOverdrafts * 10, 30)
-
-    // Negative balance days: -5 per day (max -20)
-    riskScore -= Math.min(avgNegativeDays * 5, 20)
-
-    // Negative balance occurrences: -3 per occurrence (max -15)
-    riskScore -= Math.min(avgNegativeCount * 3, 15)
-
-    // Low average balance: -1 per $100 below $1000 (max -10)
-    if (avgBalance < 1000) {
-      riskScore -= Math.min((1000 - avgBalance) / 100, 10)
-    }
-
-    // No deposits or very low deposits: -15
-    const avgDeposits = depositCount > 0 ? totalDeposits / depositCount : 0
-    if (avgDeposits < 500) {
-      riskScore -= 15
-    }
-
-    // Positive factors
-    // Good average balance: +10 if above $2000
-    if (avgBalance > 2000) {
-      riskScore += 10
-    }
-
-    // High deposit amounts: +5 if average deposits > $2000
-    if (avgDeposits > 2000) {
-      riskScore += 5
-    }
-
-    // Clamp between 0 and 100
-    return Math.max(0, Math.min(100, Math.round(riskScore)))
-  }
-
   useEffect(() => {
     if (applicationId) {
       fetchApplicationDetails()
@@ -641,6 +547,30 @@ export default function ApplicationDetailsPage() {
           </div>
 
           <div className='flex items-center gap-3'>
+              {/* Pre-Approve and Reject Actions */}
+        {application && application.application_status !== 'pre_approved' && application.application_status !== 'rejected' && (
+          <div className='border-b border-gray-200 bg-white px-6 py-4'>
+            <div className='flex items-center justify-center gap-4'>
+              <button
+                onClick={() => {
+                  setPreApproveAmount(application.loan_amount)
+                  setShowApproveModal(true)
+                }}
+                disabled={processing}
+                className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg disabled:opacity-50'
+              >
+                Pre-Approve Application
+              </button>
+              <button
+                onClick={() => setShowRejectModal(true)}
+                disabled={processing}
+                className='rounded-lg border border-red-300 bg-white px-6 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50'
+              >
+                Reject Application
+              </button>
+            </div>
+          </div>
+        )}
             {/* Client Info - Compact */}
             <div className='flex items-center gap-2'>
               <svg className='h-4 w-4 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
@@ -666,6 +596,8 @@ export default function ApplicationDetailsPage() {
             </span>
           </div>
         </div>
+
+      
 
         {/* Modern Tabs */}
         <div className='border-b border-gray-200 bg-white px-6'>
@@ -768,29 +700,6 @@ export default function ApplicationDetailsPage() {
                     Defaults to requested amount: {application ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(application.loan_amount) : '-'}
                   </p>
                 </div>
-                {application?.ibv_results && (
-                  <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
-                    <p className='mb-1 font-medium'>Based on IBV Analysis:</p>
-                    <ul className='space-y-1'>
-                      <li>
-                        • Risk Score:{' '}
-                        {calculateRiskScore(application.ibv_results)}%
-                      </li>
-                      <li>
-                        • Accounts:{' '}
-                        {application.ibv_results.accounts_count || 0}
-                      </li>
-                      <li>
-                        • Total Deposits:{' '}
-                        {application.ibv_results.aggregates?.total_deposits
-                          ? formatCurrency(
-                              application.ibv_results.aggregates.total_deposits
-                            )
-                          : 'N/A'}
-                      </li>
-                    </ul>
-                  </div>
-                )}
               </div>
               <div className='flex gap-3'>
                 <button
@@ -823,29 +732,6 @@ export default function ApplicationDetailsPage() {
                 <p className='mt-2 text-sm text-gray-600'>
                   Please provide a reason for rejection:
                 </p>
-                {application?.ibv_results && (
-                  <div className='mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700'>
-                    <p className='mb-1 font-medium'>Based on IBV Analysis:</p>
-                    <ul className='space-y-1'>
-                      <li>
-                        • Risk Score:{' '}
-                        {calculateRiskScore(application.ibv_results)}%
-                      </li>
-                      <li>
-                        • Accounts:{' '}
-                        {application.ibv_results.accounts_count || 0}
-                      </li>
-                      <li>
-                        • Total Deposits:{' '}
-                        {application.ibv_results.aggregates?.total_deposits
-                          ? formatCurrency(
-                              application.ibv_results.aggregates.total_deposits
-                            )
-                          : 'N/A'}
-                      </li>
-                    </ul>
-                  </div>
-                )}
               </div>
               <div className='flex gap-3'>
                 <button

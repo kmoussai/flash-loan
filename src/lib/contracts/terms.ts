@@ -37,6 +37,12 @@ export type ContractGenerationPayload = {
   numberOfPayments?: number
   termMonths?: number
   firstPaymentDate?: string | Date
+  paymentSchedule?: Array<{
+    due_date: string
+    amount: number
+    principal: number
+    interest: number
+  }>
 }
 
 const toDateOrNull = (value: unknown): Date | null => {
@@ -123,23 +129,50 @@ export function buildContractTermsFromApplication(
   const interestPerPayment = totalInterest / numberOfPayments
 
   // Schedule
-  const paymentSchedule: NonNullable<ContractTerms['payment_schedule']> = []
-  const scheduleStartDate = toDateOrNull(payload?.firstPaymentDate) ?? new Date()
-  const startDate = new Date(scheduleStartDate)
-  startDate.setHours(0, 0, 0, 0)
-  for (let i = 0; i < numberOfPayments; i++) {
-    const dueDate = calculateDueDate(startDate, i, paymentFrequency)
-    paymentSchedule.push({
-      due_date: dueDate.toISOString().split('T')[0],
-      amount: paymentAmount,
-      principal: principalPerPayment,
-      interest: interestPerPayment
-    })
+  let paymentSchedule: NonNullable<ContractTerms['payment_schedule']> = []
+  const defaultStartDate = toDateOrNull(payload?.firstPaymentDate) ?? new Date()
+  const normalizedStartDate = new Date(defaultStartDate)
+  normalizedStartDate.setHours(0, 0, 0, 0)
+
+  // Use provided schedule override if available
+  if (payload?.paymentSchedule && Array.isArray(payload.paymentSchedule) && payload.paymentSchedule.length > 0) {
+    paymentSchedule = payload.paymentSchedule.map(item => ({
+      due_date: item.due_date,
+      amount: item.amount,
+      principal: item.principal,
+      interest: item.interest
+    }))
+  } else {
+    // Calculate schedule normally
+    for (let i = 0; i < numberOfPayments; i++) {
+      const dueDate = calculateDueDate(normalizedStartDate, i, paymentFrequency)
+      paymentSchedule.push({
+        due_date: dueDate.toISOString().split('T')[0],
+        amount: paymentAmount,
+        principal: principalPerPayment,
+        interest: interestPerPayment
+      })
+    }
   }
+  
   const maturityDate =
     paymentSchedule.length > 0
       ? paymentSchedule[paymentSchedule.length - 1].due_date
-      : new Date(startDate).toISOString().split('T')[0]
+      : (() => {
+          return normalizedStartDate.toISOString().split('T')[0]
+        })()
+
+  const effectiveDate = (() => {
+    if (paymentSchedule.length > 0) {
+      const firstDue = toDateOrNull(paymentSchedule[0].due_date)
+      if (firstDue) {
+        const normalized = new Date(firstDue)
+        normalized.setHours(0, 0, 0, 0)
+        return normalized
+      }
+    }
+    return normalizedStartDate
+  })()
 
   // Borrower and address aliases to satisfy current viewer needs
   const borrowerFirst = app.users?.first_name ?? null
@@ -164,7 +197,7 @@ export function buildContractTermsFromApplication(
     payment_schedule: paymentSchedule,
     terms_and_conditions:
       'Standard loan terms and conditions apply. Please review carefully before signing.',
-    effective_date: startDate.toISOString(),
+    effective_date: effectiveDate.toISOString(),
     maturity_date: maturityDate,
     // Borrower details (canonical)
     first_name: borrowerFirst,

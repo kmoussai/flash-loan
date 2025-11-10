@@ -1,5 +1,7 @@
 // Database types for Supabase tables
 
+import { IBVSummary } from "@/src/app/api/inverite/fetch/[guid]/types"
+
 // ===========================
 // ENUMS
 // ===========================
@@ -221,6 +223,7 @@ export interface LoanApplication {
   contract_sent_at: string | null
   contract_signed_at: string | null
   // Modular IBV fields
+  ibv_results: IBVSummary | null,
   ibv_provider: IbvProvider | null
   ibv_status: IbvStatus | null
   ibv_provider_data: IbvProviderData | null
@@ -342,7 +345,8 @@ export interface ContractTerms {
   term_months: number
   principal_amount: number
   total_amount: number
-  payment_frequency?: PaymentFrequency
+  payment_frequency?: PaymentFrequency,
+  payment_amount?: number,
   number_of_payments?: number
   fees: {
     origination_fee?: number
@@ -369,6 +373,17 @@ export interface ContractTerms {
   city?: string | null
   province?: string | null
   postal_code?: string | null
+  // Bank account information
+  bank_account?: ContractBankAccount
+}
+
+export interface ContractBankAccount {
+  bank_name: string
+  account_number: string
+  transit_number: string
+  institution_number: string
+  account_name: string
+  account_holder: string
 }
 
 export interface ClientSignatureData {
@@ -386,10 +401,12 @@ export interface ClientSignatureData {
 
 export interface LoanContract {
   id: string
+  contract_number: number
   loan_application_id: string
   loan_id: string | null
   contract_version: number
   contract_terms: ContractTerms
+  bank_account: ContractBankAccount | null
   contract_document_path: string | null
   contract_status: ContractStatus
   client_signed_at: string | null
@@ -667,8 +684,10 @@ export interface LoanPaymentUpdate {
 export interface LoanContractInsert {
   loan_application_id: string
   loan_id?: string | null
+  contract_number?: number
   contract_version?: number
   contract_terms: ContractTerms
+  bank_account?: ContractBankAccount | null
   contract_document_path?: string | null
   contract_status?: ContractStatus
   client_signed_at?: string | null
@@ -684,8 +703,10 @@ export interface LoanContractInsert {
 
 export interface LoanContractUpdate {
   loan_id?: string | null
+  contract_number?: number
   contract_version?: number
   contract_terms?: ContractTerms
+  bank_account?: ContractBankAccount | null
   contract_document_path?: string | null
   contract_status?: ContractStatus
   client_signed_at?: string | null
