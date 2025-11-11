@@ -1,8 +1,6 @@
 // Helpers to build contract terms from application data
-import type {
-  ContractTerms,
-  PaymentFrequency
-} from '@/src/lib/supabase/types'
+import { GenerateContractPayload } from '@/src/app/types/contract'
+import type { ContractTerms, PaymentFrequency } from '@/src/lib/supabase/types'
 import { getPaymentsPerMonth, assertFrequency } from '@/src/lib/utils/frequency'
 
 type AppUser = {
@@ -29,20 +27,6 @@ export type ApplicationForContract = {
   interest_rate: number | null
   users: AppUser
   addresses?: AppAddress
-}
-
-export type ContractGenerationPayload = {
-  loanAmount?: number
-  paymentFrequency?: PaymentFrequency
-  numberOfPayments?: number
-  termMonths?: number
-  firstPaymentDate?: string | Date
-  paymentSchedule?: Array<{
-    due_date: string
-    amount: number
-    principal: number
-    interest: number
-  }>
 }
 
 const toDateOrNull = (value: unknown): Date | null => {
@@ -73,10 +57,16 @@ const normalizeLoanAmount = (rawValue: unknown, fallback: number): number => {
   return Math.round(parsed * 100) / 100
 }
 
-const calculateNumberOfPayments = (months: number, frequency: PaymentFrequency): number =>
-  Math.max(1, Math.round(months * getPaymentsPerMonth(frequency)))
+const calculateNumberOfPayments = (
+  months: number,
+  frequency: PaymentFrequency
+): number => Math.max(1, Math.round(months * getPaymentsPerMonth(frequency)))
 
-const calculateDueDate = (startDate: Date, index: number, frequency: PaymentFrequency): Date => {
+const calculateDueDate = (
+  startDate: Date,
+  index: number,
+  frequency: PaymentFrequency
+): Date => {
   const dueDate = new Date(startDate)
   switch (frequency) {
     case 'weekly':
@@ -98,13 +88,20 @@ const calculateDueDate = (startDate: Date, index: number, frequency: PaymentFreq
 
 export function buildContractTermsFromApplication(
   app: ApplicationForContract,
-  payload: ContractGenerationPayload
+  payload: GenerateContractPayload
 ): ContractTerms & Record<string, any> {
   // Core inputs
-  const loanAmount = normalizeLoanAmount(payload?.loanAmount, parseFloat(String(app.loan_amount)))
-  const interestRate = Number.isFinite(app.interest_rate ?? NaN) ? (app.interest_rate as number) : 29.0
+  const loanAmount = normalizeLoanAmount(
+    payload?.loanAmount,
+    parseFloat(String(app.loan_amount))
+  )
+  const interestRate = Number.isFinite(app.interest_rate ?? NaN)
+    ? (app.interest_rate as number)
+    : 29.0
   const paymentFrequency = assertFrequency(payload?.paymentFrequency, 'monthly')
-  const providedNumberOfPayments = normalizeNumberOfPayments(payload?.numberOfPayments)
+  const providedNumberOfPayments = normalizeNumberOfPayments(
+    payload?.numberOfPayments
+  )
   const fallbackTermMonths = normalizeTermMonths(payload?.termMonths)
 
   const paymentsPerMonth = getPaymentsPerMonth(paymentFrequency)
@@ -114,7 +111,10 @@ export function buildContractTermsFromApplication(
     : calculateNumberOfPayments(fallbackTermMonths, paymentFrequency)
 
   const durationInMonths = providedNumberOfPayments
-    ? Math.max(providedNumberOfPayments / paymentsPerMonth, 1 / paymentsPerMonth)
+    ? Math.max(
+        providedNumberOfPayments / paymentsPerMonth,
+        1 / paymentsPerMonth
+      )
     : fallbackTermMonths
 
   const termMonths = Math.max(1, Math.ceil(durationInMonths))
@@ -123,8 +123,8 @@ export function buildContractTermsFromApplication(
   // Simple-interest model
   const monthlyInterestPortion = (loanAmount * interestRate) / 100 / 12
   const totalInterest = monthlyInterestPortion * monthsForInterest
-  const totalAmount = loanAmount + totalInterest
-  const paymentAmount = totalAmount / numberOfPayments
+  const totalAmount = payload.paymentAmount * numberOfPayments
+  const paymentAmount = payload.paymentAmount
   const principalPerPayment = loanAmount / numberOfPayments
   const interestPerPayment = totalInterest / numberOfPayments
 
@@ -135,7 +135,11 @@ export function buildContractTermsFromApplication(
   normalizedStartDate.setHours(0, 0, 0, 0)
 
   // Use provided schedule override if available
-  if (payload?.paymentSchedule && Array.isArray(payload.paymentSchedule) && payload.paymentSchedule.length > 0) {
+  if (
+    payload?.paymentSchedule &&
+    Array.isArray(payload.paymentSchedule) &&
+    payload.paymentSchedule.length > 0
+  ) {
     paymentSchedule = payload.paymentSchedule.map(item => ({
       due_date: item.due_date,
       amount: item.amount,
@@ -154,7 +158,7 @@ export function buildContractTermsFromApplication(
       })
     }
   }
-  
+
   const maturityDate =
     paymentSchedule.length > 0
       ? paymentSchedule[paymentSchedule.length - 1].due_date
@@ -177,10 +181,12 @@ export function buildContractTermsFromApplication(
   // Borrower and address aliases to satisfy current viewer needs
   const borrowerFirst = app.users?.first_name ?? null
   const borrowerLast = app.users?.last_name ?? null
-  const borrowerName = [borrowerFirst, borrowerLast].filter(Boolean).join(' ').trim() || null
-  const addressLine1 = [app.addresses?.street_number, app.addresses?.street_name]
-    .filter((v): v is string => Boolean(v && String(v).trim().length > 0))
-    .join(' ') || null
+  const borrowerName =
+    [borrowerFirst, borrowerLast].filter(Boolean).join(' ').trim() || null
+  const addressLine1 =
+    [app.addresses?.street_number, app.addresses?.street_name]
+      .filter((v): v is string => Boolean(v && String(v).trim().length > 0))
+      .join(' ') || null
 
   const terms: ContractTerms & Record<string, any> = {
     interest_rate: interestRate,
@@ -189,6 +195,7 @@ export function buildContractTermsFromApplication(
     total_amount: totalAmount,
     payment_frequency: paymentFrequency,
     number_of_payments: numberOfPayments,
+    payment_amount: paymentAmount,
     fees: {
       origination_fee: 0,
       processing_fee: 0,
@@ -221,5 +228,3 @@ export function buildContractTermsFromApplication(
 
   return terms
 }
-
-

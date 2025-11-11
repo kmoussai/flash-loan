@@ -1,5 +1,11 @@
 'use client'
+import { useEffect } from 'react'
 import { useTranslations } from 'next-intl'
+import {
+  PROVINCE_CODES,
+  getProvinceTranslationKey,
+  provinceNameToCode
+} from '../constants/provinces'
 import AddressAutocomplete, {
   type ParsedAddress
 } from '../../components/AddressAutocomplete'
@@ -8,22 +14,6 @@ import type {
   QuickApplyFormData,
   QuickApplyUpdateHandler
 } from '../types'
-
-const CANADIAN_PROVINCES = [
-  'Alberta',
-  'British Columbia',
-  'Manitoba',
-  'New Brunswick',
-  'Newfoundland and Labrador',
-  'Northwest Territories',
-  'Nova Scotia',
-  'Nunavut',
-  'Ontario',
-  'Prince Edward Island',
-  'Quebec',
-  'Saskatchewan',
-  'Yukon'
-]
 
 interface Step2AddressProps {
   formData: Pick<
@@ -45,6 +35,13 @@ export default function Step2Address({
   onUpdate
 }: Step2AddressProps) {
   const t = useTranslations('')
+  const normalizedProvince = provinceNameToCode(formData.province)
+
+  useEffect(() => {
+    if (formData.province && normalizedProvince && formData.province !== normalizedProvince) {
+      onUpdate('province', normalizedProvince)
+    }
+  }, [formData.province, normalizedProvince, onUpdate])
 
   const hasPlacesAutocomplete = Boolean(
     process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ||
@@ -69,8 +66,9 @@ export default function Step2Address({
     if (address.city) {
       onUpdate('city', address.city)
     }
-    if (address.province) {
-      onUpdate('province', address.province)
+    const resolvedProvince = provinceNameToCode(address.province)
+    if (resolvedProvince) {
+      onUpdate('province', resolvedProvince)
     }
     if (address.postalCode) {
       onUpdate('postalCode', address.postalCode)
@@ -161,12 +159,12 @@ export default function Step2Address({
             {t('Province')} *
           </label>
           <Select
-            value={formData.province}
+            value={normalizedProvince}
             onValueChange={value => onUpdate('province', value)}
             placeholder={t('Select_Province')}
-            options={CANADIAN_PROVINCES.map(province => ({
-              value: province,
-              label: province
+            options={PROVINCE_CODES.map(code => ({
+              value: code,
+              label: t(getProvinceTranslationKey(code) as any)
             }))}
           />
         </div>

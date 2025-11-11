@@ -957,41 +957,12 @@ export default function LoanDetailsPage() {
           open={showContractModal}
           loadingContract={loadingContract}
           applicationId={applicationId}
-          onSubmit={async ({
-            paymentFrequency,
-            numberOfPayments,
-            loanAmount,
-            nextPaymentDate,
-            account
-          }) => {
+          onSubmit={async (payload) => {
             if (!applicationId) return
             setLoadingContract(true)
             try {
-              const termMonths = (() => {
-                switch (paymentFrequency) {
-                  case 'weekly':
-                    return Math.max(1, Math.ceil(numberOfPayments / 4))
-                  case 'bi-weekly':
-                    return Math.max(1, Math.ceil(numberOfPayments / 2))
-                  case 'twice-monthly':
-                    return Math.max(1, Math.ceil(numberOfPayments / 2))
-                  default:
-                    return Math.max(1, numberOfPayments)
-                }
-              })()
-              const payload: GenerateContractPayload = {
-                paymentFrequency,
-                numberOfPayments,
-                loanAmount,
-                nextPaymentDate,
-                account
-              }
-
-              if (account) {
-                payload.account = account
-              }
               const response = await fetch(
-                `/api/admin/applications/${applicationId}/contract/generate`,
+                `/api/admin/applications/${applicationId}/contract/generate?loanId=${loan.id}`,
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },

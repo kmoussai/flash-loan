@@ -1,21 +1,12 @@
 'use client'
 
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadGoogleMapsPlaces } from '@/src/lib/google/maps-loader'
 
 interface AddressComponent {
   long_name: string
   short_name: string
   types: string[]
-}
-
-interface AutocompletePrediction {
-  description: string
-  place_id: string
-  structured_formatting?: {
-    main_text?: string
-    secondary_text?: string
-  }
 }
 
 interface PlaceDetailsResult {
@@ -38,13 +29,10 @@ interface AddressAutocompleteProps {
   placeholder?: string
   initialValue?: string
   className?: string
-  minLength?: number
   countryRestrictions?: string[]
   apiKey?: string
   onError?: (message: string) => void
 }
-
-const DEFAULT_MIN_LENGTH = 3
 
 const DEFAULT_COUNTRY = ['ca']
 
@@ -59,20 +47,13 @@ const resolveApiKey = (providedKey?: string) => {
   return ''
 }
 
-const formatDisplayText = (prediction: AutocompletePrediction) => {
-  const main = prediction.structured_formatting?.main_text || prediction.description
-  const secondary = prediction.structured_formatting?.secondary_text
-
-  if (secondary) {
-    return `${main}, ${secondary}`
+const debugLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[AddressAutocomplete]', ...args)
   }
-
-  return main
 }
 
-const parseAddressComponents = (
-  components: AddressComponent[]
-) => {
+const parseAddressComponents = (components: AddressComponent[]) => {
   const findComponent = (types: string[]) =>
     components.find(component => types.some(type => component.types.includes(type)))
 
@@ -105,31 +86,53 @@ export default function AddressAutocomplete({
   placeholder,
   initialValue,
   className,
-  minLength = DEFAULT_MIN_LENGTH,
   countryRestrictions,
   apiKey,
   onError
 }: AddressAutocompleteProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const autocompleteRef = useRef<any>(null)
+  const countriesRef = useRef<string[]>(DEFAULT_COUNTRY)
+  const onSelectRef = useRef(onSelect)
+  const onErrorRef = useRef(onError)
+
   const [query, setQuery] = useState(initialValue ?? '')
-  const [isFocused, setIsFocused] = useState(false)
-  const [suggestions, setSuggestions] = useState<AutocompletePrediction[]>([])
-  const [activeIndex, setActiveIndex] = useState(-1)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const countries = useMemo(
-    () => countryRestrictions?.length ? countryRestrictions : DEFAULT_COUNTRY,
-    [countryRestrictions]
-  )
+  const countries = useMemo(() => {
+    if (!countryRestrictions?.length) return DEFAULT_COUNTRY
+    return countryRestrictions
+  }, [countryRestrictions])
 
   useEffect(() => {
-    if (!initialValue) return
-    setQuery(initialValue)
-  }, [initialValue])
+    onSelectRef.current = onSelect
+  }, [onSelect])
 
-  const [autocompleteService, setAutocompleteService] = useState<any>(null)
-  const [placesService, setPlacesService] = useState<any>(null)
+  useEffect(() => {
+    onErrorRef.current = onError
+  }, [onError])
+
+  useEffect(() => {
+    countriesRef.current = countries
+
+    if (autocompleteRef.current) {
+      debugLog('Updating component restrictions', { countries })
+      try {
+        autocompleteRef.current.setComponentRestrictions({ country: countries })
+      } catch (error) {
+        debugLog('Failed to update component restrictions', error)
+      }
+    }
+  }, [countries])
+
+  useEffect(() => {
+    if (initialValue === undefined) return
+    setQuery(initialValue)
+    if (inputRef.current) {
+      inputRef.current.value = initialValue
+    }
+  }, [initialValue])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -137,213 +140,130 @@ export default function AddressAutocomplete({
     if (status === 'ready' || status === 'loading') return
 
     const resolvedKey = resolveApiKey(apiKey)
+    debugLog('Initializing', { hasApiKey: Boolean(resolvedKey), countries: countriesRef.current })
 
     if (!resolvedKey) {
       setStatus('error')
-      setErrorMessage('Google Places API key is missing')
-      onError?.('Google Places API key is missing')
+      const message = 'Google Places API key is missing'
+      setErrorMessage(message)
+      onErrorRef.current?.(message)
       return
     }
 
     let cancelled = false
 
     setStatus('loading')
+    debugLog('Loading Google Maps Places library')
 
-    const primaryCountry = countries[0] ?? 'ca'
+    const primaryCountry = countriesRef.current[0] ?? 'ca'
 
     loadGoogleMapsPlaces(resolvedKey, { language: 'en', region: primaryCountry.toUpperCase() })
-      .then(googleInstance => {
+      .then(() => {
         if (cancelled) return
-        const autocomplete = new googleInstance.maps.places.AutocompleteService()
-        const places = new googleInstance.maps.places.PlacesService(document.createElement('div'))
-        setAutocompleteService(autocomplete)
-        setPlacesService(places)
+        debugLog('Google Maps Places library loaded successfully')
         setStatus('ready')
         setErrorMessage(null)
       })
       .catch(error => {
         if (cancelled) return
         console.error('[AddressAutocomplete] Failed to load Google Maps:', error)
+        debugLog('Google Maps Places library failed to load', error)
         setStatus('error')
         const message = 'Unable to load Google Places right now.'
         setErrorMessage(message)
-        onError?.(message)
+        onErrorRef.current?.(message)
       })
 
     return () => {
       cancelled = true
     }
-  }, [apiKey, countries, onError, status])
+  }, [apiKey, status])
 
   useEffect(() => {
-    if (!isFocused || !autocompleteService) {
-      setSuggestions([])
+    if (status !== 'ready') {
+      debugLog('Autocomplete not ready', { status })
       return
     }
 
-    if (query.trim().length < minLength) {
-      setSuggestions([])
+    if (typeof window === 'undefined' || !window.google?.maps?.places) {
+      debugLog('Google Maps Places not available when initializing autocomplete')
       return
     }
 
-    let cancelled = false
-    const debounceHandle = window.setTimeout(() => {
-      autocompleteService.getPlacePredictions(
-        {
-          input: query,
-          types: ['address'],
-          componentRestrictions: { country: countries }
-        },
-        (predictions: AutocompletePrediction[] | null, statusResult: string) => {
-          if (cancelled) return
-          if (statusResult !== 'OK' || !predictions || !Array.isArray(predictions)) {
-            setSuggestions([])
-            return
-          }
+    if (!inputRef.current) {
+      debugLog('Input ref not available when initializing autocomplete')
+      return
+    }
 
-          setSuggestions(predictions)
-          setActiveIndex(-1)
-        }
-      )
-    }, 200)
+    debugLog('Attaching Google Places Autocomplete to input', { countries: countriesRef.current })
+
+    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+      types: ['address'],
+      componentRestrictions: { country: countriesRef.current },
+      fields: ['address_components', 'formatted_address']
+    })
+
+    autocompleteRef.current = autocomplete
+
+    const listener = autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace() as PlaceDetailsResult
+
+      debugLog('Place changed event', {
+        hasAddressComponents: Boolean(place.address_components),
+        formattedAddress: place.formatted_address
+      })
+
+      if (!place.address_components) {
+        const message = 'Unable to retrieve full address details.'
+        setErrorMessage(message)
+        onErrorRef.current?.(message)
+        return
+      }
+
+      const parsed = parseAddressComponents(place.address_components)
+      const formattedValue = place.formatted_address ?? inputRef.current?.value ?? ''
+
+      setQuery(formattedValue)
+      if (inputRef.current) {
+        inputRef.current.value = formattedValue
+      }
+      setErrorMessage(null)
+
+      onSelectRef.current?.({
+        ...parsed,
+        raw: place
+      })
+    })
 
     return () => {
-      cancelled = true
-      window.clearTimeout(debounceHandle)
+      debugLog('Cleaning up autocomplete listener')
+      listener.remove()
+      autocompleteRef.current = null
     }
-  }, [autocompleteService, countries, isFocused, minLength, query])
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!containerRef.current) return
-      if (!containerRef.current.contains(event.target as Node)) {
-        setIsFocused(false)
-        setSuggestions([])
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [])
-
-  const handlePredictionSelect = (prediction: AutocompletePrediction) => {
-    if (!placesService) return
-
-    setQuery(prediction.description)
-    setSuggestions([])
-
-    placesService.getDetails(
-      {
-        placeId: prediction.place_id,
-        fields: ['address_components', 'formatted_address']
-      },
-      (place: PlaceDetailsResult | null, statusResult: string) => {
-        if (statusResult !== 'OK' || !place?.address_components) {
-          const message = 'Unable to retrieve full address details.'
-          setErrorMessage(message)
-          onError?.(message)
-          return
-        }
-
-        const parsed = parseAddressComponents(place.address_components ?? [])
-
-        onSelect({
-          ...parsed,
-          raw: place
-        })
-      }
-    )
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (!suggestions.length) return
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActiveIndex(prev => (prev + 1) % suggestions.length)
-      return
-    }
-
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex(prev => (prev - 1 + suggestions.length) % suggestions.length)
-      return
-    }
-
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      const selection =
-        activeIndex >= 0 ? suggestions[activeIndex] : suggestions[0]
-
-      if (selection) {
-        handlePredictionSelect(selection)
-      }
-      return
-    }
-
-    if (event.key === 'Escape') {
-      setSuggestions([])
-      return
-    }
-  }
+  }, [status])
 
   const inputClasses =
     'focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
 
   return (
-    <div ref={containerRef} className={`relative ${className ?? ''}`}>
+    <div className={`relative ${className ?? ''}`}>
       <input
+        ref={inputRef}
         type='text'
         value={query}
         onChange={event => {
-          setQuery(event.target.value)
+          const value = event.target.value
+          debugLog('Input change', { value })
+          setQuery(value)
           setErrorMessage(null)
         }}
-        onFocus={() => {
-          setIsFocused(true)
-          if (query.trim().length >= minLength && suggestions.length === 0) {
-            setActiveIndex(-1)
-          }
-        }}
-        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className={inputClasses}
-        aria-expanded={suggestions.length > 0}
-        aria-autocomplete='list'
-        aria-controls='address-autocomplete-listbox'
+        autoComplete='off'
       />
 
       {status === 'error' && errorMessage && (
         <p className='mt-2 text-sm text-red-600'>{errorMessage}</p>
-      )}
-
-      {suggestions.length > 0 && (
-        <ul
-          id='address-autocomplete-listbox'
-          role='listbox'
-          className='absolute z-20 mt-2 max-h-64 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg'
-        >
-          {suggestions.map((prediction, index) => (
-            <li
-              key={prediction.place_id}
-              role='option'
-              aria-selected={index === activeIndex}
-              className={`cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-primary/10 ${
-                index === activeIndex ? 'bg-primary/10 text-primary' : ''
-              }`}
-              onMouseDown={event => {
-                event.preventDefault()
-                handlePredictionSelect(prediction)
-              }}
-              onMouseEnter={() => setActiveIndex(index)}
-            >
-              {formatDisplayText(prediction)}
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   )

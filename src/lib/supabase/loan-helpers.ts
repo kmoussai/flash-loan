@@ -18,7 +18,8 @@ import type {
   RequestFormSubmission,
   RequestFormSubmissionInsert,
   RequestFormSubmissionUpdate,
-  Loan
+  Loan,
+  LoanUpdate
 } from './types'
 import { createClient } from './client'
 
@@ -288,7 +289,24 @@ export async function getLoanApplicationById(
 
   return { success: true, data: data as LoanApplication, error: null }
 }
+export async function getLoanById(loanId: string, isServer = false) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
 
+  const { data, error } = await supabase
+    .from('loans')
+    .select('*')
+    .eq('id', loanId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error fetching loan by ID:', error)
+    return { success: false, error: error.message, data: null }
+  }
+
+  return { success: true, data: data as Loan, error: null }
+}
 export async function getLoanByApplicationId(
   applicationId: string,
   isServer = false
@@ -368,6 +386,51 @@ export async function getLoanApplicationWithDetails(
 
   return data
 }
+/**
+ * Update loan details
+ */
+type UpdateLoanOptions =
+  | boolean
+  | {
+      isServer?: boolean
+      useAdminClient?: boolean
+    }
+
+export async function updateLoan(
+  loanId: string,
+  updates: LoanUpdate,
+  options: UpdateLoanOptions = false
+) {
+  const normalizedOptions =
+    typeof options === 'boolean' ? { isServer: options } : options
+
+  const { isServer = false, useAdminClient = false } = normalizedOptions
+
+  const supabase: any = useAdminClient
+    ? await (await import('./server')).createServerSupabaseAdminClient()
+    : isServer
+      ? await (await import('./server')).createServerSupabaseClient()
+      : createClient()
+
+  const { data, error } = await supabase
+    .from('loans')
+    .update(updates)
+    .eq('id', loanId)
+    .select()
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error updating loan:', error)
+    return { success: false, error: error.message }
+  }
+
+  if (!data) {
+    return { success: false, error: 'Loan not found' }
+  }
+
+  return { success: true, data: data as Loan }
+}
+
 // TODO: Update loan ampunt when generating contract
 export async function updateLoanAmount(
   id: string,

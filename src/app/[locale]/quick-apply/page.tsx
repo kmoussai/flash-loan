@@ -21,6 +21,7 @@ import type {
   QuickApplyFormData,
   QuickApplyUpdateHandler
 } from './types'
+import { PROVINCE_CODES, provinceNameToCode } from './constants/provinces'
 
 export default function MicroLoanApplicationPage() {
   const t = useTranslations('')
@@ -52,7 +53,12 @@ export default function MicroLoanApplicationPage() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved)
-          return { ...defaults, ...parsed }
+          const normalizedProvince = provinceNameToCode(parsed?.province)
+          return {
+            ...defaults,
+            ...parsed,
+            province: normalizedProvince
+          }
         } catch {
           return defaults
         }
@@ -214,16 +220,7 @@ const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<str
       'Fortin',
       'Gagne'
     ]
-    const provinces = [
-      'Quebec',
-      'Ontario',
-      'British Columbia',
-      'Alberta',
-      'Manitoba',
-      'Nova Scotia',
-      'New Brunswick',
-      'Saskatchewan'
-    ]
+    const provinces = PROVINCE_CODES
     const streetNames = [
       'Maple',
       'Elm',

@@ -84,6 +84,7 @@ export {
   getClientLoanApplications,
   getLoanApplication,
   getLoanApplicationWithDetails,
+  updateLoan,
   updateLoanApplication,
   updateApplicationStatus,
   getAllLoanApplications,

@@ -240,10 +240,11 @@ export async function GET(
       loanApplicationData?.ibv_results?.accounts?.[0]?.income?.[0]?.frequency ??
       'monthly'
     const numberOfPayments =
-      contractData?.contract_terms.number_of_payments ?? 0
+      contractData?.contract_terms.number_of_payments ?? 6
     const loanAmount =
       contractData?.contract_terms?.principal_amount ??
-      loanData?.principal_amount
+      loanData?.principal_amount ??
+      0
 
     const defaultsresponse: ContractDefaultsResponse = {
       success: true,
@@ -257,7 +258,17 @@ export async function GET(
           contractData?.contract_terms,
           loanApplicationData?.ibv_results
         ),
-        paymentAmount: contractData?.contract_terms?.payment_amount ?? calculatePaymentAmount(paymentFrequency, loanAmount ?? 0, 29, numberOfPayments) ?? 0
+        paymentAmount:
+          contractData?.contract_terms?.payment_amount ??
+          (loanAmount * 1.76) / (numberOfPayments ?? 6) 
+
+          // calculatePaymentAmount(
+          //   paymentFrequency,
+          //   loanAmount ?? 0,
+          //   29,
+          //   numberOfPayments
+          // ) ??
+          // 0
       }
     }
 
@@ -294,7 +305,7 @@ function calculatePaymentAmount(
   }
 
   const paymentsPerYear = paymentsPerYearMap[payment_frequency]
-  const periodicRate = (interest_rate / 100) / paymentsPerYear
+  const periodicRate = interest_rate / 100 / paymentsPerYear
 
   // amortized payment formula
   const payment =
