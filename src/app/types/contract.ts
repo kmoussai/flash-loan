@@ -21,6 +21,13 @@ interface ContractDefaultsResponse {
   }
 }
 
+interface  PayementScheduleItem {
+  due_date: string
+  amount: number
+  principal?: number
+  interest?: number
+}
+
 interface GenerateContractPayload {
   paymentFrequency: PaymentFrequency
   numberOfPayments: number
@@ -31,12 +38,7 @@ interface GenerateContractPayload {
   paymentAmount: number,
   interestRate?: number,
   termMonths?: number,
-  paymentSchedule?: Array<{
-    due_date: string
-    amount: number
-    principal: number
-    interest: number
-  }>
+  paymentSchedule?: Array<PayementScheduleItem>
 }
 
-export type { ContractDefaultsResponse, BankAccount, GenerateContractPayload }
+export type { ContractDefaultsResponse, BankAccount, GenerateContractPayload, PayementScheduleItem}

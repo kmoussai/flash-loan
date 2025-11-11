@@ -15,6 +15,8 @@ import {
 import { buildContractTermsFromApplication } from '@/src/lib/contracts/terms'
 import {
   getLoanByApplicationId,
+  getLoanById,
+  updateLoan,
   updateLoanAmount
 } from '@/src/lib/supabase/loan-helpers'
 import { GenerateContractPayload } from '@/src/app/types/contract'
@@ -26,8 +28,9 @@ export async function POST(
 ) {
   try {
     const applicationId = params.id
+    const loanId = request.nextUrl.searchParams.get('loanId')
 
-    if (!applicationId) {
+    if (!applicationId || !loanId) {
       return NextResponse.json(
         { error: 'Application ID is required' },
         { status: 400 }
@@ -40,7 +43,7 @@ export async function POST(
       paymentFrequency: 'monthly',
       numberOfPayments: 6,
       loanAmount: 0,
-      paymentAmount: 0,
+      paymentAmount: 0
     }
     try {
       payload = await request.json()
@@ -92,8 +95,7 @@ export async function POST(
       )
     }
 
-    const { data: loanData, error } =
-      await getLoanByApplicationId(applicationId)
+    const { data: loanData, error } = await getLoanById(loanId as string, true)
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
@@ -196,15 +198,15 @@ export async function POST(
         nextPaymentDate: payload?.nextPaymentDate,
         firstPaymentDate: payload?.firstPaymentDate,
         paymentAmount: payload.paymentAmount,
-        paymentSchedule: buildPaymentSchedule(
-        {
+        paymentSchedule: payload?.paymentSchedule ?? buildPaymentSchedule({
           payment_frequency: payload?.paymentFrequency,
           loan_amount: resolvedLoanAmount,
           interest_rate: resolvedInterestRate,
           num_payments: payload?.numberOfPayments as number,
-          start_date: payload?.firstPaymentDate ? payload?.firstPaymentDate.toISOString() : undefined
-        }
-        )
+          start_date: payload?.firstPaymentDate
+            ? payload?.firstPaymentDate.toISOString()
+            : undefined
+        })
       }
     )
 
@@ -214,6 +216,7 @@ export async function POST(
       const contractResult = await createLoanContract(
         {
           loan_application_id: applicationId,
+          loan_id: loanId,
           contract_version: 1,
           contract_terms: contractTerms,
           contract_status: 'generated',
@@ -238,12 +241,19 @@ export async function POST(
           contract_generated_at: new Date().toISOString()
         })
         .eq('id', applicationId)
-
+      await updateLoan(
+        loanId as string,
+        {
+          principal_amount: resolvedLoanAmount,
+          remaining_balance: resolvedLoanAmount
+        },
+        { useAdminClient: true }
+      )
       return NextResponse.json({
         success: true,
         contract: contractResult.data
       })
-    } else if(canRegenerate) {
+    } else if (canRegenerate) {
       // Regenerate (update existing, bump version)
       const nextVersion = (existing.contract_version ?? 1) + 1
       const { updateLoanContract } = await import(
@@ -252,7 +262,9 @@ export async function POST(
       const updateResult = await updateLoanContract(
         existing.id,
         {
+          loan_id: loanId,
           contract_terms: contractTerms,
+          bank_account: payload?.account,
           contract_version: nextVersion,
           contract_status: 'generated',
           expires_at: new Date(
@@ -267,12 +279,21 @@ export async function POST(
           { status: 500 }
         )
       }
+
+      await updateLoan(
+        loanId as string,
+        {
+          principal_amount: resolvedLoanAmount,
+          remaining_balance: resolvedLoanAmount,
+          
+        },
+        { useAdminClient: true }
+      )
       return NextResponse.json({
         success: true,
         contract: updateResult.data
       })
-    }
-    else {
+    } else if (canRegenerate) {
       return NextResponse.json(
         { error: 'Contract already signed; regeneration is not allowed' },
         { status: 400 }

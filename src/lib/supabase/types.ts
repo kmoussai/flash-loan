@@ -1,6 +1,7 @@
 // Database types for Supabase tables
 
 import { IBVSummary } from "@/src/app/api/inverite/fetch/[guid]/types"
+import { BankAccount } from "@/src/app/types/contract"
 
 // ===========================
 // ENUMS
@@ -356,8 +357,8 @@ export interface ContractTerms {
   payment_schedule?: Array<{
     due_date: string
     amount: number
-    principal: number
-    interest: number
+    principal?: number
+    interest?: number
   }>
   terms_and_conditions?: string
   effective_date?: string
@@ -374,17 +375,9 @@ export interface ContractTerms {
   province?: string | null
   postal_code?: string | null
   // Bank account information
-  bank_account?: ContractBankAccount
+  bank_account?: BankAccount
 }
 
-export interface ContractBankAccount {
-  bank_name: string
-  account_number: string
-  transit_number: string
-  institution_number: string
-  account_name: string
-  account_holder: string
-}
 
 export interface ClientSignatureData {
   signature_method: 'click_to_sign' | 'drawn_signature' | 'uploaded'
@@ -406,7 +399,7 @@ export interface LoanContract {
   loan_id: string | null
   contract_version: number
   contract_terms: ContractTerms
-  bank_account: ContractBankAccount | null
+  bank_account: BankAccount | null
   contract_document_path: string | null
   contract_status: ContractStatus
   client_signed_at: string | null
@@ -420,6 +413,7 @@ export interface LoanContract {
   created_at: string
   updated_at: string
   notes: string | null
+  loan: Loan    
 }
 
 // ===========================
@@ -687,7 +681,7 @@ export interface LoanContractInsert {
   contract_number?: number
   contract_version?: number
   contract_terms: ContractTerms
-  bank_account?: ContractBankAccount | null
+  bank_account?: BankAccount | null
   contract_document_path?: string | null
   contract_status?: ContractStatus
   client_signed_at?: string | null
@@ -706,7 +700,7 @@ export interface LoanContractUpdate {
   contract_number?: number
   contract_version?: number
   contract_terms?: ContractTerms
-  bank_account?: ContractBankAccount | null
+  bank_account?: BankAccount | null
   contract_document_path?: string | null
   contract_status?: ContractStatus
   client_signed_at?: string | null

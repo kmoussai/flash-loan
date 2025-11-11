@@ -141,7 +141,7 @@ export default function ContractViewer({
 
     // Contract meta
     const loanNumber =
-      contractData.loan_id ??
+      contractData.loan.loan_number ??
       contractData.loan_application_id ??
       contractData.id
     const signatureDateClient = formatDate(contractData.client_signed_at)
@@ -422,8 +422,8 @@ export default function ContractViewer({
       <p>City: ${withFallback(bankingCity)}</p>
       <p>Province: ${withFallback(bankingProvince)}</p>
       <p>Postal code: ${withFallback(bankingPostal)}</p>
-      <p>Banking number: ${contractData.bank_account?.institution_number}</p>
-      <p>Bransit number: ${contractData.bank_account?.transit_number}</p>
+      <p>Bank number: ${contractData.bank_account?.institution_number}</p>
+      <p>Transit number: ${contractData.bank_account?.transit_number}</p>
       <p>account number: ${contractData.bank_account?.account_number}</p>
 
       <p class="emphasis">Details of the Preauthorize</p>

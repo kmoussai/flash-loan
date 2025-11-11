@@ -12,7 +12,6 @@ interface AddressComponent {
 interface PlaceDetailsResult {
   address_components?: AddressComponent[]
   formatted_address?: string
-  place_id?: string
 }
 
 export interface ParsedAddress {
@@ -91,21 +90,20 @@ export default function AddressAutocomplete({
   apiKey,
   onError
 }: AddressAutocompleteProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const autocompleteRef = useRef<any>(null)
-  const placesServiceRef = useRef<any>(null)
-  const placeListenerRef = useRef<any>(null)
+  const countriesRef = useRef<string[]>(DEFAULT_COUNTRY)
   const onSelectRef = useRef(onSelect)
   const onErrorRef = useRef(onError)
+
   const [query, setQuery] = useState(initialValue ?? '')
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const countries = useMemo(
-    () => (countryRestrictions?.length ? countryRestrictions : DEFAULT_COUNTRY),
-    [countryRestrictions]
-  )
+  const countries = useMemo(() => {
+    if (!countryRestrictions?.length) return DEFAULT_COUNTRY
+    return countryRestrictions
+  }, [countryRestrictions])
 
   useEffect(() => {
     onSelectRef.current = onSelect
@@ -116,16 +114,33 @@ export default function AddressAutocomplete({
   }, [onError])
 
   useEffect(() => {
-    if (!initialValue) return
+    countriesRef.current = countries
+
+    if (autocompleteRef.current) {
+      debugLog('Updating component restrictions', { countries })
+      try {
+        autocompleteRef.current.setComponentRestrictions({ country: countries })
+      } catch (error) {
+        debugLog('Failed to update component restrictions', error)
+      }
+    }
+  }, [countries])
+
+  useEffect(() => {
+    if (initialValue === undefined) return
     setQuery(initialValue)
+    if (inputRef.current) {
+      inputRef.current.value = initialValue
+    }
   }, [initialValue])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+
     if (status === 'ready' || status === 'loading') return
 
     const resolvedKey = resolveApiKey(apiKey)
-    debugLog('Initializing', { hasApiKey: Boolean(resolvedKey), countries })
+    debugLog('Initializing', { hasApiKey: Boolean(resolvedKey), countries: countriesRef.current })
 
     if (!resolvedKey) {
       setStatus('error')
@@ -136,16 +151,16 @@ export default function AddressAutocomplete({
     }
 
     let cancelled = false
+
     setStatus('loading')
     debugLog('Loading Google Maps Places library')
 
-    const primaryCountry = countries[0] ?? 'ca'
+    const primaryCountry = countriesRef.current[0] ?? 'ca'
 
     loadGoogleMapsPlaces(resolvedKey, { language: 'en', region: primaryCountry.toUpperCase() })
-      .then(googleInstance => {
+      .then(() => {
         if (cancelled) return
         debugLog('Google Maps Places library loaded successfully')
-        placesServiceRef.current = new googleInstance.maps.places.PlacesService(document.createElement('div'))
         setStatus('ready')
         setErrorMessage(null)
       })
@@ -162,124 +177,85 @@ export default function AddressAutocomplete({
     return () => {
       cancelled = true
     }
-  }, [apiKey, countries, status])
+  }, [apiKey, status])
 
   useEffect(() => {
-    if (status !== 'ready') return
-    if (!inputRef.current) return
-
-    const googleInstance = window.google
-    if (!googleInstance?.maps?.places) return
-
-    const restrictions = countries.length ? { country: countries } : undefined
-
-    if (!autocompleteRef.current) {
-      const autocomplete = new googleInstance.maps.places.Autocomplete(inputRef.current, {
-        types: ['address'],
-        fields: ['address_components', 'formatted_address', 'place_id'],
-        componentRestrictions: restrictions
-      })
-
-      autocompleteRef.current = autocomplete
-
-      placeListenerRef.current = autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace() as PlaceDetailsResult
-        debugLog('Autocomplete place changed', {
-          hasAddressComponents: Boolean(place?.address_components?.length),
-          placeId: place?.place_id
-        })
-
-        if (place?.formatted_address) {
-          setQuery(place.formatted_address)
-        }
-
-        if (place?.address_components?.length) {
-          const parsed = parseAddressComponents(place.address_components)
-          debugLog('Parsed address details', parsed)
-          setErrorMessage(null)
-          onSelectRef.current?.({
-            ...parsed,
-            raw: place
-          })
-          return
-        }
-
-        const placeId = place?.place_id
-        const service = placesServiceRef.current
-
-        if (!placeId || !service) {
-          const message = 'Unable to retrieve full address details.'
-          setErrorMessage(message)
-          onErrorRef.current?.(message)
-          debugLog('No place_id or places service available for fallback')
-          return
-        }
-
-        service.getDetails(
-          {
-            placeId,
-            fields: ['address_components', 'formatted_address']
-          },
-          (details: PlaceDetailsResult | null, statusResult: string) => {
-            if (statusResult !== 'OK' || !details?.address_components) {
-              const message = 'Unable to retrieve full address details.'
-              setErrorMessage(message)
-              onErrorRef.current?.(message)
-              debugLog('Failed to fetch place details', { statusResult })
-              return
-            }
-
-            const parsed = parseAddressComponents(details.address_components ?? [])
-            debugLog('Parsed address details from fallback lookup', parsed)
-            setErrorMessage(null)
-            onSelectRef.current?.({
-              ...parsed,
-              raw: details
-            })
-          }
-        )
-      })
-    } else if (restrictions) {
-      autocompleteRef.current.setComponentRestrictions(restrictions)
+    if (status !== 'ready') {
+      debugLog('Autocomplete not ready', { status })
+      return
     }
 
+    if (typeof window === 'undefined' || !window.google?.maps?.places) {
+      debugLog('Google Maps Places not available when initializing autocomplete')
+      return
+    }
+
+    if (!inputRef.current) {
+      debugLog('Input ref not available when initializing autocomplete')
+      return
+    }
+
+    debugLog('Attaching Google Places Autocomplete to input', { countries: countriesRef.current })
+
+    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+      types: ['address'],
+      componentRestrictions: { country: countriesRef.current },
+      fields: ['address_components', 'formatted_address']
+    })
+
+    autocompleteRef.current = autocomplete
+
+    const listener = autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace() as PlaceDetailsResult
+
+      debugLog('Place changed event', {
+        hasAddressComponents: Boolean(place.address_components),
+        formattedAddress: place.formatted_address
+      })
+
+      if (!place.address_components) {
+        const message = 'Unable to retrieve full address details.'
+        setErrorMessage(message)
+        onErrorRef.current?.(message)
+        return
+      }
+
+      const parsed = parseAddressComponents(place.address_components)
+      const formattedValue = place.formatted_address ?? inputRef.current?.value ?? ''
+
+      setQuery(formattedValue)
+      if (inputRef.current) {
+        inputRef.current.value = formattedValue
+      }
+      setErrorMessage(null)
+
+      onSelectRef.current?.({
+        ...parsed,
+        raw: place
+      })
+    })
+
     return () => {
-      placeListenerRef.current?.remove()
-      placeListenerRef.current = null
+      debugLog('Cleaning up autocomplete listener')
+      listener.remove()
       autocompleteRef.current = null
     }
-  }, [countries, status])
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!containerRef.current) return
-      if (!containerRef.current.contains(event.target as Node)) {
-        setErrorMessage(null)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [])
+  }, [status])
 
   const inputClasses =
     'focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
 
   return (
-    <div ref={containerRef} className={`relative ${className ?? ''}`}>
+    <div className={`relative ${className ?? ''}`}>
       <input
         ref={inputRef}
         type='text'
         value={query}
         onChange={event => {
-          setQuery(event.target.value)
+          const value = event.target.value
+          debugLog('Input change', { value })
+          setQuery(value)
           setErrorMessage(null)
-        }}
-        onFocus={() => {
-          debugLog('Input focused')
         }}
         placeholder={placeholder}
         className={inputClasses}
