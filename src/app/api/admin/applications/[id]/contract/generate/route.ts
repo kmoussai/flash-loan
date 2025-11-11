@@ -36,7 +36,12 @@ export async function POST(
 
     const supabase = await createServerSupabaseAdminClient()
 
-    let payload: Partial<GenerateContractPayload> = {}
+    let payload: GenerateContractPayload = {
+      paymentFrequency: 'monthly',
+      numberOfPayments: 6,
+      loanAmount: 0,
+      paymentAmount: 0,
+    }
     try {
       payload = await request.json()
     } catch (error) {
@@ -46,7 +51,6 @@ export async function POST(
           error
         )
       }
-      payload = {}
     }
 
     // Fetch application details
@@ -186,10 +190,12 @@ export async function POST(
       },
       {
         loanAmount: resolvedLoanAmount,
-        paymentFrequency: payload?.paymentFrequency,
-        numberOfPayments: payload?.numberOfPayments,
+        paymentFrequency: payload?.paymentFrequency as PaymentFrequency,
+        numberOfPayments: payload?.numberOfPayments as number,
         termMonths: resolvedTermMonths,
+        nextPaymentDate: payload?.nextPaymentDate,
         firstPaymentDate: payload?.firstPaymentDate,
+        paymentAmount: payload.paymentAmount,
         paymentSchedule: buildPaymentSchedule(
         {
           payment_frequency: payload?.paymentFrequency,

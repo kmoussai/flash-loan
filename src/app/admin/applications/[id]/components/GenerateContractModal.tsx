@@ -89,6 +89,7 @@ export const GenerateContractModal = ({
       nextPaymentDate,
       account: accounts.find(acc => acc.account_number === selectedAccountId),
       interestRate: Number(interestRate),
+      paymentAmount: Number(paymentAmount),
     }
 
     // Simulate async

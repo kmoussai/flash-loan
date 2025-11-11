@@ -1,6 +1,6 @@
 'use client'
 
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadGoogleMapsPlaces } from '@/src/lib/google/maps-loader'
 
 interface AddressComponent {
@@ -9,18 +9,10 @@ interface AddressComponent {
   types: string[]
 }
 
-interface AutocompletePrediction {
-  description: string
-  place_id: string
-  structured_formatting?: {
-    main_text?: string
-    secondary_text?: string
-  }
-}
-
 interface PlaceDetailsResult {
   address_components?: AddressComponent[]
   formatted_address?: string
+  place_id?: string
 }
 
 export interface ParsedAddress {
@@ -38,13 +30,10 @@ interface AddressAutocompleteProps {
   placeholder?: string
   initialValue?: string
   className?: string
-  minLength?: number
   countryRestrictions?: string[]
   apiKey?: string
   onError?: (message: string) => void
 }
-
-const DEFAULT_MIN_LENGTH = 3
 
 const DEFAULT_COUNTRY = ['ca']
 
@@ -59,20 +48,13 @@ const resolveApiKey = (providedKey?: string) => {
   return ''
 }
 
-const formatDisplayText = (prediction: AutocompletePrediction) => {
-  const main = prediction.structured_formatting?.main_text || prediction.description
-  const secondary = prediction.structured_formatting?.secondary_text
-
-  if (secondary) {
-    return `${main}, ${secondary}`
+const debugLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[AddressAutocomplete]', ...args)
   }
-
-  return main
 }
 
-const parseAddressComponents = (
-  components: AddressComponent[]
-) => {
+const parseAddressComponents = (components: AddressComponent[]) => {
   const findComponent = (types: string[]) =>
     components.find(component => types.some(type => component.types.includes(type)))
 
@@ -105,120 +87,174 @@ export default function AddressAutocomplete({
   placeholder,
   initialValue,
   className,
-  minLength = DEFAULT_MIN_LENGTH,
   countryRestrictions,
   apiKey,
   onError
 }: AddressAutocompleteProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const autocompleteRef = useRef<any>(null)
+  const placesServiceRef = useRef<any>(null)
+  const placeListenerRef = useRef<any>(null)
+  const onSelectRef = useRef(onSelect)
+  const onErrorRef = useRef(onError)
   const [query, setQuery] = useState(initialValue ?? '')
-  const [isFocused, setIsFocused] = useState(false)
-  const [suggestions, setSuggestions] = useState<AutocompletePrediction[]>([])
-  const [activeIndex, setActiveIndex] = useState(-1)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const countries = useMemo(
-    () => countryRestrictions?.length ? countryRestrictions : DEFAULT_COUNTRY,
+    () => (countryRestrictions?.length ? countryRestrictions : DEFAULT_COUNTRY),
     [countryRestrictions]
   )
+
+  useEffect(() => {
+    onSelectRef.current = onSelect
+  }, [onSelect])
+
+  useEffect(() => {
+    onErrorRef.current = onError
+  }, [onError])
 
   useEffect(() => {
     if (!initialValue) return
     setQuery(initialValue)
   }, [initialValue])
 
-  const [autocompleteService, setAutocompleteService] = useState<any>(null)
-  const [placesService, setPlacesService] = useState<any>(null)
-
   useEffect(() => {
     if (typeof window === 'undefined') return
-
     if (status === 'ready' || status === 'loading') return
 
     const resolvedKey = resolveApiKey(apiKey)
+    debugLog('Initializing', { hasApiKey: Boolean(resolvedKey), countries })
 
     if (!resolvedKey) {
       setStatus('error')
-      setErrorMessage('Google Places API key is missing')
-      onError?.('Google Places API key is missing')
+      const message = 'Google Places API key is missing'
+      setErrorMessage(message)
+      onErrorRef.current?.(message)
       return
     }
 
     let cancelled = false
-
     setStatus('loading')
+    debugLog('Loading Google Maps Places library')
 
     const primaryCountry = countries[0] ?? 'ca'
 
     loadGoogleMapsPlaces(resolvedKey, { language: 'en', region: primaryCountry.toUpperCase() })
       .then(googleInstance => {
         if (cancelled) return
-        const autocomplete = new googleInstance.maps.places.AutocompleteService()
-        const places = new googleInstance.maps.places.PlacesService(document.createElement('div'))
-        setAutocompleteService(autocomplete)
-        setPlacesService(places)
+        debugLog('Google Maps Places library loaded successfully')
+        placesServiceRef.current = new googleInstance.maps.places.PlacesService(document.createElement('div'))
         setStatus('ready')
         setErrorMessage(null)
       })
       .catch(error => {
         if (cancelled) return
         console.error('[AddressAutocomplete] Failed to load Google Maps:', error)
+        debugLog('Google Maps Places library failed to load', error)
         setStatus('error')
         const message = 'Unable to load Google Places right now.'
         setErrorMessage(message)
-        onError?.(message)
+        onErrorRef.current?.(message)
       })
 
     return () => {
       cancelled = true
     }
-  }, [apiKey, countries, onError, status])
+  }, [apiKey, countries, status])
 
   useEffect(() => {
-    if (!isFocused || !autocompleteService) {
-      setSuggestions([])
-      return
-    }
+    if (status !== 'ready') return
+    if (!inputRef.current) return
 
-    if (query.trim().length < minLength) {
-      setSuggestions([])
-      return
-    }
+    const googleInstance = window.google
+    if (!googleInstance?.maps?.places) return
 
-    let cancelled = false
-    const debounceHandle = window.setTimeout(() => {
-      autocompleteService.getPlacePredictions(
-        {
-          input: query,
-          types: ['address'],
-          componentRestrictions: { country: countries }
-        },
-        (predictions: AutocompletePrediction[] | null, statusResult: string) => {
-          if (cancelled) return
-          if (statusResult !== 'OK' || !predictions || !Array.isArray(predictions)) {
-            setSuggestions([])
-            return
-          }
+    const restrictions = countries.length ? { country: countries } : undefined
 
-          setSuggestions(predictions)
-          setActiveIndex(-1)
+    if (!autocompleteRef.current) {
+      const autocomplete = new googleInstance.maps.places.Autocomplete(inputRef.current, {
+        types: ['address'],
+        fields: ['address_components', 'formatted_address', 'place_id'],
+        componentRestrictions: restrictions
+      })
+
+      autocompleteRef.current = autocomplete
+
+      placeListenerRef.current = autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace() as PlaceDetailsResult
+        debugLog('Autocomplete place changed', {
+          hasAddressComponents: Boolean(place?.address_components?.length),
+          placeId: place?.place_id
+        })
+
+        if (place?.formatted_address) {
+          setQuery(place.formatted_address)
         }
-      )
-    }, 200)
+
+        if (place?.address_components?.length) {
+          const parsed = parseAddressComponents(place.address_components)
+          debugLog('Parsed address details', parsed)
+          setErrorMessage(null)
+          onSelectRef.current?.({
+            ...parsed,
+            raw: place
+          })
+          return
+        }
+
+        const placeId = place?.place_id
+        const service = placesServiceRef.current
+
+        if (!placeId || !service) {
+          const message = 'Unable to retrieve full address details.'
+          setErrorMessage(message)
+          onErrorRef.current?.(message)
+          debugLog('No place_id or places service available for fallback')
+          return
+        }
+
+        service.getDetails(
+          {
+            placeId,
+            fields: ['address_components', 'formatted_address']
+          },
+          (details: PlaceDetailsResult | null, statusResult: string) => {
+            if (statusResult !== 'OK' || !details?.address_components) {
+              const message = 'Unable to retrieve full address details.'
+              setErrorMessage(message)
+              onErrorRef.current?.(message)
+              debugLog('Failed to fetch place details', { statusResult })
+              return
+            }
+
+            const parsed = parseAddressComponents(details.address_components ?? [])
+            debugLog('Parsed address details from fallback lookup', parsed)
+            setErrorMessage(null)
+            onSelectRef.current?.({
+              ...parsed,
+              raw: details
+            })
+          }
+        )
+      })
+    } else if (restrictions) {
+      autocompleteRef.current.setComponentRestrictions(restrictions)
+    }
 
     return () => {
-      cancelled = true
-      window.clearTimeout(debounceHandle)
+      placeListenerRef.current?.remove()
+      placeListenerRef.current = null
+      autocompleteRef.current = null
     }
-  }, [autocompleteService, countries, isFocused, minLength, query])
+  }, [countries, status])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!containerRef.current) return
       if (!containerRef.current.contains(event.target as Node)) {
-        setIsFocused(false)
-        setSuggestions([])
+        setErrorMessage(null)
       }
     }
 
@@ -229,73 +265,13 @@ export default function AddressAutocomplete({
     }
   }, [])
 
-  const handlePredictionSelect = (prediction: AutocompletePrediction) => {
-    if (!placesService) return
-
-    setQuery(prediction.description)
-    setSuggestions([])
-
-    placesService.getDetails(
-      {
-        placeId: prediction.place_id,
-        fields: ['address_components', 'formatted_address']
-      },
-      (place: PlaceDetailsResult | null, statusResult: string) => {
-        if (statusResult !== 'OK' || !place?.address_components) {
-          const message = 'Unable to retrieve full address details.'
-          setErrorMessage(message)
-          onError?.(message)
-          return
-        }
-
-        const parsed = parseAddressComponents(place.address_components ?? [])
-
-        onSelect({
-          ...parsed,
-          raw: place
-        })
-      }
-    )
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (!suggestions.length) return
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActiveIndex(prev => (prev + 1) % suggestions.length)
-      return
-    }
-
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex(prev => (prev - 1 + suggestions.length) % suggestions.length)
-      return
-    }
-
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      const selection =
-        activeIndex >= 0 ? suggestions[activeIndex] : suggestions[0]
-
-      if (selection) {
-        handlePredictionSelect(selection)
-      }
-      return
-    }
-
-    if (event.key === 'Escape') {
-      setSuggestions([])
-      return
-    }
-  }
-
   const inputClasses =
     'focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
 
   return (
     <div ref={containerRef} className={`relative ${className ?? ''}`}>
       <input
+        ref={inputRef}
         type='text'
         value={query}
         onChange={event => {
@@ -303,47 +279,15 @@ export default function AddressAutocomplete({
           setErrorMessage(null)
         }}
         onFocus={() => {
-          setIsFocused(true)
-          if (query.trim().length >= minLength && suggestions.length === 0) {
-            setActiveIndex(-1)
-          }
+          debugLog('Input focused')
         }}
-        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className={inputClasses}
-        aria-expanded={suggestions.length > 0}
-        aria-autocomplete='list'
-        aria-controls='address-autocomplete-listbox'
+        autoComplete='off'
       />
 
       {status === 'error' && errorMessage && (
         <p className='mt-2 text-sm text-red-600'>{errorMessage}</p>
-      )}
-
-      {suggestions.length > 0 && (
-        <ul
-          id='address-autocomplete-listbox'
-          role='listbox'
-          className='absolute z-20 mt-2 max-h-64 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg'
-        >
-          {suggestions.map((prediction, index) => (
-            <li
-              key={prediction.place_id}
-              role='option'
-              aria-selected={index === activeIndex}
-              className={`cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-primary/10 ${
-                index === activeIndex ? 'bg-primary/10 text-primary' : ''
-              }`}
-              onMouseDown={event => {
-                event.preventDefault()
-                handlePredictionSelect(prediction)
-              }}
-              onMouseEnter={() => setActiveIndex(index)}
-            >
-              {formatDisplayText(prediction)}
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   )

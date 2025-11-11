@@ -128,9 +128,7 @@ export default function ContractViewer({
         : principalAmount
     const interestRate =
       typeof terms.interest_rate === 'number' ? terms.interest_rate : 0
-    const paymentAmount =
-      schedule[0]?.amount ??
-      (numberOfPayments ? totalAmount / numberOfPayments : 0)
+    const paymentAmount = contractData.contract_terms.payment_amount
     const firstPaymentDue =
       schedule[0]?.due_date ?? terms.effective_date ?? null
     const lastPaymentDue =

@@ -26,6 +26,8 @@ const buildScriptSrc = (apiKey: string, { language, region }: LoadOptions) => {
   if (region) {
     params.set('region', region)
   }
+  params.set('loading', 'async')
+    // "https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&loading=async&libraries=places&callback=initMap"
 
   return `https://maps.googleapis.com/maps/api/js?${params.toString()}`
 }

@@ -25,11 +25,18 @@ interface GenerateContractPayload {
   paymentFrequency: PaymentFrequency
   numberOfPayments: number
   loanAmount: number
-  nextPaymentDate: string
+  nextPaymentDate?: string
   account?: BankAccount,
   firstPaymentDate?: Date,
+  paymentAmount: number,
   interestRate?: number,
   termMonths?: number,
+  paymentSchedule?: Array<{
+    due_date: string
+    amount: number
+    principal: number
+    interest: number
+  }>
 }
 
 export type { ContractDefaultsResponse, BankAccount, GenerateContractPayload }

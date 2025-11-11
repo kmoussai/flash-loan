@@ -962,7 +962,8 @@ export default function LoanDetailsPage() {
             numberOfPayments,
             loanAmount,
             nextPaymentDate,
-            account
+            account,
+            paymentAmount,
           }) => {
             if (!applicationId) return
             setLoadingContract(true)
@@ -984,7 +985,8 @@ export default function LoanDetailsPage() {
                 numberOfPayments,
                 loanAmount,
                 nextPaymentDate,
-                account
+                account,
+                paymentAmount,
               }
 
               if (account) {
