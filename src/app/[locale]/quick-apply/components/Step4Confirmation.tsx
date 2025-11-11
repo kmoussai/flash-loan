@@ -1,5 +1,9 @@
 'use client'
 import { useTranslations } from 'next-intl'
+import {
+  getProvinceTranslationKey,
+  provinceNameToCode
+} from '../constants/provinces'
 import type {
   QuickApplyFormData,
   QuickApplyUpdateHandler
@@ -29,11 +33,16 @@ export default function Step4Confirmation({ formData, onUpdate }: Step4Confirmat
   const t = useTranslations('')
 
   const formatAddress = () => {
+    const provinceCode = provinceNameToCode(formData.province)
+    const provinceLabel = provinceCode
+      ? t(getProvinceTranslationKey(provinceCode) as any)
+      : formData.province
+
     const parts = [
       `${formData.streetNumber} ${formData.streetName}`.trim(),
       formData.apartmentNumber ? `${t('Apartment_Number')}: ${formData.apartmentNumber}` : null,
       formData.city,
-      formData.province,
+      provinceLabel,
       formData.postalCode
     ].filter(Boolean)
 

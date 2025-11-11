@@ -3,11 +3,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import Button from '@/src/app/[locale]/components/Button'
 import Select from '@/src/app/[locale]/components/Select'
-import type { PaymentFrequency } from '@/src/lib/supabase/types'
+import type { Frequency, PaymentFrequency } from '@/src/lib/supabase/types'
+import { addDays, addMonths } from 'date-fns'
+
+const frequencyConfig: Record<
+  PaymentFrequency,
+  { paymentsPerYear: number; daysBetween: number; monthsBetween: number }
+> = {
+  weekly: { paymentsPerYear: 52, daysBetween: 7, monthsBetween: 0 },
+  'bi-weekly': { paymentsPerYear: 26, daysBetween: 14, monthsBetween: 0 },
+  'twice-monthly': { paymentsPerYear: 24, daysBetween: 15, monthsBetween: 0 }, // use 15 days instead of 0.5 month
+  monthly: { paymentsPerYear: 12, daysBetween: 0, monthsBetween: 1 }
+}
 
 import useSWR from 'swr'
 import { calculateLoanSchedule, fetcher } from '@/lib/utils'
-import { ContractDefaultsResponse, GenerateContractPayload } from '@/src/app/types/contract'
+import {
+  ContractDefaultsResponse,
+  GenerateContractPayload,
+  PayementScheduleItem
+} from '@/src/app/types/contract'
+import PaymentScheduleList from '@/src/app/[locale]/components/PaymentScheduleList'
 
 const frequencyOptions = [
   { value: 'monthly', label: 'Monthly' },
@@ -89,14 +105,34 @@ export const GenerateContractModal = ({
       nextPaymentDate,
       account: accounts.find(acc => acc.account_number === selectedAccountId),
       interestRate: Number(interestRate),
+      paymentAmount: Number(paymentAmount),
+      paymentSchedule: buildSchedule({
+        paymentAmount: Number(paymentAmount),
+        paymentFrequency,
+        numberOfPayments,
+        nextPaymentDate
+      })
     }
+    setLoadingContract(false)
+    onSubmit(payload)
+  }
 
-    // Simulate async
-    setTimeout(() => {
-      setLoadingContract(false)
-      onSubmit(payload)
-      onClose()
-    }, 800)
+  function buildSchedule(arg0: {
+    paymentAmount: number | ''
+    paymentFrequency: Frequency
+    numberOfPayments: number
+    nextPaymentDate: string
+  }): PayementScheduleItem[] {
+    const isMonthly = paymentFrequency === 'monthly'
+    return Array.from({ length: numberOfPayments }, (_v, i) => ({
+      due_date: isMonthly
+        ? addMonths(nextPaymentDate, i)
+        : addDays(
+            nextPaymentDate,
+            i * frequencyConfig[paymentFrequency].daysBetween
+          ),
+      amount: Number(paymentAmount)
+    })) as unknown as PayementScheduleItem[]
   }
 
   return (
@@ -182,10 +218,10 @@ export const GenerateContractModal = ({
                 <input
                   type='number'
                   min={1}
-                  value={
-                    Number.isFinite(numberOfPayments) ? numberOfPayments : ''
+                  value={numberOfPayments}
+                  onChange={e =>
+                    setNumberOfPayments(e.target.value as unknown as number)
                   }
-                  onChange={e => setNumberOfPayments(Number(e.target.value))}
                   disabled={isLoading}
                   className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
                 />
@@ -267,6 +303,24 @@ export const GenerateContractModal = ({
               <p className='text-sm text-gray-500'>Loading default values…</p>
             )}
             {formError && <p className='text-sm text-red-600'>{formError}</p>}
+          </div>
+          {/* payment schedule */}
+          <div className='grid  gap-4'>
+            <div>
+              <h3 className='text-lg font-semibold text-gray-900'>
+                Payment Schedule
+              </h3>
+              <div className='max-h-[200px] overflow-y-auto'>
+                <PaymentScheduleList
+                  schedule={buildSchedule({
+                    paymentAmount,
+                    paymentFrequency,
+                    numberOfPayments,
+                    nextPaymentDate
+                  })}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

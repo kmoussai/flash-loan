@@ -5,9 +5,12 @@ import type {
   LoanContractInsert, 
   LoanContractUpdate,
   ContractTerms,
-  ContractStatus
+  ContractStatus,
+  Loan
 } from './types'
 import { createClient } from './client'
+
+type LoanContractWithLoanNumber = LoanContract & { loan?: Pick<Loan, 'loan_number'> | null }
 
 // ===========================
 // CONTRACT OPERATIONS
@@ -45,7 +48,12 @@ export async function getContractByApplicationId(applicationId: string, isServer
   
   const { data, error } = await supabase
     .from('loan_contracts')
-    .select('*')
+    .select(`
+      *,
+      loan:loans!loan_contracts_loan_id_fkey (
+        loan_number
+      )
+    `)
     .eq('loan_application_id', applicationId)
     .order('contract_version', { ascending: false })
     .limit(1)
@@ -56,7 +64,7 @@ export async function getContractByApplicationId(applicationId: string, isServer
     return { success: false, error: error.message, data: null }
   }
   
-  return { success: true, data: data as LoanContract | null, error: null }
+  return { success: true, data: data as LoanContractWithLoanNumber | null, error: null }
 }
 
 /**
