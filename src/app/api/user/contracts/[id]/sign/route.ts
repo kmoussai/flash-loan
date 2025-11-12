@@ -67,7 +67,7 @@ export async function POST(
       )
     }
 
-    if (contractRow.client_signed_at) {
+    if ((contractRow as any).client_signed_at) {
       return NextResponse.json(
         { error: 'Contract already signed' },
         { status: 400 }
@@ -88,8 +88,8 @@ export async function POST(
     const userAgent = request.headers.get('user-agent') ?? 'Unknown'
     const signedAt = new Date().toISOString()
 
-    const { data: updated, error: updateError } = await adminClient
-      .from('loan_contracts' as any)
+    const { data: updated, error: updateError } = await (adminClient as any)
+      .from('loan_contracts')
       .update({
         contract_status: 'signed',
         client_signed_at: signedAt,
@@ -102,16 +102,21 @@ export async function POST(
         }
       })
       .eq('id', contractId)
-      .select(
-        `
-          *,
-          loan_applications!inner (
-            id,
-            application_status,
-            loan_amount
-          )
-        `
-      )
+      .select(`
+        *,
+        loan_applications!inner (
+          id,
+          application_status,
+          loan_amount
+        ),
+        loan:loans (
+          id,
+          principal_amount,
+          disbursement_date,
+          due_date,
+          remaining_balance
+        )
+      `)
       .single()
 
     if (updateError || !updated) {
@@ -135,28 +140,28 @@ export async function POST(
       const schedule = contractTerms?.payment_schedule ?? []
 
       if (updatedContract.loan && schedule.length > 0) {
-        const { data: loanData, error: loanError } = await adminClient
+        const lastDue = schedule[schedule.length - 1]
+        const principalAmount =
+          Number(updatedContract.loan?.principal_amount) ||
+          Number(updatedContract.contract_terms?.principal_amount) ||
+          null
+
+        const { error: loanError } = await (adminClient as any)
           .from('loans')
           .update({
-            payment_schedule: schedule
+            payment_schedule: schedule,
+            disbursement_date: updatedContract.loan?.disbursement_date ?? signedAt,
+            due_date: lastDue?.due_date ?? updatedContract.loan?.due_date ?? null,
+            remaining_balance:
+              updatedContract.loan?.remaining_balance ?? principalAmount
           })
           .eq('id', updatedContract.loan.id)
-          .select()
-          .maybeSingle()
 
         if (loanError) {
-          console.error('[POST /api/user/contracts/:id/sign] Failed to update loan schedule:', loanError)
-        } else {
-          const firstDue = schedule[0]
-          const lastDue = schedule[schedule.length - 1]
-          await adminClient
-            .from('loans')
-            .update({
-              disbursement_date: loanData?.disbursement_date ?? signedAt,
-              due_date: lastDue?.due_date ?? loanData?.due_date ?? null,
-              remaining_balance: loanData?.remaining_balance ?? updatedContract.loan.principal_amount
-            })
-            .eq('id', updatedContract.loan.id)
+          console.error(
+            '[POST /api/user/contracts/:id/sign] Failed to update loan schedule:',
+            loanError
+          )
         }
       }
     } catch (paymentError) {

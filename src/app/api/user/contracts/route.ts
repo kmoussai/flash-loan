@@ -80,7 +80,6 @@ export async function GET(request: NextRequest) {
         } | null
       })[] | null)?.map(row => {
         const application = row.loan_applications
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { loan_applications, loan, ...rest } = row
         const contract: LoanContract = {
           ...rest,

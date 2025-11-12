@@ -368,15 +368,20 @@ export async function POST(
       const descriptionParts = uniqueKinds.map(kind => kindLabels[kind] || kindLabels.other)
       const notificationCategory: NotificationCategory =
         uniqueKinds.length === 1
-          ? ({
-              document: 'document_request_created',
-              reference: 'reference_request_created',
-              employment: 'employment_request_created',
-              address: 'address_request_created'
-            }[uniqueKinds[0]] ?? 'multi_request_created')
-          : 'multi_request_created'
+          ? (
+              uniqueKinds[0] === 'document'
+                ? 'document_request_created'
+                : uniqueKinds[0] === 'reference'
+                ? 'reference_request_created'
+                : uniqueKinds[0] === 'employment'
+                ? 'employment_request_created'
+                : uniqueKinds[0] === 'address'
+                ? 'address_request_created'
+                : 'multi_request_created'
+            )
+          : 'multi_request_created';
 
-      const notificationTitle = 'Action needed for your loan application'
+      const notificationTitle = 'Action needed for your loan application';
       const notificationMessage =
         descriptionParts.length > 0
           ? `Please complete the following to keep things moving: ${descriptionParts.join('; ')}.`
