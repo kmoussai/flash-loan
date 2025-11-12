@@ -1,14 +1,15 @@
 // Database helper functions for loan contract system
 
-import type { 
-  LoanContract, 
-  LoanContractInsert, 
+import type {
+  LoanContract,
+  LoanContractInsert,
   LoanContractUpdate,
-  ContractTerms,
-  ContractStatus,
-  Loan
+  ContractStatus
 } from './types'
 import { createClient } from './client'
+import { Loan } from '@/src/types'
+import { createNotification } from './notification-helpers'
+import type { NotificationCategory } from '@/src/types'
 
 type LoanContractWithLoanNumber = LoanContract & { loan?: Pick<Loan, 'loan_number'> | null }
 
@@ -192,7 +193,50 @@ export async function sendContract(
     console.error('Error sending contract:', error)
     return { success: false, error: error.message, data: null }
   }
-  
-  return { success: true, data: data as LoanContract, error: null }
+
+  const contract = data as LoanContract
+
+  try {
+    const { createServerSupabaseAdminClient } = await import('./server')
+    const adminClient = await createServerSupabaseAdminClient()
+
+    const { data: clientInfo } = await adminClient
+      .from('loan_applications' as any)
+      .select('client_id')
+      .eq('id', contract.loan_application_id)
+      .maybeSingle()
+
+    const clientId = (clientInfo as any)?.client_id as string | undefined
+
+    if (clientId) {
+      const metadata = {
+        type: 'contract_event' as const,
+        contractId: contract.id,
+        loanApplicationId: contract.loan_application_id,
+        contractNumber: contract.contract_number ?? null,
+        sentAt: contract.sent_at ?? new Date().toISOString(),
+        viewedAt: null,
+        signedAt: null,
+        event: 'sent' as const
+      }
+
+      await createNotification(
+        {
+          recipientId: clientId,
+          recipientType: 'client',
+          title: 'Your contract is ready',
+          message:
+            'Please review and sign your loan agreement to complete your application.',
+          category: 'contract_sent' as NotificationCategory,
+          metadata
+        },
+        { client: adminClient }
+      )
+    }
+  } catch (notificationError) {
+    console.error('[sendContract] Failed to create notification:', notificationError)
+  }
+
+  return { success: true, data: contract, error: null }
 }
 

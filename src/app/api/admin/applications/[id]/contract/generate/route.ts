@@ -20,7 +20,7 @@ import {
   updateLoanAmount
 } from '@/src/lib/supabase/loan-helpers'
 import { GenerateContractPayload } from '@/src/app/types/contract'
-import { PaymentFrequency } from '@/src/lib/supabase/types'
+import { PaymentFrequency, ContractTerms } from '@/src/lib/supabase/types'
 
 export async function POST(
   request: NextRequest,
@@ -218,7 +218,7 @@ export async function POST(
           loan_application_id: applicationId,
           loan_id: loanId,
           contract_version: 1,
-          contract_terms: contractTerms,
+          contract_terms: contractTerms as ContractTerms,
           contract_status: 'generated',
           expires_at: new Date(
             Date.now() + 30 * 24 * 60 * 60 * 1000

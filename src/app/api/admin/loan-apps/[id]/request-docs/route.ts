@@ -4,6 +4,8 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { signRequestToken } from '@/src/lib/security/token'
 import { sendEmail } from '@/src/lib/email/smtp'
 import { generateDocumentRequestEmail } from '@/src/lib/email/templates/document-request'
+import { createNotification } from '@/src/lib/supabase'
+import type { NotificationCategory } from '@/src/types'
 
 const EMPLOYMENT_DEFAULT_FORM_SCHEMA = {
   title: 'Employment Verification',
@@ -343,6 +345,70 @@ export async function POST(
       )
     }
 
+    const documentNames = (docTypes || []).map((dt: any) => dt.name).filter(Boolean)
+
+    const clientRecord = (appWithUser as any)?.users
+    const clientId = clientRecord?.id as string | undefined
+
+    if (clientId) {
+      const notificationRequestIds = (inserted || []).map((r: any) => r.id as string).filter(Boolean)
+      const requestKinds = filteredRequests.map(req => req.request_kind)
+
+      const kindLabels: Record<string, string> = {
+        document: documentNames.length
+          ? `Upload ${documentNames.join(', ')}`
+          : 'Upload requested documents',
+        reference: 'Provide reference details',
+        employment: 'Share employment information',
+        address: 'Confirm your address details',
+        other: 'Provide the requested information'
+      }
+
+      const uniqueKinds = Array.from(new Set(requestKinds))
+      const descriptionParts = uniqueKinds.map(kind => kindLabels[kind] || kindLabels.other)
+      const notificationCategory: NotificationCategory =
+        uniqueKinds.length === 1
+          ? (
+              uniqueKinds[0] === 'document'
+                ? 'document_request_created'
+                : uniqueKinds[0] === 'reference'
+                ? 'reference_request_created'
+                : uniqueKinds[0] === 'employment'
+                ? 'employment_request_created'
+                : uniqueKinds[0] === 'address'
+                ? 'address_request_created'
+                : 'multi_request_created'
+            )
+          : 'multi_request_created';
+
+      const notificationTitle = 'Action needed for your loan application';
+      const notificationMessage =
+        descriptionParts.length > 0
+          ? `Please complete the following to keep things moving: ${descriptionParts.join('; ')}.`
+          : 'We need additional information to continue processing your application.'
+
+      const metadata = {
+        type: 'request_prompt' as const,
+        requestIds: notificationRequestIds,
+        groupId,
+        loanApplicationId,
+        requestKinds,
+        expiresAt: expiresAt || null
+      }
+
+      await createNotification(
+        {
+          recipientId: clientId,
+          recipientType: 'client',
+          title: notificationTitle,
+          message: notificationMessage,
+          category: notificationCategory,
+          metadata
+        },
+        { client: admin }
+      )
+    }
+
     // Send email if we have client email and group link
     let emailSent = false
     let emailError: string | null = null
@@ -352,7 +418,6 @@ export async function POST(
       const clientFirstName = (appWithUser as any).users.first_name || ''
       const clientLastName = (appWithUser as any).users.last_name || ''
       const applicantName = `${clientFirstName} ${clientLastName}`.trim() || 'Valued Customer'
-      const documentNames = (docTypes || []).map((dt: any) => dt.name)
 
       if (documentNames.length > 0) {
         const emailContent = generateDocumentRequestEmail({

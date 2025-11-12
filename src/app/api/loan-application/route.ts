@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient, createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import {
+  createServerSupabaseClient,
+  createServerSupabaseAdminClient
+} from '@/src/lib/supabase/server'
+import { createNotification } from '@/src/lib/supabase'
+import type { NotificationCategory } from '@/src/types'
 import {
   IncomeSourceType,
   EmployedIncomeFields,
@@ -25,7 +30,7 @@ interface LoanApplicationRequestBody {
   phone: string
   dateOfBirth: string
   preferredLanguage: string
-  
+
   // Address Information
   streetNumber?: string
   streetName?: string
@@ -35,7 +40,7 @@ interface LoanApplicationRequestBody {
   postalCode?: string
   country?: string
   movingDate?: string
-  
+
   // Financial Obligations (Quebec only)
   residenceStatus?: string
   grossSalary?: string
@@ -43,7 +48,7 @@ interface LoanApplicationRequestBody {
   heatingElectricityCost?: string
   carLoan?: string
   furnitureLoan?: string
-  
+
   // References
   reference1FirstName?: string
   reference1LastName?: string
@@ -53,7 +58,7 @@ interface LoanApplicationRequestBody {
   reference2LastName?: string
   reference2Phone?: string
   reference2Relationship?: string
-  
+
   // Income Information
   incomeSource?: IncomeSourceType
   // Employed fields
@@ -74,19 +79,25 @@ interface LoanApplicationRequestBody {
   selfEmployedStartDate?: string
   // Common field for most income types
   nextDepositDate?: string
-  
+
   // Loan Details
   loanAmount: string
-  
+
   // Pre-qualification
   bankruptcyPlan?: boolean
-  
+
   // Confirmation
   confirmInformation: boolean
-  
+
   // IBV Data (modular, provider-agnostic)
   ibvProvider?: 'flinks' | 'inverite' | 'plaid' | 'other'
-  ibvStatus?: 'pending' | 'processing' | 'verified' | 'failed' | 'cancelled' | 'expired'
+  ibvStatus?:
+    | 'pending'
+    | 'processing'
+    | 'verified'
+    | 'failed'
+    | 'cancelled'
+    | 'expired'
   ibvProviderData?: any
   ibvVerifiedAt?: string
 }
@@ -95,7 +106,9 @@ interface LoanApplicationRequestBody {
 // VALIDATION FUNCTIONS
 // ===========================
 
-function validateQuickApplyFields(body: LoanApplicationRequestBody): string | null {
+function validateQuickApplyFields(
+  body: LoanApplicationRequestBody
+): string | null {
   const required = [
     'firstName',
     'lastName',
@@ -120,7 +133,9 @@ function validateQuickApplyFields(body: LoanApplicationRequestBody): string | nu
   return null
 }
 
-function validateFullApplicationFields(body: LoanApplicationRequestBody): string | null {
+function validateFullApplicationFields(
+  body: LoanApplicationRequestBody
+): string | null {
   const required = [
     'firstName',
     'lastName',
@@ -232,7 +247,12 @@ function validateLoanAmount(amount: string): boolean {
 function buildIncomeFields(
   incomeSource: IncomeSourceType | null,
   body: LoanApplicationRequestBody
-): EmployedIncomeFields | EmploymentInsuranceIncomeFields | SelfEmployedIncomeFields | OtherIncomeFields | Record<string, never> {
+):
+  | EmployedIncomeFields
+  | EmploymentInsuranceIncomeFields
+  | SelfEmployedIncomeFields
+  | OtherIncomeFields
+  | Record<string, never> {
   if (!incomeSource) {
     return {}
   }
@@ -249,13 +269,13 @@ function buildIncomeFields(
         date_hired: body.dateHired!,
         next_pay_date: body.nextPayDate!
       } as EmployedIncomeFields
-      
+
     case 'employment-insurance':
       return {
         employment_insurance_start_date: body.employmentInsuranceStartDate!,
         next_deposit_date: body.nextDepositDate!
       } as EmploymentInsuranceIncomeFields
-      
+
     case 'self-employed':
       return {
         paid_by_direct_deposit: body.paidByDirectDeposit!,
@@ -264,7 +284,7 @@ function buildIncomeFields(
         self_employed_start_date: body.selfEmployedStartDate!,
         next_deposit_date: body.nextDepositDate!
       } as SelfEmployedIncomeFields
-      
+
     default:
       // For csst-saaq, parental-insurance, retirement-plan
       return {
@@ -284,18 +304,15 @@ export async function POST(request: NextRequest) {
   try {
     const body: LoanApplicationRequestBody = await request.json()
     const isQuickApply = Boolean(body.isQuickApply)
-    
+
     // Validate required fields based on flow
     const validationError = isQuickApply
       ? validateQuickApplyFields(body)
       : validateFullApplicationFields(body)
     if (validationError) {
-      return NextResponse.json(
-        { error: validationError },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: validationError }, { status: 400 })
     }
-    
+
     // Validate email format
     if (!validateEmail(body.email)) {
       return NextResponse.json(
@@ -303,7 +320,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    
+
     // Validate loan amount
     if (!validateLoanAmount(body.loanAmount)) {
       return NextResponse.json(
@@ -311,44 +328,63 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    
+
     // Validate IBV status if provided
-    if (body.ibvStatus && 
-        !['pending', 'processing', 'verified', 'failed', 'cancelled', 'expired'].includes(body.ibvStatus)) {
+    if (
+      body.ibvStatus &&
+      ![
+        'pending',
+        'processing',
+        'verified',
+        'failed',
+        'cancelled',
+        'expired'
+      ].includes(body.ibvStatus)
+    ) {
       return NextResponse.json(
-        { error: 'Invalid IBV status. Must be one of: pending, processing, verified, failed, cancelled, expired' },
+        {
+          error:
+            'Invalid IBV status. Must be one of: pending, processing, verified, failed, cancelled, expired'
+        },
         { status: 400 }
       )
     }
-    
+
     // Initialize Supabase admin client (bypasses RLS for public submissions)
     console.log('Environment check:')
-    console.log('- NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '✓ Set' : '✗ Missing')
-    console.log('- SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✓ Set' : '✗ Missing')
-    
+    console.log(
+      '- NEXT_PUBLIC_SUPABASE_URL:',
+      process.env.NEXT_PUBLIC_SUPABASE_URL ? '✓ Set' : '✗ Missing'
+    )
+    console.log(
+      '- SUPABASE_SERVICE_ROLE_KEY:',
+      process.env.SUPABASE_SERVICE_ROLE_KEY ? '✓ Set' : '✗ Missing'
+    )
+
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json(
-        { 
+        {
           error: 'Server configuration error',
-          details: 'SUPABASE_SERVICE_ROLE_KEY is not configured. Please add it to your .env.local file.'
+          details:
+            'SUPABASE_SERVICE_ROLE_KEY is not configured. Please add it to your .env.local file.'
         },
         { status: 500 }
       )
     }
-    
+
     const supabase = createServerSupabaseAdminClient()
-    
+
     // Check if user already exists by email
     const { data: existingUser } = await supabase
       .from('users')
       .select('id, email')
       .eq('email', body.email)
       .maybeSingle()
-    
+
     let userId: string | null = null
     let authUserIdToCleanup: string | null = null
     let isPreviousBorrower = false
-    
+
     if (existingUser as any) {
       // User exists - they're a previous borrower
       userId = (existingUser as any).id
@@ -358,39 +394,40 @@ export async function POST(request: NextRequest) {
       // New user - create auth account first (required for foreign key)
       // The transaction function will handle creating the public.users record
       console.log('Creating new auth user for:', body.email)
-      
+
       // Generate a random password for the user
       const tempPassword = `temp_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`
-      
+
       // Create auth user
-      const { data: authData, error: signUpError } = await supabase.auth.admin.createUser({
-        email: body.email,
-        password: tempPassword,
-        email_confirm: true, // Auto-confirm email
-        user_metadata: {
-          first_name: body.firstName,
-          last_name: body.lastName,
-          phone: body.phone,
-          signup_type: 'client'
-        }
-      })
-      
+      const { data: authData, error: signUpError } =
+        await supabase.auth.admin.createUser({
+          email: body.email,
+          password: tempPassword,
+          email_confirm: true, // Auto-confirm email
+          user_metadata: {
+            first_name: body.firstName,
+            last_name: body.lastName,
+            phone: body.phone,
+            signup_type: 'client'
+          }
+        })
+
       if (signUpError || !authData?.user) {
         console.error('Error creating auth user:', signUpError)
-        
+
         // Check if user was actually created despite the error
         const { data: checkUser } = await supabase
           .from('users')
           .select('id, email')
           .eq('email', body.email)
           .maybeSingle()
-        
+
         if (checkUser) {
           userId = (checkUser as any).id
           console.log('User found despite error, using existing ID:', userId)
         } else {
           return NextResponse.json(
-            { 
+            {
               error: 'Failed to create user account',
               details: signUpError?.message || 'Unknown error'
             },
@@ -401,12 +438,12 @@ export async function POST(request: NextRequest) {
         userId = authData.user.id
         authUserIdToCleanup = userId // Track for potential cleanup
         console.log('New auth user created:', userId)
-        
+
         // Wait for trigger to create public.users record
         await new Promise(resolve => setTimeout(resolve, 500))
       }
     }
-    
+
     // Prepare references array when provided (full application)
     const references = [] as Array<{
       first_name: string
@@ -436,54 +473,66 @@ export async function POST(request: NextRequest) {
     const incomeFields = isQuickApply
       ? {}
       : buildIncomeFields(incomeSource, body)
-    
+
     // Call the atomic transaction function
     // Pass NULL for p_client_id if new user - transaction will find/create by email
     // Transaction function handles all user/address/application/references atomically
     console.log('Calling submit_loan_application transaction...')
-    const { data: result, error: submitError } = await (supabase.rpc as any)('submit_loan_application', {
-      // Required parameters (in order)
-      p_first_name: body.firstName,
-      p_last_name: body.lastName,
-      p_email: body.email,
-      p_phone: body.phone,
-      p_date_of_birth: body.dateOfBirth,
-      p_preferred_language: body.preferredLanguage,
-      p_province: body.province || null,
-      p_loan_amount: parseFloat(body.loanAmount),
-      p_income_source: incomeSource,
-      p_income_fields: incomeFields,
-      p_bankruptcy_plan: body.bankruptcyPlan ?? false,
-      p_references: references,
-      // Optional parameters (with defaults)
-      // For existing users: pass userId (transaction will use it)
-      // For new users: pass NULL to let transaction find/use trigger-created user by email
-      // This ensures transaction handles everything atomically
-      p_client_id: existingUser ? userId : null,
-      p_street_number: body.streetNumber || null,
-      p_street_name: body.streetName || null,
-      p_apartment_number: body.apartmentNumber || null,
-      p_city: body.city || null,
-      p_postal_code: body.postalCode || null,
-      p_moving_date: body.movingDate || null,
-      p_residence_status: body.residenceStatus || null,
-      p_gross_salary: body.grossSalary ? parseFloat(body.grossSalary) : null,
-      p_rent_or_mortgage_cost: body.rentOrMortgageCost ? parseFloat(body.rentOrMortgageCost) : null,
-      p_heating_electricity_cost: body.heatingElectricityCost ? parseFloat(body.heatingElectricityCost) : null,
-      p_car_loan: body.carLoan ? parseFloat(body.carLoan) : null,
-      p_furniture_loan: body.furnitureLoan ? parseFloat(body.furnitureLoan) : null,
-      // IBV data (modular, provider-agnostic)
-      p_ibv_provider: body.ibvProvider || null,
-      p_ibv_status: body.ibvStatus || null,
-      p_ibv_provider_data: body.ibvProviderData || null
-    })
-    
+    const { data: result, error: submitError } = await (supabase.rpc as any)(
+      'submit_loan_application',
+      {
+        // Required parameters (in order)
+        p_first_name: body.firstName,
+        p_last_name: body.lastName,
+        p_email: body.email,
+        p_phone: body.phone,
+        p_date_of_birth: body.dateOfBirth,
+        p_preferred_language: body.preferredLanguage,
+        p_province: body.province || null,
+        p_loan_amount: parseFloat(body.loanAmount),
+        p_income_source: incomeSource,
+        p_income_fields: incomeFields,
+        p_bankruptcy_plan: body.bankruptcyPlan ?? false,
+        p_references: references,
+        // Optional parameters (with defaults)
+        // For existing users: pass userId (transaction will use it)
+        // For new users: pass NULL to let transaction find/use trigger-created user by email
+        // This ensures transaction handles everything atomically
+        p_client_id: existingUser ? userId : null,
+        p_street_number: body.streetNumber || null,
+        p_street_name: body.streetName || null,
+        p_apartment_number: body.apartmentNumber || null,
+        p_city: body.city || null,
+        p_postal_code: body.postalCode || null,
+        p_moving_date: body.movingDate || null,
+        p_residence_status: body.residenceStatus || null,
+        p_gross_salary: body.grossSalary ? parseFloat(body.grossSalary) : null,
+        p_rent_or_mortgage_cost: body.rentOrMortgageCost
+          ? parseFloat(body.rentOrMortgageCost)
+          : null,
+        p_heating_electricity_cost: body.heatingElectricityCost
+          ? parseFloat(body.heatingElectricityCost)
+          : null,
+        p_car_loan: body.carLoan ? parseFloat(body.carLoan) : null,
+        p_furniture_loan: body.furnitureLoan
+          ? parseFloat(body.furnitureLoan)
+          : null,
+        // IBV data (modular, provider-agnostic)
+        p_ibv_provider: body.ibvProvider || null,
+        p_ibv_status: body.ibvStatus || null,
+        p_ibv_provider_data: body.ibvProviderData || null
+      }
+    )
+
     if (submitError) {
       console.error('Transaction error:', submitError)
-      
+
       // Clean up auth user if transaction failed and we created a new one
       if (authUserIdToCleanup) {
-        console.log('Cleaning up auth user due to transaction failure:', authUserIdToCleanup)
+        console.log(
+          'Cleaning up auth user due to transaction failure:',
+          authUserIdToCleanup
+        )
         try {
           await supabase.auth.admin.deleteUser(authUserIdToCleanup)
           console.log('Auth user cleaned up successfully')
@@ -492,12 +541,12 @@ export async function POST(request: NextRequest) {
           // Continue anyway - error already occurred
         }
       }
-      
+
       throw new Error(submitError.message)
     }
-    
+
     console.log('Transaction successful:', result)
-    
+
     const txResult = result as any
 
     let requestGuidFromBody: string | null = null
@@ -516,7 +565,10 @@ export async function POST(request: NextRequest) {
       }
     } catch (e) {
       // Non-fatal: continue even if this convenience write fails
-      console.warn('[Loan Application] Failed to set initial ibv_results.request_guid', e)
+      console.warn(
+        '[Loan Application] Failed to set initial ibv_results.request_guid',
+        e
+      )
     }
 
     // Automatically fetch Inverite data when an Inverite request GUID is available
@@ -534,7 +586,10 @@ export async function POST(request: NextRequest) {
           requestGuid
         )}?application_id=${encodeURIComponent(txResult.application_id)}`
 
-        console.log('[Loan Application] Fetching Inverite data for request GUID:', requestGuid)
+        console.log(
+          '[Loan Application] Fetching Inverite data for request GUID:',
+          requestGuid
+        )
 
         const fetchResponse = await fetch(fetchUrl, {
           method: 'GET',
@@ -553,25 +608,113 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (inveriteError) {
-      console.warn('[Loan Application] Failed to fetch Inverite data automatically', inveriteError)
+      console.warn(
+        '[Loan Application] Failed to fetch Inverite data automatically',
+        inveriteError
+      )
     }
-    
-    // Return success response
-    return NextResponse.json({
-      success: true,
-      message: 'Loan application submitted successfully',
-      data: {
-        applicationId: txResult.application_id,
-        isPreviousBorrower: txResult.is_previous_borrower,
-        referenceNumber: `FL-${Date.now().toString().slice(-8)}`
+
+    // Notify staff about the new application (non-blocking)
+    try {
+      if (txResult?.application_id) {
+        const adminClient = createServerSupabaseAdminClient()
+
+        const { data: applicationDetails } = await adminClient
+          .from('loan_applications' as any)
+          .select(
+            `
+              id,
+              client_id,
+              application_status,
+              assigned_to,
+              users:client_id (
+                first_name,
+                last_name
+              )
+            `
+          )
+          .eq('id', txResult.application_id)
+          .maybeSingle()
+
+        if (applicationDetails) {
+          const staffRecipients = new Set<string>()
+
+          if ((applicationDetails as any).assigned_to) {
+            staffRecipients.add((applicationDetails as any).assigned_to)
+          }
+
+          const { data: adminStaff } = await adminClient
+            .from('staff' as any)
+            .select('id, role')
+            .in('role', ['admin', 'support'])
+
+          adminStaff?.forEach((staff: { id: string } | null) => {
+            if (staff?.id) {
+              staffRecipients.add(staff.id)
+            }
+          })
+
+          if (staffRecipients.size > 0) {
+            const clientFirstName =
+              (applicationDetails as any)?.users?.first_name ?? ''
+            const clientLastName =
+              (applicationDetails as any)?.users?.last_name ?? ''
+            const clientName = [clientFirstName, clientLastName]
+              .filter(Boolean)
+              .join(' ')
+              .trim()
+
+            await Promise.all(
+              Array.from(staffRecipients).map(staffId =>
+                createNotification(
+                  {
+                    recipientId: staffId,
+                    recipientType: 'staff',
+                    title: 'New loan application submitted',
+                    message: clientName
+                      ? `${clientName} just submitted a new loan application.`
+                      : 'A client just submitted a new loan application.',
+                    category: 'application_submitted' as NotificationCategory,
+                    metadata: {
+                      type: 'application_event' as const,
+                      loanApplicationId: (applicationDetails as any).id,
+                      clientId: (applicationDetails as any).client_id,
+                      status: (applicationDetails as any).application_status,
+                      submittedAt: new Date().toISOString()
+                    }
+                  },
+                  { client: adminClient }
+                )
+              )
+            )
+          }
+        }
       }
-    }, { status: 201 })
-    
+    } catch (notificationError) {
+      console.error(
+        '[Loan Application] Failed to create staff notification:',
+        notificationError
+      )
+    }
+
+    // Return success response
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Loan application submitted successfully',
+        data: {
+          applicationId: txResult.application_id,
+          isPreviousBorrower: txResult.is_previous_borrower,
+          referenceNumber: `FL-${Date.now().toString().slice(-8)}`
+        }
+      },
+      { status: 201 }
+    )
   } catch (error: any) {
     console.error('Loan application submission error:', error)
-    
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to submit loan application',
         details: error.message || 'Unknown error occurred'
       },
@@ -591,4 +734,3 @@ export async function GET(request: NextRequest) {
     endpoint: '/api/loan-application'
   })
 }
-

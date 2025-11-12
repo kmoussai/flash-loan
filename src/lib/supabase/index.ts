@@ -2,9 +2,8 @@
 // Note: createServerSupabaseClient is not exported here to prevent
 // it from being imported in Client Components. Import it directly
 // from './server' in Server Components when needed.
-
 export { createClient } from './client'
-
+export type { Loan } from '@/src/types'
 // Export all types
 export type { 
   Database, 
@@ -13,7 +12,6 @@ export type {
   Address,
   LoanApplication,
   Reference,
-  Loan,
   LoanPayment,
   DocumentRequest,
   RequestFormSubmission,
@@ -141,3 +139,24 @@ export {
   determineIbvStatus,
   isIbvDataComplete
 } from './ibv-helpers'
+
+// Export notification helpers
+export {
+  createNotification,
+  getNotificationsForRecipient,
+  markNotificationAsRead,
+  markAllNotificationsAsRead
+} from './notification-helpers'
+
+export type {
+  CreateNotificationParams,
+  GetNotificationsParams,
+  MarkNotificationAsReadParams
+} from './notification-helpers'
+
+export type {
+  Notification,
+  NotificationInsert,
+  NotificationUpdate,
+  NotificationRecipient
+} from '@/src/types'
