@@ -107,7 +107,14 @@ export async function POST(
         loan_applications!inner (
           id,
           application_status,
-          loan_amount
+          loan_amount,
+          client_id,
+          assigned_to,
+          users:client_id (
+            id,
+            first_name,
+            last_name
+          )
         ),
         loan:loans (
           id,
@@ -192,7 +199,71 @@ export async function POST(
         { client: adminClient }
       )
     } catch (notificationError) {
-      console.error('[POST /api/user/contracts/:id/sign] Failed to create notification:', notificationError)
+      console.error('[POST /api/user/contracts/:id/sign] Failed to create client notification:', notificationError)
+    }
+
+    // Notify staff that contract was signed
+    try {
+      const updatedContract = updated as any
+      const application = updatedContract.loan_applications
+      const clientInfo = application?.users
+
+      // Fetch all staff members
+      const staffRecipients = new Set<string>()
+      const { data: adminStaff } = await (adminClient as any)
+        .from('staff')
+        .select('id, role')
+        .in('role', ['admin', 'support'])
+
+      adminStaff?.forEach((staff: { id: string } | null) => {
+        if (staff?.id) {
+          staffRecipients.add(staff.id)
+        }
+      })
+
+      // Also add assigned staff if available
+      if (application?.assigned_to) {
+        staffRecipients.add(application.assigned_to)
+      }
+
+      if (staffRecipients.size > 0) {
+        const clientFirstName = clientInfo?.first_name ?? ''
+        const clientLastName = clientInfo?.last_name ?? ''
+        const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim()
+
+        const contractNumber = updatedContract.contract_number
+          ? `Contract #${updatedContract.contract_number}`
+          : 'A contract'
+
+        await Promise.all(
+          Array.from(staffRecipients).map(staffId =>
+            createNotification(
+              {
+                recipientId: staffId,
+                recipientType: 'staff',
+                title: 'Contract signed',
+                message: clientName
+                  ? `${clientName} signed ${contractNumber.toLowerCase()}.`
+                  : `${contractNumber} has been signed by a client.`,
+                category: 'contract_signed' as NotificationCategory,
+                metadata: {
+                  type: 'contract_event' as const,
+                  contractId: updatedContract.id,
+                  loanApplicationId: application?.id,
+                  contractNumber: updatedContract.contract_number ?? null,
+                  sentAt: updatedContract.sent_at ?? null,
+                  viewedAt: null,
+                  signedAt,
+                  event: 'signed' as const
+                }
+              },
+              { client: adminClient }
+            )
+          )
+        )
+      }
+    } catch (staffNotificationError) {
+      console.error('[POST /api/user/contracts/:id/sign] Failed to create staff notification:', staffNotificationError)
     }
 
     return NextResponse.json({
