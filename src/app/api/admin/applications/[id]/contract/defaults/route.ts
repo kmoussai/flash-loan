@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
 import type {
-  PaymentFrequency,
-  ContractTerms,
   IncomeSourceType
 } from '@/src/lib/supabase/types'
 import { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
@@ -14,11 +12,12 @@ import {
   normalizeFrequency
 } from '@/src/lib/utils/frequency'
 import { buildContractTermsFromApplication } from '@/src/lib/contracts/terms'
-import { BankAccount, ContractDefaultsResponse } from '@/src/app/types/contract'
+import {  ContractDefaultsResponse, PaymentFrequency, ContractTerms } from '@/src/types'
 import {
   getLoanApplicationById,
   getLoanByApplicationId
 } from '@/src/lib/supabase/loan-helpers'
+import { BankAccount } from '@/src/types'
 
 const getLowestPaymentFrequencyFromIbv = (
   ibvResults?: IBVSummary | null

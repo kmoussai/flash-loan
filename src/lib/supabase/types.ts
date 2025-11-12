@@ -1,7 +1,12 @@
 // Database types for Supabase tables
 
-import { IBVSummary } from "@/src/app/api/inverite/fetch/[guid]/types"
-import { BankAccount } from "@/src/app/types/contract"
+import { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
+import { BankAccount, PaymentFrequency, ContractTerms } from '@/src/types'
+import { Loan } from '@/src/types'
+
+export type Frequency = PaymentFrequency
+export type { PaymentFrequency }
+export type { ContractTerms }
 
 // ===========================
 // ENUMS
@@ -10,24 +15,71 @@ import { BankAccount } from "@/src/app/types/contract"
 export type StaffRole = 'admin' | 'support' | 'intern'
 export type KycStatus = 'pending' | 'verified' | 'rejected'
 export type AddressType = 'current' | 'previous' | 'mailing' | 'work'
-export type ApplicationStatus = 'pending' | 'processing' | 'pre_approved' | 'contract_pending' | 'contract_signed' | 'approved' | 'rejected' | 'cancelled'
-export type ContractStatus = 'draft' | 'generated' | 'sent' | 'pending_signature' | 'signed' | 'rejected' | 'expired'
+export type ApplicationStatus =
+  | 'pending'
+  | 'processing'
+  | 'pre_approved'
+  | 'contract_pending'
+  | 'contract_signed'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled'
+export type ContractStatus =
+  | 'draft'
+  | 'generated'
+  | 'sent'
+  | 'pending_signature'
+  | 'signed'
+  | 'rejected'
+  | 'expired'
 export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'other'
-export type IbvStatus = 'pending' | 'processing' | 'verified' | 'failed' | 'cancelled' | 'expired'
-export type DocumentType = 'drivers_license' | 'passport' | 'health_card' | 'social_insurance' | 'permanent_resident_card' | 'citizenship_card' | 'birth_certificate' | 'other'
-export type DocumentStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'expired'
-export type LoanStatus = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
+export type IbvStatus =
+  | 'pending'
+  | 'processing'
+  | 'verified'
+  | 'failed'
+  | 'cancelled'
+  | 'expired'
+export type DocumentType =
+  | 'drivers_license'
+  | 'passport'
+  | 'health_card'
+  | 'social_insurance'
+  | 'permanent_resident_card'
+  | 'citizenship_card'
+  | 'birth_certificate'
+  | 'other'
+export type DocumentStatus =
+  | 'pending'
+  | 'under_review'
+  | 'approved'
+  | 'rejected'
+  | 'expired'
+export type LoanStatus =
+  | 'pending_disbursement'
+  | 'active'
+  | 'completed'
+  | 'defaulted'
+  | 'cancelled'
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
-export type Frequency = 'weekly' | 'bi-weekly' | 'twice-monthly' | 'monthly'
-export type PaymentFrequency = Frequency
-export type DocumentRequestStatus = 'requested' | 'uploaded' | 'verified' | 'rejected' | 'expired'
-export type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
-export type IncomeSourceType = 
-  | 'employed' 
-  | 'employment-insurance' 
-  | 'self-employed' 
-  | 'csst-saaq' 
-  | 'parental-insurance' 
+export type DocumentRequestStatus =
+  | 'requested'
+  | 'uploaded'
+  | 'verified'
+  | 'rejected'
+  | 'expired'
+export type RequestKind =
+  | 'document'
+  | 'address'
+  | 'reference'
+  | 'employment'
+  | 'other'
+export type IncomeSourceType =
+  | 'employed'
+  | 'employment-insurance'
+  | 'self-employed'
+  | 'csst-saaq'
+  | 'parental-insurance'
   | 'retirement-plan'
 
 // ===========================
@@ -40,7 +92,7 @@ export interface EmployedIncomeFields {
   supervisor_name: string
   work_phone: string
   post: string
-  payroll_frequency: Frequency
+  payroll_frequency: PaymentFrequency
   date_hired: string
   next_pay_date: string
 }
@@ -53,7 +105,7 @@ export interface EmploymentInsuranceIncomeFields {
 export interface SelfEmployedIncomeFields {
   paid_by_direct_deposit: 'yes' | 'no'
   self_employed_phone: string
-  deposits_frequency: Frequency
+  deposits_frequency: PaymentFrequency
   self_employed_start_date: string
   next_deposit_date: string
 }
@@ -62,10 +114,10 @@ export interface OtherIncomeFields {
   next_deposit_date: string
 }
 
-export type IncomeFields = 
-  | EmployedIncomeFields 
-  | EmploymentInsuranceIncomeFields 
-  | SelfEmployedIncomeFields 
+export type IncomeFields =
+  | EmployedIncomeFields
+  | EmploymentInsuranceIncomeFields
+  | SelfEmployedIncomeFields
   | OtherIncomeFields
 
 // ===========================
@@ -85,7 +137,7 @@ export interface InveriteIbvData {
   applicant_id?: string
   request_guid?: string
   verified_at?: string
-  
+
   // Account information
   account_info?: {
     institution_number: string
@@ -98,7 +150,7 @@ export interface InveriteIbvData {
       current: number | null
     }
   }
-  
+
   // Account statistics
   account_stats?: {
     periods: string[]
@@ -123,7 +175,7 @@ export interface InveriteIbvData {
     number_of_overdrafts: number
     average_amount_of_overdrafts: number
   }
-  
+
   // Account statement/transactions
   account_statement?: Array<{
     date: string
@@ -145,10 +197,10 @@ export interface OtherIbvData {
   [key: string]: any
 }
 
-export type IbvProviderData = 
-  | FlinksIbvData 
-  | InveriteIbvData 
-  | PlaidIbvData 
+export type IbvProviderData =
+  | FlinksIbvData
+  | InveriteIbvData
+  | PlaidIbvData
   | OtherIbvData
 
 // ===========================
@@ -224,7 +276,7 @@ export interface LoanApplication {
   contract_sent_at: string | null
   contract_signed_at: string | null
   // Modular IBV fields
-  ibv_results: IBVSummary | null,
+  ibv_results: IBVSummary | null
   ibv_provider: IbvProvider | null
   ibv_status: IbvStatus | null
   ibv_provider_data: IbvProviderData | null
@@ -311,22 +363,6 @@ export interface RequestFormSubmission {
   updated_at: string
 }
 
-export interface Loan {
-  id: string
-  application_id: string
-  user_id: string
-  loan_number: number
-  principal_amount: number
-  interest_rate: number
-  term_months: number
-  disbursement_date: string | null
-  due_date: string | null
-  remaining_balance: number
-  status: LoanStatus
-  created_at: string
-  updated_at: string
-}
-
 export interface LoanPayment {
   id: string
   loan_id: string
@@ -340,44 +376,6 @@ export interface LoanPayment {
 // ===========================
 // CONTRACT TYPES (JSONB)
 // ===========================
-
-export interface ContractTerms {
-  interest_rate: number
-  term_months: number
-  principal_amount: number
-  total_amount: number
-  payment_frequency?: PaymentFrequency,
-  payment_amount?: number,
-  number_of_payments?: number
-  fees: {
-    origination_fee?: number
-    processing_fee?: number
-    other_fees?: number
-  }
-  payment_schedule?: Array<{
-    due_date: string
-    amount: number
-    principal?: number
-    interest?: number
-  }>
-  terms_and_conditions?: string
-  effective_date?: string
-  maturity_date?: string
-  // Optional borrower information for rendering the contract
-  first_name?: string | null
-  last_name?: string | null
-  email?: string | null
-  phone?: string | null
-  street_number?: string | null
-  street_name?: string | null
-  apartment_number?: string | null
-  city?: string | null
-  province?: string | null
-  postal_code?: string | null
-  // Bank account information
-  bank_account?: BankAccount
-}
-
 
 export interface ClientSignatureData {
   signature_method: 'click_to_sign' | 'drawn_signature' | 'uploaded'
@@ -413,7 +411,7 @@ export interface LoanContract {
   created_at: string
   updated_at: string
   notes: string | null
-  loan: Loan    
+  loan: Loan
 }
 
 // ===========================
@@ -783,4 +781,3 @@ export interface Database {
     }
   }
 }
-

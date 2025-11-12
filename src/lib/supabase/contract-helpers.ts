@@ -4,11 +4,10 @@ import type {
   LoanContract, 
   LoanContractInsert, 
   LoanContractUpdate,
-  ContractTerms,
   ContractStatus,
-  Loan
 } from './types'
 import { createClient } from './client'
+import { Loan } from '@/src/types'
 
 type LoanContractWithLoanNumber = LoanContract & { loan?: Pick<Loan, 'loan_number'> | null }
 

@@ -1,6 +1,6 @@
-import { Frequency } from '@/src/lib/supabase/types'
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { PaymentFrequency } from '@/src/types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -20,7 +20,7 @@ interface LoanCalculationInput {
   loanAmount: number
   annualInterestRate: number // e.g. 29 for 29%
   termMonths: number // usually 12
-  frequency: Frequency
+  frequency: PaymentFrequency
 }
 
 interface LoanCalculationResult {
@@ -46,7 +46,7 @@ export function calculateLoanSchedule({
   }
 
   // Payments per year based on frequency
-  const paymentsPerYear: Record<Frequency, number> = {
+  const paymentsPerYear: Record<PaymentFrequency, number> = {
     weekly: 52,
     'bi-weekly': 26,
     'twice-monthly': 24,

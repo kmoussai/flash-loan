@@ -5,21 +5,13 @@ import { useParams, useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import Button from '@/src/app/[locale]/components/Button'
 import type {
-  Frequency,
-  PaymentFrequency,
   ApplicationStatus,
   LoanContract
 } from '@/src/lib/supabase/types'
 import GenerateContractModal from '../../applications/[id]/components/GenerateContractModal'
 import ContractViewer from '../../components/ContractViewer'
-import { BankAccount, GenerateContractPayload } from '@/src/app/types/contract'
+import { PaymentFrequency, LoanStatus } from '@/src/types'
 
-type LoanStatusDB =
-  | 'pending_disbursement'
-  | 'active'
-  | 'completed'
-  | 'defaulted'
-  | 'cancelled'
 type LoanStatusUI = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
 
 interface Payment {
@@ -44,7 +36,7 @@ interface LoanDetail {
   remaining_balance: number
   interest_rate: number
   term_months: number
-  payment_frequency: Frequency
+  payment_frequency: PaymentFrequency
   payment_amount: number
   origination_date: string
   status: LoanStatusUI
@@ -65,7 +57,7 @@ interface LoanFromAPI {
   disbursement_date: string | null
   due_date: string | null
   remaining_balance: number
-  status: LoanStatusDB
+  status: LoanStatus
   created_at: string
   updated_at: string
   loan_applications: {
@@ -141,7 +133,7 @@ function addDays(date: Date, days: number): Date {
 }
 
 // Map database status to UI status
-const mapStatusToUI = (status: LoanStatusDB): LoanStatusUI => {
+const mapStatusToUI = (status: LoanStatus): LoanStatusUI => {
   switch (status) {
     case 'pending_disbursement':
       return 'pending'
@@ -223,7 +215,7 @@ const transformLoanDetails = (apiData: LoanDetailsResponse): LoanDetail => {
     remaining_balance: parseFloat(loan.remaining_balance.toString()),
     interest_rate: parseFloat(loan.interest_rate.toString()),
     term_months: loan.term_months,
-    payment_frequency: 'monthly' as Frequency, // Default, could be enhanced to use actual frequency
+    payment_frequency: 'monthly' as PaymentFrequency, // Default, could be enhanced to use actual frequency
     payment_amount: Math.round(monthlyPayment * 100) / 100,
     origination_date: loan.created_at,
     status: mapStatusToUI(loan.status),
@@ -957,7 +949,7 @@ export default function LoanDetailsPage() {
           open={showContractModal}
           loadingContract={loadingContract}
           applicationId={applicationId}
-          onSubmit={async (payload) => {
+          onSubmit={async payload => {
             if (!applicationId) return
             setLoadingContract(true)
             try {
