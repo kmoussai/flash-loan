@@ -139,3 +139,24 @@ export {
   determineIbvStatus,
   isIbvDataComplete
 } from './ibv-helpers'
+
+// Export notification helpers
+export {
+  createNotification,
+  getNotificationsForRecipient,
+  markNotificationAsRead,
+  markAllNotificationsAsRead
+} from './notification-helpers'
+
+export type {
+  CreateNotificationParams,
+  GetNotificationsParams,
+  MarkNotificationAsReadParams
+} from './notification-helpers'
+
+export type {
+  Notification,
+  NotificationInsert,
+  NotificationUpdate,
+  NotificationRecipient
+} from '@/src/types'

@@ -4,6 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { createNotification } from '@/src/lib/supabase'
+import type { NotificationCategory } from '@/src/types'
 import { normalizeFrequency } from '@/src/lib/utils/frequency'
 import type { IBVSummary } from './types'
 
@@ -181,7 +183,7 @@ export async function GET(
       // Direct lookup by application ID
     const { data: application, error: fetchError } = await supabase
         .from('loan_applications')
-        .select('id, client_id, ibv_provider_data')
+        .select('id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)')
         .eq('id', applicationId)
         .eq('ibv_provider', 'inverite')
         .single()
@@ -217,7 +219,7 @@ export async function GET(
       // Fallback: search by request_guid
       const { data: applications, error: fetchError } = await supabase
         .from('loan_applications')
-        .select('id, client_id, ibv_provider_data')
+        .select('id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)')
         .eq('ibv_provider', 'inverite')
         .not('ibv_provider_data', 'is', null)
 
@@ -387,6 +389,61 @@ export async function GET(
       targetApplicationId,
       matchingApplication.id
     )
+
+    // Notify staff that IBV data was fetched
+    try {
+      const staffRecipients = new Set<string>()
+      if (matchingApplication.assigned_to) {
+        staffRecipients.add(matchingApplication.assigned_to)
+      }
+
+      const { data: adminStaff } = await supabase
+        .from('staff' as any)
+        .select('id, role')
+        .in('role', ['admin', 'support'])
+
+      adminStaff?.forEach((staff: { id: string } | null) => {
+        if (staff?.id) {
+          staffRecipients.add(staff.id)
+        }
+      })
+
+      if (staffRecipients.size > 0) {
+        const clientFirstName = (matchingApplication as any)?.users?.first_name ?? ''
+        const clientLastName = (matchingApplication as any)?.users?.last_name ?? ''
+        const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim()
+
+        const statusLabel = normalizedStatus ?? 'pending'
+
+        await Promise.all(
+          Array.from(staffRecipients).map(staffId =>
+            createNotification(
+              {
+                recipientId: staffId,
+                recipientType: 'staff',
+                title: 'Inverite data received',
+                message: clientName
+                  ? `${clientName} submitted bank verification data (status: ${statusLabel}).`
+                  : `A client submitted bank verification data (status: ${statusLabel}).`,
+                category: 'ibv_request_submitted' as NotificationCategory,
+                metadata: {
+                  type: 'ibv_event' as const,
+                  loanApplicationId: matchingApplication.id,
+                  clientId: matchingApplication.client_id,
+                  provider: 'inverite',
+                  status: statusLabel,
+                  requestGuid,
+                  submittedAt: new Date().toISOString()
+                }
+              },
+              { client: supabase }
+            )
+          )
+        )
+      }
+    } catch (notificationError) {
+      console.error('[Inverite Fetch] Failed to create notification:', notificationError)
+    }
 
     // Return success with fetched data summary
     return NextResponse.json({

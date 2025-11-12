@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { createNotification } from '@/src/lib/supabase'
+import type { NotificationCategory } from '@/src/types'
 import {
   IncomeSourceType,
   EmployedIncomeFields,
@@ -556,6 +558,81 @@ export async function POST(request: NextRequest) {
       console.warn('[Loan Application] Failed to fetch Inverite data automatically', inveriteError)
     }
     
+    // Notify staff about the new application (non-blocking)
+    try {
+      if (txResult?.application_id) {
+        const adminClient = createServerSupabaseAdminClient()
+
+        const { data: applicationDetails } = await adminClient
+          .from('loan_applications' as any)
+          .select(
+            `
+              id,
+              client_id,
+              application_status,
+              assigned_to,
+              users:client_id (
+                first_name,
+                last_name
+              )
+            `
+          )
+          .eq('id', txResult.application_id)
+          .maybeSingle()
+
+        if (applicationDetails) {
+          const staffRecipients = new Set<string>()
+
+          if (applicationDetails.assigned_to) {
+            staffRecipients.add(applicationDetails.assigned_to)
+          }
+
+          const { data: adminStaff } = await adminClient
+            .from('staff' as any)
+            .select('id, role')
+            .in('role', ['admin', 'support'])
+
+          adminStaff?.forEach((staff: { id: string } | null) => {
+            if (staff?.id) {
+              staffRecipients.add(staff.id)
+            }
+          })
+
+          if (staffRecipients.size > 0) {
+            const clientFirstName = (applicationDetails as any)?.users?.first_name ?? ''
+            const clientLastName = (applicationDetails as any)?.users?.last_name ?? ''
+            const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim()
+
+            await Promise.all(
+              Array.from(staffRecipients).map(staffId =>
+                createNotification(
+                  {
+                    recipientId: staffId,
+                    recipientType: 'staff',
+                    title: 'New loan application submitted',
+                    message: clientName
+                      ? `${clientName} just submitted a new loan application.`
+                      : 'A client just submitted a new loan application.',
+                    category: 'application_submitted' as NotificationCategory,
+                    metadata: {
+                      type: 'application_event' as const,
+                      loanApplicationId: applicationDetails.id,
+                      clientId: applicationDetails.client_id,
+                      status: applicationDetails.application_status,
+                      submittedAt: new Date().toISOString()
+                    }
+                  },
+                  { client: adminClient }
+                )
+              )
+            )
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('[Loan Application] Failed to create staff notification:', notificationError)
+    }
+
     // Return success response
     return NextResponse.json({
       success: true,

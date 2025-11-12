@@ -1,8 +1,16 @@
 // Database types for Supabase tables
 
 import { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
-import { BankAccount, PaymentFrequency, ContractTerms } from '@/src/types'
-import { Loan } from '@/src/types'
+import {
+  BankAccount,
+  PaymentFrequency,
+  ContractTerms,
+  Loan,
+  Notification,
+  NotificationInsert,
+  NotificationUpdate,
+  NotificationRecipient
+} from '@/src/types'
 
 export type Frequency = PaymentFrequency
 export type { PaymentFrequency }
@@ -372,6 +380,7 @@ export interface LoanPayment {
   status: PaymentStatus
   created_at: string
 }
+
 
 // ===========================
 // CONTRACT TYPES (JSONB)
@@ -762,6 +771,11 @@ export interface Database {
         Row: LoanPayment
         Insert: LoanPaymentInsert
         Update: LoanPaymentUpdate
+      }
+      notifications: {
+        Row: Notification
+        Insert: NotificationInsert
+        Update: NotificationUpdate
       }
       loan_contracts: {
         Row: LoanContract

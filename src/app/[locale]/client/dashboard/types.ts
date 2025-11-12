@@ -1,6 +1,11 @@
 import type { LoanApplication } from '@/src/lib/supabase/types'
 
-export type SectionId = 'overview' | 'applications' | 'documents' | 'support'
+export type SectionId =
+  | 'overview'
+  | 'applications'
+  | 'documents'
+  | 'contracts'
+  | 'support'
 
 export interface DashboardStats {
   active: number
