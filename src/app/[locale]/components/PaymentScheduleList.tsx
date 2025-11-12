@@ -1,12 +1,5 @@
 import React from 'react'
-import { PayementScheduleItem } from '../../types/contract'
-
-type PaymentStatus =
-  | 'paid'
-  | 'upcoming'
-  | 'overdue'
-  | 'processing'
-  | 'cancelled'
+import { PayementScheduleItem } from '@/src/types'
 
 export interface PaymentScheduleListProps {
   schedule: PayementScheduleItem[]

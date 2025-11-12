@@ -18,10 +18,10 @@ import type {
   RequestFormSubmission,
   RequestFormSubmissionInsert,
   RequestFormSubmissionUpdate,
-  Loan,
   LoanUpdate
 } from './types'
 import { createClient } from './client'
+import { Loan } from '@/src/types'
 
 interface DocumentRequestRow extends DocumentRequest {
   loan_applications?: {

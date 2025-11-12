@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Button from '@/src/app/[locale]/components/Button'
-import type { PaymentFrequency } from '@/src/lib/supabase/types'
+import { PaymentFrequency } from '@/src/types'
 import GenerateContractModal from './GenerateContractModal'
 import type { ApplicationWithDetails } from '../types'
 

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Button from '@/src/app/[locale]/components/Button'
 import Select from '@/src/app/[locale]/components/Select'
-import type { Frequency, PaymentFrequency } from '@/src/lib/supabase/types'
 import { addDays, addMonths } from 'date-fns'
+import { PaymentFrequency, GenerateContractPayload, PayementScheduleItem } from '@/src/types'
 
 const frequencyConfig: Record<
   PaymentFrequency,
@@ -18,12 +18,8 @@ const frequencyConfig: Record<
 
 import useSWR from 'swr'
 import { calculateLoanSchedule, fetcher } from '@/lib/utils'
-import {
-  ContractDefaultsResponse,
-  GenerateContractPayload,
-  PayementScheduleItem
-} from '@/src/app/types/contract'
 import PaymentScheduleList from '@/src/app/[locale]/components/PaymentScheduleList'
+import { ContractDefaultsResponse } from '@/src/types'
 
 const frequencyOptions = [
   { value: 'monthly', label: 'Monthly' },
@@ -31,17 +27,6 @@ const frequencyOptions = [
   { value: 'twice-monthly', label: 'Twice per Month' },
   { value: 'weekly', label: 'Weekly' }
 ]
-
-interface BankAccount {
-  id: string
-  bank_name: string
-  account_number: string
-  transit_number: string
-  institution_number: string
-  account_name: string
-  account_holder: string
-  display_name: string
-}
 
 interface GenerateContractModalProps {
   applicationId: string
@@ -119,7 +104,7 @@ export const GenerateContractModal = ({
 
   function buildSchedule(arg0: {
     paymentAmount: number | ''
-    paymentFrequency: Frequency
+    paymentFrequency: PaymentFrequency
     numberOfPayments: number
     nextPaymentDate: string
   }): PayementScheduleItem[] {

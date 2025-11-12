@@ -1,6 +1,5 @@
 // Helpers to build contract terms from application data
-import { GenerateContractPayload } from '@/src/app/types/contract'
-import type { ContractTerms, PaymentFrequency } from '@/src/lib/supabase/types'
+import type { ContractTerms, PaymentFrequency, GenerateContractPayload} from '@/src/types'
 import { getPaymentsPerMonth, assertFrequency } from '@/src/lib/utils/frequency'
 
 type AppUser = {

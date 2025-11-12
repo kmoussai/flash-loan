@@ -11,7 +11,9 @@ import { buildDashboardStats } from '../utils/stats'
 import OverviewSection from './sections/OverviewSection'
 import ApplicationsSection from './sections/ApplicationsSection'
 import DocumentsSection from './sections/DocumentsSection'
+import ContractsSection from './sections/ContractsSection'
 import SupportSection from './sections/SupportSection'
+import { AdminNotificationCenter } from '@/src/app/admin/components/AdminNotificationCenter'
 
 interface DashboardShellProps {
   locale: string
@@ -41,6 +43,7 @@ export default function DashboardShell({
       { id: 'overview', label: t('Overview') },
       { id: 'applications', label: t('Applications') },
       { id: 'documents', label: t('Documents') },
+      { id: 'contracts', label: t('Contracts') },
       { id: 'support', label: t('Support') }
     ],
     [t]
@@ -75,10 +78,7 @@ export default function DashboardShell({
 
   const greetingName =
     user.first_name || user.last_name
-      ? [user.first_name, user.last_name]
-          .filter(Boolean)
-          .join(' ')
-          .trim()
+      ? [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
       : t('Client')
 
   const handleSignOut = async () => {
@@ -141,7 +141,7 @@ export default function DashboardShell({
           <div className='flex items-center gap-3'>
             <Link
               href='/quick-apply'
-              className='hidden rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90 sm:inline-block'
+              className='hover:bg-primary/90 hidden rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition sm:inline-block'
             >
               {t('Start_New_Application')}
             </Link>
@@ -152,6 +152,7 @@ export default function DashboardShell({
             >
               {t('Sign_Out')}
             </button>
+            <AdminNotificationCenter />
           </div>
         </div>
       </header>
@@ -166,7 +167,7 @@ export default function DashboardShell({
 
       <div className='relative mx-auto w-full max-w-6xl lg:flex'>
         <aside
-          className={`fixed left-0 top-0 z-50 h-full w-72 transform border-r border-gray-200 bg-white px-6 py-10 transition-transform duration-200 ease-out lg:static lg:z-auto lg:flex lg:w-64 lg:translate-x-0 lg:flex-shrink-0 lg:border-r lg:bg-white lg:px-6 lg:py-10 ${
+          className={`fixed left-0 top-0 z-50 h-full w-72 transform border-r border-gray-200 bg-white px-6 py-10 transition-transform duration-200 ease-out lg:static lg:z-auto lg:flex lg:w-64 lg:flex-shrink-0 lg:translate-x-0 lg:border-r lg:bg-white lg:px-6 lg:py-10 ${
             drawerOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -179,7 +180,7 @@ export default function DashboardShell({
                 key={section.id}
                 type='button'
                 onClick={() => handleSectionChange(section.id)}
-                className={`flex w-full items-center justify-between rounded-lg px-4 py-3 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                className={`focus-visible:ring-primary/30 flex w-full items-center justify-between rounded-lg px-4 py-3 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ${
                   activeSection === section.id
                     ? 'bg-primary text-white shadow-sm'
                     : 'bg-background-secondary text-gray-700 hover:bg-gray-100'
@@ -221,6 +222,10 @@ export default function DashboardShell({
               />
             )}
 
+            {activeSection === 'contracts' && (
+              <ContractsSection locale={locale} />
+            )}
+
             {activeSection === 'support' && (
               <SupportSection onNavigateToOverview={goToOverview} />
             )}
@@ -230,4 +235,3 @@ export default function DashboardShell({
     </div>
   )
 }
-
