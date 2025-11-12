@@ -10,7 +10,12 @@ import IbvTab from './components/IbvTab'
 import DocumentsTab from './components/DocumentsTab'
 import DetailsTab from './components/DetailsTab'
 import TimelineTab from './components/TimelineTab'
-import type { ApplicationStatus, InveriteIbvData, LoanContract, PaymentFrequency } from '@/src/lib/supabase/types'
+import type {
+  ApplicationStatus,
+  InveriteIbvData,
+  LoanContract,
+  PaymentFrequency
+} from '@/src/lib/supabase/types'
 import type { ApplicationWithDetails, IbvResults } from './types'
 
 export default function ApplicationDetailsPage() {
@@ -32,7 +37,9 @@ export default function ApplicationDetailsPage() {
     number | undefined
   >(undefined)
   const [fetchingInveriteData, setFetchingInveriteData] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'ibv' | 'documents' | 'details' | 'timeline'>('overview')
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'ibv' | 'documents' | 'details' | 'timeline'
+  >('overview')
   const [showContractViewer, setShowContractViewer] = useState(false)
   const [contract, setContract] = useState<LoanContract | null>(null)
   const [loadingContract, setLoadingContract] = useState(false)
@@ -251,20 +258,25 @@ export default function ApplicationDetailsPage() {
 
   const handleApprove = async () => {
     if (!applicationId) return
-    
+
     setProcessing(true)
     try {
       const payload: { loanAmount?: number } = {}
       const numericAmount =
-        typeof preApproveAmount === 'string' ? Number(preApproveAmount) : preApproveAmount
+        typeof preApproveAmount === 'string'
+          ? Number(preApproveAmount)
+          : preApproveAmount
       if (Number.isFinite(numericAmount) && numericAmount! > 0) {
         payload.loanAmount = Math.round((numericAmount as number) * 100) / 100
       }
-      const response = await fetch(`/api/admin/applications/${applicationId}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/approve`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }
+      )
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -275,13 +287,13 @@ export default function ApplicationDetailsPage() {
       setProcessing(false)
       setShowApproveModal(false)
       alert('Application pre-approved and pending loan created.')
-      
+
       // Navigate to the newly created loan if present
       if (data?.loan?.id) {
         router.push(`/admin/loan/${data.loan.id}`)
         return
       }
-      
+
       // Refresh application details to show updated status
       await fetchApplicationDetails()
     } catch (err: any) {
@@ -355,7 +367,9 @@ export default function ApplicationDetailsPage() {
     firstPaymentDate?: string
   }
 
-  const handleGenerateContract = async (options?: ContractGenerationOptions) => {
+  const handleGenerateContract = async (
+    options?: ContractGenerationOptions
+  ) => {
     if (!applicationId) return
 
     setLoadingContract(true)
@@ -367,11 +381,20 @@ export default function ApplicationDetailsPage() {
       if (options?.paymentFrequency) {
         payload.paymentFrequency = options.paymentFrequency
       }
-      if (options?.numberOfPayments && Number.isFinite(options.numberOfPayments)) {
-        payload.numberOfPayments = Math.max(1, Math.round(options.numberOfPayments))
+      if (
+        options?.numberOfPayments &&
+        Number.isFinite(options.numberOfPayments)
+      ) {
+        payload.numberOfPayments = Math.max(
+          1,
+          Math.round(options.numberOfPayments)
+        )
       }
       if (options?.loanAmount && Number.isFinite(options.loanAmount)) {
-        payload.loanAmount = Math.max(0, Math.round(options.loanAmount * 100) / 100)
+        payload.loanAmount = Math.max(
+          0,
+          Math.round(options.loanAmount * 100) / 100
+        )
       }
       if (options?.nextPaymentDate) {
         const parsedDate = new Date(options.nextPaymentDate)
@@ -380,13 +403,16 @@ export default function ApplicationDetailsPage() {
         }
       }
 
-      const response = await fetch(`/api/admin/applications/${applicationId}/contract/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      })
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/contract/generate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        }
+      )
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -396,7 +422,7 @@ export default function ApplicationDetailsPage() {
       const result = await response.json()
       setContract(result.contract)
       setShowContractViewer(true)
-      
+
       // Refresh application details
       await fetchApplicationDetails()
     } catch (error: any) {
@@ -412,7 +438,9 @@ export default function ApplicationDetailsPage() {
 
     setLoadingContract(true)
     try {
-      const response = await fetch(`/api/admin/applications/${applicationId}/contract`)
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/contract`
+      )
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -441,13 +469,16 @@ export default function ApplicationDetailsPage() {
 
     setLoadingContract(true)
     try {
-      const response = await fetch(`/api/admin/applications/${applicationId}/contract/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ method: 'email' })
-      })
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/contract/send`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ method: 'email' })
+        }
+      )
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -456,10 +487,10 @@ export default function ApplicationDetailsPage() {
 
       const result = await response.json()
       setContract(result.contract)
-      
+
       // Refresh application details
       await fetchApplicationDetails()
-      
+
       alert('Contract sent successfully!')
     } catch (error: any) {
       console.error('Error sending contract:', error)
@@ -507,7 +538,7 @@ export default function ApplicationDetailsPage() {
     { id: 'ibv' as const, label: 'IBV Verification', icon: '🔐' },
     { id: 'documents' as const, label: 'Documents', icon: '📄' },
     { id: 'details' as const, label: 'Details', icon: 'ℹ️' },
-    { id: 'timeline' as const, label: 'Timeline', icon: '⏱️' },
+    { id: 'timeline' as const, label: 'Timeline', icon: '⏱️' }
   ]
 
   return (
@@ -540,45 +571,67 @@ export default function ApplicationDetailsPage() {
                 Application Details
               </h1>
               <span className='text-xs text-gray-400'>•</span>
-              <span className='text-xs font-mono text-gray-500'>
+              <span className='font-mono text-xs text-gray-500'>
                 {application.id.slice(0, 8)}
               </span>
             </div>
           </div>
 
           <div className='flex items-center gap-3'>
-              {/* Pre-Approve and Reject Actions */}
-        {application && application.application_status !== 'pre_approved' && application.application_status !== 'rejected' && (
-          <div className='border-b border-gray-200 bg-white px-6 py-4'>
-            <div className='flex items-center justify-center gap-4'>
-              <button
-                onClick={() => {
-                  setPreApproveAmount(application.loan_amount)
-                  setShowApproveModal(true)
-                }}
-                disabled={processing}
-                className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg disabled:opacity-50'
-              >
-                Pre-Approve Application
-              </button>
-              <button
-                onClick={() => setShowRejectModal(true)}
-                disabled={processing}
-                className='rounded-lg border border-red-300 bg-white px-6 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50'
-              >
-                Reject Application
-              </button>
-            </div>
-          </div>
-        )}
+            <button
+              onClick={fetchApplicationDetails}
+              disabled={loading}
+              className='flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50'
+              title='Refresh application details'
+            >
+              <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+            {/* Pre-Approve and Reject Actions */}
+            {application &&
+              application.application_status !== 'pre_approved' &&
+              application.application_status !== 'rejected' && (
+                <div className='border-b border-gray-200 bg-white px-6 py-4'>
+                  <div className='flex items-center justify-center gap-4'>
+                    <button
+                      onClick={() => {
+                        setPreApproveAmount(application.loan_amount)
+                        setShowApproveModal(true)
+                      }}
+                      disabled={processing}
+                      className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg disabled:opacity-50'
+                    >
+                      Pre-Approve Application
+                    </button>
+                    <button
+                      onClick={() => setShowRejectModal(true)}
+                      disabled={processing}
+                      className='rounded-lg border border-red-300 bg-white px-6 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50'
+                    >
+                      Reject Application
+                    </button>
+                  </div>
+                </div>
+              )}
             {/* Client Info - Compact */}
             <div className='flex items-center gap-2'>
-              <svg className='h-4 w-4 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' />
+              <svg
+                className='h-4 w-4 text-gray-400'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+                />
               </svg>
               {application.users?.id ? (
                 <button
-                  onClick={() => router.push(`/admin/clients/${application.users?.id}`)}
+                  onClick={() =>
+                    router.push(`/admin/clients/${application.users?.id}`)
+                  }
                   className='text-sm font-semibold text-gray-900 transition-colors hover:text-blue-600'
                 >
                   {application.users?.first_name} {application.users?.last_name}
@@ -597,12 +650,10 @@ export default function ApplicationDetailsPage() {
           </div>
         </div>
 
-      
-
         {/* Modern Tabs */}
         <div className='border-b border-gray-200 bg-white px-6'>
           <div className='flex items-center gap-1'>
-            {tabs.map((tab) => (
+            {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -625,7 +676,6 @@ export default function ApplicationDetailsPage() {
         {/* Tab Content - Scrollable */}
         <div className='flex-1 overflow-y-auto bg-gray-50'>
           <div className='mx-auto max-w-7xl px-6 py-6'>
-
             {/* Tab: Overview */}
             {activeTab === 'overview' && (
               <OverviewTab
@@ -644,20 +694,20 @@ export default function ApplicationDetailsPage() {
             {/* Tab: IBV Verification */}
             {activeTab === 'ibv' && (
               <IbvTab
-                  applicationId={applicationId}
-                  onViewTransactions={accountIndex => {
-                    setSelectedAccountIndex(accountIndex)
-                    setShowTransactionsModal(true)
-                  }}
-                />
+                applicationId={applicationId}
+                onViewTransactions={accountIndex => {
+                  setSelectedAccountIndex(accountIndex)
+                  setShowTransactionsModal(true)
+                }}
+              />
             )}
 
             {/* Tab: Documents */}
             {activeTab === 'documents' && (
               <DocumentsTab
-                  clientId={application.users?.id || ''}
-                  applicationId={applicationId}
-                />
+                clientId={application.users?.id || ''}
+                applicationId={applicationId}
+              />
             )}
 
             {/* Tab: Details */}
@@ -669,7 +719,7 @@ export default function ApplicationDetailsPage() {
             {activeTab === 'timeline' && (
               <TimelineTab application={application} />
             )}
-                          </div>
+          </div>
         </div>
 
         {/* Approve Modal */}
@@ -684,20 +734,28 @@ export default function ApplicationDetailsPage() {
                   Set the pre-approved amount. A pending loan will be created.
                 </p>
                 <div className='mt-4'>
-                  <label className='mb-1 block text-xs font-medium text-gray-700'>Amount (CAD)</label>
+                  <label className='mb-1 block text-xs font-medium text-gray-700'>
+                    Amount (CAD)
+                  </label>
                   <input
                     type='number'
                     min={1}
                     step='0.01'
                     value={preApproveAmount === '' ? '' : preApproveAmount}
-                    onChange={(e) => {
+                    onChange={e => {
                       const v = e.target.value
                       setPreApproveAmount(v === '' ? '' : Number(v))
                     }}
                     className='w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500'
                   />
                   <p className='mt-1 text-[10px] text-gray-500'>
-                    Defaults to requested amount: {application ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(application.loan_amount) : '-'}
+                    Defaults to requested amount:{' '}
+                    {application
+                      ? new Intl.NumberFormat('en-CA', {
+                          style: 'currency',
+                          currency: 'CAD'
+                        }).format(application.loan_amount)
+                      : '-'}
                   </p>
                 </div>
               </div>

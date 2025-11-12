@@ -286,6 +286,22 @@ export async function GET(
         )
       }
 
+      // Update ibv_status on loan_application
+      try {
+        await (supabase as any)
+          .from('loan_applications')
+          .update({
+            ibv_status: statusToPersist,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetApplicationId)
+      } catch (appUpdateError) {
+        console.warn(
+          '[Inverite Fetch] Failed to update loan_application ibv_status for pending status',
+          appUpdateError
+        )
+      }
+
       console.log(
         '[Inverite Fetch] Inverite response pending, no account data yet:',
         {
@@ -350,11 +366,15 @@ export async function GET(
     // Persist recomputed summary
     const targetApplicationId = applicationId || (matchingApplication as any).id
 
+    const verifiedAt = updatedProviderData.verified_at || new Date().toISOString()
+
     const { error: updateError } = await (supabase as any)
       .from('loan_applications')
       .update({
+        ibv_status: 'verified',
         ibv_results: ibvSummary,
         ibv_provider_data: updatedProviderData,
+        ibv_verified_at: verifiedAt,
         updated_at: new Date().toISOString()
       })
       .eq('id', targetApplicationId)
