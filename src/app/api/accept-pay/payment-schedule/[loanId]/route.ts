@@ -30,11 +30,13 @@ export async function GET(
     }
 
     // Check if user owns this loan or is staff
-    const { data: loan } = await supabase
+    const { data } = await supabase
       .from('loans')
       .select('user_id')
       .eq('id', loanId)
       .single()
+
+    const loan = data as { user_id: string } | null
 
     if (!loan) {
       return NextResponse.json({ error: 'Loan not found' }, { status: 404 })

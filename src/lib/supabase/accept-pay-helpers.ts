@@ -10,7 +10,6 @@
 import type {
   User,
   UserUpdate,
-  Loan,
   LoanUpdate,
   LoanPayment,
   LoanPaymentInsert,
@@ -25,6 +24,7 @@ import type {
   PaymentScheduleStatus,
   Database
 } from './types'
+import { Loan } from '@/src/types'
 import { createClient } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAcceptPayClient } from '@/src/lib/accept-pay/client'
@@ -108,11 +108,13 @@ export async function createAcceptPayCustomer(
 
   try {
     // Get user data
-    const { data: user, error: userError } = await supabase
+    const { data, error: userError } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
       .single()
+
+    const user = data as User | null
 
     if (userError || !user) {
       return { success: false, customerId: null, error: 'User not found' }
@@ -140,17 +142,23 @@ export async function createAcceptPayCustomer(
     }
 
     // Get bank account from loan contract (most recent signed contract)
-    const { data: contract } = await supabase
+    const { data: applicationData } = await supabase
+      .from('loan_applications')
+      .select('id')
+      .eq('client_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    const applicationId = (applicationData as { id: string } | null)?.id || ''
+
+    const { data: contractData } = await supabase
       .from('loan_contracts')
       .select('bank_account')
-      .eq('loan_application_id', (await supabase
-        .from('loan_applications')
-        .select('id')
-        .eq('client_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()).data?.id || '')
+      .eq('loan_application_id', applicationId)
       .single()
+
+    const contract = contractData as { bank_account: any } | null
 
     const bankAccount = contract?.bank_account as {
       institution_number?: string
@@ -174,14 +182,15 @@ export async function createAcceptPayCustomer(
     const response = await acceptPayClient.createCustomer(customerData)
 
     // Update user with Accept Pay customer ID
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({
-        accept_pay_customer_id: response.Id,
-        accept_pay_customer_status: 'active',
-        accept_pay_customer_created_at: new Date().toISOString(),
-        accept_pay_customer_updated_at: new Date().toISOString()
-      })
+    const updatePayload: UserUpdate = {
+      accept_pay_customer_id: response.Id,
+      accept_pay_customer_status: 'active',
+      accept_pay_customer_created_at: new Date().toISOString(),
+      accept_pay_customer_updated_at: new Date().toISOString()
+    }
+    const { error: updateError } = await (supabase
+      .from('users') as any)
+      .update(updatePayload)
       .eq('id', userId)
 
     if (updateError) {
@@ -217,7 +226,8 @@ export async function getAcceptPayCustomerId(
     return null
   }
 
-  return data.accept_pay_customer_id
+  const userData = data as { accept_pay_customer_id: number | null } | null
+  return userData?.accept_pay_customer_id ?? null
 }
 
 /**
@@ -232,12 +242,13 @@ export async function updateAcceptPayCustomerStatus(
     ? await (await import('./server')).createServerSupabaseClient()
     : createClient()
 
-  const { error } = await supabase
-    .from('users')
-    .update({
-      accept_pay_customer_status: status,
-      accept_pay_customer_updated_at: new Date().toISOString()
-    })
+  const updatePayload: UserUpdate = {
+    accept_pay_customer_status: status,
+    accept_pay_customer_updated_at: new Date().toISOString()
+  }
+  const { error } = await (supabase
+    .from('users') as any)
+    .update(updatePayload)
     .eq('id', userId)
 
   if (error) {
@@ -265,15 +276,17 @@ export async function initiateDisbursement(
 
   try {
     // Get loan data
-    const { data: loan, error: loanError } = await supabase
+    const { data: loanData, error: loanError } = await supabase
       .from('loans')
       .select('*, users!loans_user_id_fkey(*)')
       .eq('id', loanId)
       .single()
 
-    if (loanError || !loan) {
+    if (loanError || !loanData) {
       return { success: false, transactionId: null, error: 'Loan not found' }
     }
+
+    const loan = loanData as Loan & { users: User }
 
     const user = loan.users as User
 
@@ -306,15 +319,16 @@ export async function initiateDisbursement(
     })
 
     // Update loan with transaction details
-    const { error: updateError } = await supabase
-      .from('loans')
-      .update({
-        accept_pay_customer_id: customerId,
-        disbursement_transaction_id: transactionResponse.Id,
-        disbursement_process_date: processDate,
-        disbursement_status: '101', // Initiated
-        disbursement_initiated_at: new Date().toISOString()
-      })
+    const loanUpdatePayload: LoanUpdate = {
+      accept_pay_customer_id: customerId,
+      disbursement_transaction_id: transactionResponse.Id,
+      disbursement_process_date: processDate,
+      disbursement_status: '101', // Initiated
+      disbursement_initiated_at: new Date().toISOString()
+    }
+    const { error: updateError } = await (supabase
+      .from('loans') as any)
+      .update(loanUpdatePayload)
       .eq('id', loanId)
 
     if (updateError) {
@@ -341,11 +355,13 @@ export async function authorizeDisbursement(
     : createClient()
 
   try {
-    const { data: loan, error: loanError } = await supabase
+    const { data: loanData, error: loanError } = await supabase
       .from('loans')
       .select('disbursement_transaction_id')
       .eq('id', loanId)
       .single()
+
+    const loan = loanData as { disbursement_transaction_id: number | null } | null
 
     if (loanError || !loan?.disbursement_transaction_id) {
       return { success: false, error: 'Loan or transaction not found' }
@@ -355,12 +371,13 @@ export async function authorizeDisbursement(
     await acceptPayClient.authorizeTransaction(loan.disbursement_transaction_id)
 
     // Update loan
-    const { error: updateError } = await supabase
-      .from('loans')
-      .update({
-        disbursement_status: '101', // Authorized
-        disbursement_authorized_at: new Date().toISOString()
-      })
+    const loanUpdatePayload: LoanUpdate = {
+      disbursement_status: '101', // Authorized
+      disbursement_authorized_at: new Date().toISOString()
+    }
+    const { error: updateError } = await (supabase
+      .from('loans') as any)
+      .update(loanUpdatePayload)
       .eq('id', loanId)
 
     if (updateError) {
@@ -398,7 +415,9 @@ export async function updateDisbursementStatus(
     updateData.disbursement_date = new Date().toISOString().split('T')[0]
 
     // Get loan details to create payment schedule
-    const { data: loan } = await supabase.from('loans').select('*').eq('id', loanId).single()
+    const { data: loanData } = await supabase.from('loans').select('*').eq('id', loanId).single()
+
+    const loan = loanData as Loan | null
 
     if (loan) {
       // Calculate payment amount (principal + interest) / term_months
@@ -423,7 +442,7 @@ export async function updateDisbursementStatus(
     updateData.disbursement_error_code = errorCode
   }
 
-  const { error } = await supabase.from('loans').update(updateData).eq('id', loanId)
+  const { error } = await (supabase.from('loans') as any).update(updateData).eq('id', loanId)
 
   if (error) {
     console.error('Error updating disbursement status:', error)
@@ -454,9 +473,11 @@ export async function getDisbursementStatus(
     return { status: null, transactionId: null }
   }
 
+  const loanData = data as { disbursement_status: string | null; disbursement_transaction_id: number | null } | null
+
   return {
-    status: data.disbursement_status,
-    transactionId: data.disbursement_transaction_id
+    status: loanData?.disbursement_status ?? null,
+    transactionId: loanData?.disbursement_transaction_id ?? null
   }
 }
 
@@ -495,7 +516,7 @@ export async function createPaymentSchedule(
       })
     }
 
-    const { error } = await supabase.from('loan_payment_schedule').insert(schedules)
+    const { error } = await (supabase.from('loan_payment_schedule') as any).insert(schedules)
 
     if (error) {
       console.error('Error creating payment schedule:', error)
@@ -532,7 +553,10 @@ export async function initiatePaymentCollection(
       return { success: false, transactionId: null, error: 'Payment schedule not found' }
     }
 
-    const loan = schedule.loans as Loan & { users: User }
+    const scheduleData = schedule as LoanPaymentSchedule & {
+      loans: Loan & { users: User }
+    }
+    const loan = scheduleData.loans
 
     // Get customer ID
     const customerId = loan.accept_pay_customer_id || loan.users.accept_pay_customer_id
@@ -546,30 +570,31 @@ export async function initiatePaymentCollection(
     const processDate = minDateResponse.MinProcessDate
 
     // Use scheduled date if it's >= min process date, otherwise use min process date
-    const scheduledDate = new Date(schedule.scheduled_date)
+    const scheduledDate = new Date(scheduleData.scheduled_date)
     const minDate = new Date(minDateResponse.MinProcessDate)
-    const finalProcessDate = scheduledDate >= minDate ? schedule.scheduled_date : minDateResponse.MinProcessDate
+    const finalProcessDate = scheduledDate >= minDate ? scheduleData.scheduled_date : minDateResponse.MinProcessDate
 
     // Create collection transaction (DB = Debit)
     const transactionResponse = await acceptPayClient.createTransaction({
       CustomerId: customerId,
       ProcessDate: finalProcessDate,
-      Amount: schedule.amount,
+      Amount: scheduleData.amount,
       TransactionType: 'DB', // Debit = collect from borrower
       PaymentType: 450, // EFT payment type
       PADTType: 'Business',
       Status: 'Authorized',
-      Memo: `Loan payment #${schedule.payment_number}`,
-      Reference: `PAYMENT-${schedule.id}`
+      Memo: `Loan payment #${scheduleData.payment_number}`,
+      Reference: `PAYMENT-${scheduleData.id}`
     })
 
     // Update schedule
-    const { error: updateError } = await supabase
-      .from('loan_payment_schedule')
-      .update({
-        accept_pay_transaction_id: transactionResponse.Id,
-        status: 'scheduled'
-      })
+    const updatePayload: LoanPaymentScheduleUpdate = {
+      accept_pay_transaction_id: transactionResponse.Id,
+      status: 'scheduled'
+    }
+    const { error: updateError } = await (supabase
+      .from('loan_payment_schedule') as any)
+      .update(updatePayload)
       .eq('id', scheduleId)
 
     if (updateError) {
@@ -602,19 +627,25 @@ export async function authorizePayment(
       .eq('id', scheduleId)
       .single()
 
-    if (scheduleError || !schedule?.accept_pay_transaction_id) {
-      return { success: false, error: 'Payment schedule or transaction not found' }
+    if (scheduleError || !schedule) {
+      return { success: false, error: 'Payment schedule not found' }
+    }
+
+    const scheduleData = schedule as { accept_pay_transaction_id: number | null }
+    if (!scheduleData.accept_pay_transaction_id) {
+      return { success: false, error: 'Transaction not found' }
     }
 
     const acceptPayClient = getAcceptPayClient()
-    await acceptPayClient.authorizeTransaction(schedule.accept_pay_transaction_id)
+    await acceptPayClient.authorizeTransaction(scheduleData.accept_pay_transaction_id)
 
     // Update schedule
-    const { error: updateError } = await supabase
-      .from('loan_payment_schedule')
-      .update({
-        status: 'authorized'
-      })
+    const updatePayload: LoanPaymentScheduleUpdate = {
+      status: 'authorized'
+    }
+    const { error: updateError } = await (supabase
+      .from('loan_payment_schedule') as any)
+      .update(updatePayload)
       .eq('id', scheduleId)
 
     if (updateError) {
@@ -652,6 +683,10 @@ export async function updatePaymentStatus(
       return { success: false, error: 'Payment schedule not found' }
     }
 
+    const scheduleData = schedule as LoanPaymentSchedule & {
+      loans: Loan
+    }
+
     const updateData: LoanPaymentScheduleUpdate = {}
 
     if (status === 'AA') {
@@ -659,20 +694,21 @@ export async function updatePaymentStatus(
       updateData.status = 'collected'
 
       // Create loan payment record
-      const loan = schedule.loans as Loan
-      const { data: payment, error: paymentError } = await supabase
-        .from('loan_payments')
-        .insert({
-          loan_id: schedule.loan_id,
-          amount: schedule.amount,
-          payment_date: new Date().toISOString(),
-          status: 'confirmed',
-          accept_pay_customer_id: loan.accept_pay_customer_id,
-          accept_pay_transaction_id: schedule.accept_pay_transaction_id,
-          process_date: schedule.scheduled_date,
-          accept_pay_status: status,
-          collection_completed_at: new Date().toISOString()
-        })
+      const loan = scheduleData.loans
+      const paymentInsert: LoanPaymentInsert = {
+        loan_id: scheduleData.loan_id,
+        amount: scheduleData.amount,
+        payment_date: new Date().toISOString(),
+        status: 'confirmed',
+        accept_pay_customer_id: loan.accept_pay_customer_id,
+        accept_pay_transaction_id: scheduleData.accept_pay_transaction_id,
+        process_date: scheduleData.scheduled_date,
+        accept_pay_status: status,
+        collection_completed_at: new Date().toISOString()
+      }
+      const { data: payment, error: paymentError } = await (supabase
+        .from('loan_payments') as any)
+        .insert(paymentInsert)
         .select()
         .single()
 
@@ -680,28 +716,30 @@ export async function updatePaymentStatus(
         return { success: false, error: 'Failed to create payment record' }
       }
 
-      updateData.loan_payment_id = payment.id
+      const paymentData = payment as LoanPayment
+      updateData.loan_payment_id = paymentData.id
 
       // Update loan remaining balance
       const { data: loanData } = await supabase
         .from('loans')
         .select('remaining_balance')
-        .eq('id', schedule.loan_id)
+        .eq('id', scheduleData.loan_id)
         .single()
 
       if (loanData) {
-        const newBalance = Math.max(0, (loanData.remaining_balance || 0) - schedule.amount)
-        await supabase
-          .from('loans')
+        const loanDataTyped = loanData as { remaining_balance: number | null }
+        const newBalance = Math.max(0, (loanDataTyped.remaining_balance || 0) - scheduleData.amount)
+        await (supabase
+          .from('loans') as any)
           .update({ remaining_balance: newBalance })
-          .eq('id', schedule.loan_id)
+          .eq('id', scheduleData.loan_id)
       }
     } else if (errorCode) {
       updateData.status = 'failed'
     }
 
-    const { error: updateError } = await supabase
-      .from('loan_payment_schedule')
+    const { error: updateError } = await (supabase
+      .from('loan_payment_schedule') as any)
       .update(updateData)
       .eq('id', scheduleId)
 
@@ -735,19 +773,25 @@ export async function voidPayment(
       .eq('id', scheduleId)
       .single()
 
-    if (scheduleError || !schedule?.accept_pay_transaction_id) {
-      return { success: false, error: 'Payment schedule or transaction not found' }
+    if (scheduleError || !schedule) {
+      return { success: false, error: 'Payment schedule not found' }
+    }
+
+    const scheduleData = schedule as { accept_pay_transaction_id: number | null }
+    if (!scheduleData.accept_pay_transaction_id) {
+      return { success: false, error: 'Transaction not found' }
     }
 
     const acceptPayClient = getAcceptPayClient()
-    await acceptPayClient.voidTransaction(schedule.accept_pay_transaction_id)
+    await acceptPayClient.voidTransaction(scheduleData.accept_pay_transaction_id)
 
     // Update schedule
-    const { error: updateError } = await supabase
-      .from('loan_payment_schedule')
-      .update({
-        status: 'cancelled'
-      })
+    const updatePayload: LoanPaymentScheduleUpdate = {
+      status: 'cancelled'
+    }
+    const { error: updateError } = await (supabase
+      .from('loan_payment_schedule') as any)
+      .update(updatePayload)
       .eq('id', scheduleId)
 
     if (updateError) {
@@ -787,7 +831,8 @@ export async function syncTransactionUpdates(
       .limit(1)
       .single()
 
-    const changedSince = lastSync?.last_sync_at || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() // Default to 7 days ago
+    const lastSyncData = lastSync as { last_sync_at: string } | null
+    const changedSince = lastSyncData?.last_sync_at || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() // Default to 7 days ago
 
     // Get transaction updates from Accept Pay
     const acceptPayClient = getAcceptPayClient()
@@ -810,7 +855,8 @@ export async function syncTransactionUpdates(
           .single()
 
         if (loan) {
-          await updateDisbursementStatus(loan.id, status, update.ErrorCode, isServer)
+          const loanData = loan as { id: string }
+          await updateDisbursementStatus(loanData.id, status, update.ErrorCode, isServer)
           transactionsSynced++
           continue
         }
@@ -823,7 +869,8 @@ export async function syncTransactionUpdates(
           .single()
 
         if (schedule) {
-          await updatePaymentStatus(schedule.id, status, update.ErrorCode, isServer)
+          const scheduleData = schedule as { id: string }
+          await updatePaymentStatus(scheduleData.id, status, update.ErrorCode, isServer)
           transactionsSynced++
         }
       } catch (error: any) {
@@ -860,7 +907,7 @@ export async function logSync(
     errors: errors
   }
 
-  const { error } = await supabase.from('accept_pay_sync_log').insert(syncLog)
+  const { error } = await (supabase.from('accept_pay_sync_log') as any).insert(syncLog)
 
   if (error) {
     console.error('Error logging sync:', error)
@@ -889,6 +936,7 @@ export async function getLastSyncTime(isServer = true): Promise<string | null> {
     return null
   }
 
-  return data.last_sync_at
+  const syncLogData = data as { last_sync_at: string }
+  return syncLogData.last_sync_at
 }
 

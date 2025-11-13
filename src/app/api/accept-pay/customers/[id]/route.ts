@@ -6,6 +6,7 @@ import {
   updateAcceptPayCustomerStatus
 } from '@/src/lib/supabase/accept-pay-helpers'
 import { getAcceptPayClient } from '@/src/lib/accept-pay/client'
+import type { User } from '@/src/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,10 +104,12 @@ export async function DELETE(
 
     // Find user with this customer ID and update status
     const supabase = await createServerSupabaseClient()
-    const { data: users } = await supabase
+    const { data } = await supabase
       .from('users')
       .select('id')
       .eq('accept_pay_customer_id', customerId)
+
+    const users = data as Pick<User, 'id'>[] | null
 
     if (users && users.length > 0) {
       for (const user of users) {

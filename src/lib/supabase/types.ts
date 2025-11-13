@@ -720,6 +720,31 @@ export interface RequestFormSubmissionUpdate {
   form_data?: Record<string, any>
 }
 
+// export interface Loan {
+//   id: string
+//   application_id: string
+//   user_id: string
+//   loan_number: number | null
+//   principal_amount: number
+//   interest_rate: number
+//   term_months: number
+//   disbursement_date: string | null
+//   due_date: string | null
+//   remaining_balance: number
+//   status: LoanStatus
+//   accept_pay_customer_id: number | null
+//   disbursement_transaction_id: number | null
+//   disbursement_process_date: string | null
+//   disbursement_status: string | null
+//   disbursement_authorized_at: string | null
+//   disbursement_initiated_at: string | null
+//   disbursement_completed_at: string | null
+//   disbursement_error_code: string | null
+//   disbursement_reference: string | null
+//   created_at: string
+//   updated_at: string
+// }
+
 export interface LoanInsert {
   application_id: string
   user_id: string
