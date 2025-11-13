@@ -148,10 +148,28 @@ export default function UploadDocumentsPage() {
           const latestSubmission = req.submissions?.[0]
           const initialValues: Record<string, any> = {}
 
-          fields.forEach(field => {
-            const fallback = field.defaultValue ?? field.default ?? ''
-            initialValues[field.id] = latestSubmission?.form_data?.[field.id] ?? fallback
-          })
+          // Handle reference requests: convert array format back to individual fields
+          if (req.request_kind === 'reference' && latestSubmission?.form_data?.references) {
+            const refs = Array.isArray(latestSubmission.form_data.references) ? latestSubmission.form_data.references : []
+            if (refs.length > 0 && refs[0]) {
+              initialValues.reference1_first_name = refs[0].first_name || ''
+              initialValues.reference1_last_name = refs[0].last_name || ''
+              initialValues.reference1_phone = refs[0].phone || ''
+              initialValues.reference1_relationship = refs[0].relationship || ''
+            }
+            if (refs.length > 1 && refs[1]) {
+              initialValues.reference2_first_name = refs[1].first_name || ''
+              initialValues.reference2_last_name = refs[1].last_name || ''
+              initialValues.reference2_phone = refs[1].phone || ''
+              initialValues.reference2_relationship = refs[1].relationship || ''
+            }
+          } else {
+            // For other request types, use field-based initialization
+            fields.forEach(field => {
+              const fallback = field.defaultValue ?? field.default ?? ''
+              initialValues[field.id] = latestSubmission?.form_data?.[field.id] ?? fallback
+            })
+          }
 
           nextFormValues[req.id] = initialValues
         }
@@ -343,6 +361,27 @@ export default function UploadDocumentsPage() {
       setSuccess(prev => ({ ...prev, [requestId]: false }))
       setFormErrors(prev => ({ ...prev, [requestId]: null }))
 
+      // Convert reference fields to array format if this is a reference request
+      let submissionData = values
+      if (request.request_kind === 'reference') {
+        const ref1 = {
+          first_name: values.reference1_first_name,
+          last_name: values.reference1_last_name,
+          phone: values.reference1_phone,
+          relationship: values.reference1_relationship
+        }
+        const ref2 = {
+          first_name: values.reference2_first_name,
+          last_name: values.reference2_last_name,
+          phone: values.reference2_phone,
+          relationship: values.reference2_relationship
+        }
+        submissionData = {
+          ...values,
+          references: [ref1, ref2]
+        }
+      }
+
       let submitUrl = `/api/public/document-requests/${requestId}/submit`
       const urlParams = new URLSearchParams()
 
@@ -362,7 +401,7 @@ export default function UploadDocumentsPage() {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ form_data: values })
+        body: JSON.stringify({ form_data: submissionData })
       })
 
       if (!res.ok) {
@@ -820,6 +859,32 @@ export default function UploadDocumentsPage() {
                                   className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
                                   rows={4}
                                 />
+                              ) : r.request_kind === 'reference' ? (
+                                // Special rendering for reference requests - group into 2 reference sections
+                                <div className='space-y-6'>
+                                  {/* Reference 1 */}
+                                  <div className='rounded-lg border border-gray-200 bg-gray-50 p-4'>
+                                    <h4 className='mb-4 text-sm font-semibold text-gray-900'>
+                                      {t('First_Reference') || 'Reference #1'}
+                                    </h4>
+                                    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                                      {fields
+                                        .filter(f => f.id.startsWith('reference1_'))
+                                        .map(field => renderFormField(r.id, field))}
+                                    </div>
+                                  </div>
+                                  {/* Reference 2 */}
+                                  <div className='rounded-lg border border-gray-200 bg-gray-50 p-4'>
+                                    <h4 className='mb-4 text-sm font-semibold text-gray-900'>
+                                      {t('Second_Reference') || 'Reference #2'}
+                                    </h4>
+                                    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                                      {fields
+                                        .filter(f => f.id.startsWith('reference2_'))
+                                        .map(field => renderFormField(r.id, field))}
+                                    </div>
+                                  </div>
+                                </div>
                               ) : (
                                 fields.map(field => renderFormField(r.id, field))
                               )}

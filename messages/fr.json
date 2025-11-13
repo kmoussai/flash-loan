@@ -661,6 +661,14 @@
     "Uploaded_Successfully": "Téléversé avec succès",
     "File_Uploaded_Successfully": "Document téléversé avec succès.",
     "Document_Rejected": "Ce document a été refusé. Veuillez téléverser un nouveau fichier.",
-    "Please_Select_File": "Veuillez sélectionner un fichier."
+    "Please_Select_File": "Veuillez sélectionner un fichier.",
+    "References": "Références",
+    "Reference": "Référence",
+    "Name": "Nom",
+    "Phone": "Téléphone",
+    "Relationship": "Relation",
+    "Notes": "Notes",
+    "No_Information_Provided": "Aucune information fournie",
+    "Submitted_Information": "Informations soumises"
   }
 }

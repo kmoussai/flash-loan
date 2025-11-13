@@ -664,6 +664,14 @@
     "Uploaded_Successfully": "Uploaded successfully",
     "File_Uploaded_Successfully": "File uploaded successfully.",
     "Document_Rejected": "Document was rejected. Please upload a new file.",
-    "Please_Select_File": "Please select a file."
+    "Please_Select_File": "Please select a file.",
+    "References": "References",
+    "Reference": "Reference",
+    "Name": "Name",
+    "Phone": "Phone",
+    "Relationship": "Relationship",
+    "Notes": "Notes",
+    "No_Information_Provided": "No information provided",
+    "Submitted_Information": "Submitted Information"
   }
 }

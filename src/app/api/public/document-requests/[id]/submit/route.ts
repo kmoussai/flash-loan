@@ -115,7 +115,76 @@ export async function POST(
       )
     }
 
-    const formData = body.form_data
+    let formData = body.form_data
+
+    // Validate reference requests: ensure exactly 2 references are provided
+    if (request_kind === 'reference') {
+      // Check if form_data already has references array (from client-side conversion)
+      if (Array.isArray(formData.references)) {
+        if (formData.references.length !== 2) {
+          return NextResponse.json(
+            { error: 'Exactly 2 references are required' },
+            { status: 400 }
+          )
+        }
+        // Validate each reference has required fields
+        for (let i = 0; i < formData.references.length; i++) {
+          const ref = formData.references[i]
+          if (!ref?.first_name || !ref?.last_name || !ref?.phone || !ref?.relationship) {
+            return NextResponse.json(
+              { error: `Reference ${i + 1} is missing required fields (first name, last name, phone, relationship)` },
+              { status: 400 }
+            )
+          }
+        }
+      } else {
+        // Convert individual reference fields to array format
+        const ref1 = {
+          first_name: formData.reference1_first_name,
+          last_name: formData.reference1_last_name,
+          phone: formData.reference1_phone,
+          relationship: formData.reference1_relationship
+        }
+        const ref2 = {
+          first_name: formData.reference2_first_name,
+          last_name: formData.reference2_last_name,
+          phone: formData.reference2_phone,
+          relationship: formData.reference2_relationship
+        }
+
+        // Validate both references have all required fields
+        const missingRef1 = []
+        const missingRef2 = []
+        if (!ref1.first_name) missingRef1.push('first name')
+        if (!ref1.last_name) missingRef1.push('last name')
+        if (!ref1.phone) missingRef1.push('phone')
+        if (!ref1.relationship) missingRef1.push('relationship')
+        if (!ref2.first_name) missingRef2.push('first name')
+        if (!ref2.last_name) missingRef2.push('last name')
+        if (!ref2.phone) missingRef2.push('phone')
+        if (!ref2.relationship) missingRef2.push('relationship')
+
+        if (missingRef1.length > 0 || missingRef2.length > 0) {
+          const errors = []
+          if (missingRef1.length > 0) {
+            errors.push(`Reference 1 is missing: ${missingRef1.join(', ')}`)
+          }
+          if (missingRef2.length > 0) {
+            errors.push(`Reference 2 is missing: ${missingRef2.join(', ')}`)
+          }
+          return NextResponse.json(
+            { error: errors.join('. ') },
+            { status: 400 }
+          )
+        }
+
+        // Convert to array format
+        formData = {
+          ...formData,
+          references: [ref1, ref2]
+        }
+      }
+    }
 
     const nowIso = new Date().toISOString()
 

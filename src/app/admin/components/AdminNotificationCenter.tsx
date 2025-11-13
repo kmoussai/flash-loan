@@ -6,7 +6,7 @@ import useSWR from 'swr'
 import { formatDistanceToNow } from 'date-fns'
 import { cn, fetcher } from '@/lib/utils'
 import type { Notification } from '@/src/types'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Link from '@/src/app/[locale]/components/Button'
 
 interface AdminNotificationCenterProps {
@@ -31,6 +31,12 @@ export function AdminNotificationCenter({
   const [open, setOpen] = useState(false)
   const [isMarkingRead, setIsMarkingRead] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
+  
+  // Detect if we're on admin or client side based on pathname
+  const isAdminContext = useMemo(() => {
+    return pathname?.includes('/admin') ?? false
+  }, [pathname])
 
   const query = useMemo(() => {
     const params = new URLSearchParams()
@@ -100,8 +106,13 @@ export function AdminNotificationCenter({
 
   const resolveNotificationTarget = useCallback((notification: Notification) => {
     const metadata = notification.metadata as Record<string, any> | null | undefined
+    
+    if (!metadata || typeof metadata !== 'object') {
+      return null
+    }
 
-    if (metadata && typeof metadata === 'object') {
+    // Admin context routes
+    if (isAdminContext) {
       if (metadata.type === 'request_submission' && metadata.loanApplicationId) {
         return `/admin/applications/${metadata.loanApplicationId}`
       }
@@ -109,14 +120,54 @@ export function AdminNotificationCenter({
       if (metadata.loanApplicationId) {
         return `/admin/applications/${metadata.loanApplicationId}`
       }
+
+      if (metadata.type === 'contract_event' && metadata.contractId && metadata.loanApplicationId) {
+        return `/admin/applications/${metadata.loanApplicationId}`
+      }
+
+      if (metadata.type === 'application_event' && metadata.loanApplicationId) {
+        return `/admin/applications/${metadata.loanApplicationId}`
+      }
+
+      if (metadata.type === 'ibv_event' && metadata.loanApplicationId) {
+        return `/admin/applications/${metadata.loanApplicationId}`
+      }
+
+      return null
+    }
+
+    // Client context routes (using query params for dashboard sections)
+    // Use current pathname if we're on client dashboard, otherwise construct path
+    const basePath = pathname?.includes('/client/dashboard') 
+      ? pathname 
+      : pathname?.replace(/\/[^/]+$/, '') || '/client/dashboard'
+    
+    if (metadata.type === 'contract_event' && metadata.contractId) {
+      // Navigate to contracts section
+      return `${basePath}?section=contracts`
+    }
+
+    if (metadata.type === 'request_prompt' || metadata.type === 'request_submission') {
+      // Navigate to documents section for document requests
+      return `${basePath}?section=documents`
+    }
+
+    if (metadata.loanApplicationId) {
+      // Navigate to applications section
+      return `${basePath}?section=applications`
+    }
+
+    if (metadata.type === 'application_event' && metadata.loanApplicationId) {
+      return `${basePath}?section=applications`
     }
 
     return null
-  }, [])
+  }, [isAdminContext, pathname])
 
   const handleNotificationClick = useCallback(
     async (notification: Notification) => {
       const target = resolveNotificationTarget(notification)
+      
 
       if (!notification.read_at) {
         await markNotificationsAsRead([notification.id], { silent: true })
