@@ -5,7 +5,7 @@
 export { createClient } from './client'
 export type { Loan } from '@/src/types'
 // Export all types
-export type { 
+export type {
   Database, 
   User, 
   Staff, 
@@ -13,6 +13,8 @@ export type {
   LoanApplication,
   Reference,
   LoanPayment,
+  LoanPaymentSchedule,
+  AcceptPaySyncLog,
   DocumentRequest,
   RequestFormSubmission,
   UserInsert, 
@@ -22,6 +24,8 @@ export type {
   ReferenceInsert,
   LoanInsert,
   LoanPaymentInsert,
+  LoanPaymentScheduleInsert,
+  AcceptPaySyncLogInsert,
   DocumentRequestInsert,
   RequestFormSubmissionInsert,
   LoanContract,
@@ -37,6 +41,7 @@ export type {
   ReferenceUpdate,
   LoanUpdate,
   LoanPaymentUpdate,
+  LoanPaymentScheduleUpdate,
   DocumentRequestUpdate,
   RequestFormSubmissionUpdate,
   StaffRole, 
@@ -45,6 +50,7 @@ export type {
   ApplicationStatus,
   LoanStatus,
   PaymentStatus,
+  PaymentScheduleStatus,
   IncomeSourceType,
   IbvProvider,
   IbvStatus,
@@ -53,7 +59,10 @@ export type {
   InveriteIbvData,
   PlaidIbvData,
   DocumentRequestStatus,
-  RequestKind
+  RequestKind,
+  AcceptPayCustomerStatus,
+  AcceptPayTransactionStatus,
+  AcceptPayTransactionType
 } from './types'
 
 // Export user and staff helpers
@@ -160,3 +169,28 @@ export type {
   NotificationUpdate,
   NotificationRecipient
 } from '@/src/types'
+
+// ===========================
+// ACCEPT PAY HELPERS
+// ===========================
+// ⚠️ SERVER-ONLY: These helpers should ONLY be called from API routes or server-side code.
+// NEVER import these functions in client components.
+
+export {
+  mapUserToAcceptPayCustomer,
+  createAcceptPayCustomer,
+  getAcceptPayCustomerId,
+  updateAcceptPayCustomerStatus,
+  initiateDisbursement,
+  authorizeDisbursement,
+  updateDisbursementStatus,
+  getDisbursementStatus,
+  createPaymentSchedule,
+  initiatePaymentCollection,
+  authorizePayment,
+  updatePaymentStatus,
+  voidPayment,
+  syncTransactionUpdates,
+  logSync,
+  getLastSyncTime
+} from './accept-pay-helpers'
