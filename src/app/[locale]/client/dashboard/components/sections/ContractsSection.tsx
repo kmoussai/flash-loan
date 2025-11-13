@@ -17,6 +17,7 @@ import {
   getContractStatusBadgeClass
 } from '../../utils/formatters'
 import ContractViewer from '@/src/app/admin/components/ContractViewer'
+import ContractSigningModal from '../ContractSigningModal'
 
 interface ClientContract {
   contract: LoanContract
@@ -76,6 +77,8 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
   const [expandedContractId, setExpandedContractId] = useState<string | null>(null)
   const [viewerContract, setViewerContract] = useState<LoanContract | null>(null)
   const [signingId, setSigningId] = useState<string | null>(null)
+  const [signingContract, setSigningContract] = useState<LoanContract | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const contracts = data?.contracts ?? []
 
@@ -139,28 +142,70 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     )
   }
 
-  const handleSign = async (contract: LoanContract) => {
-    setSigningId(contract.id)
+  const handleSignClick = (contract: LoanContract) => {
+    setSigningContract(contract)
+  }
+
+  const handleDownload = async (contractId: string) => {
+    if (downloadingId === contractId) return
+
+    setDownloadingId(contractId)
     try {
-      const response = await fetch(`/api/user/contracts/${contract.id}/sign`, {
+      const response = await fetch(`/api/user/contracts/${contractId}/download`)
+      if (!response.ok) {
+        throw new Error('Failed to get download URL')
+      }
+      const data = await response.json()
+      if (data.signed_url) {
+        // Open the signed URL in a new tab to download
+        window.open(data.signed_url, '_blank', 'noopener,noreferrer')
+      } else {
+        throw new Error('No download URL received')
+      }
+    } catch (error) {
+      console.error('Error downloading contract:', error)
+      alert(t('Contract_Download_Error') || 'Failed to download contract. Please try again.')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  const handleSign = async (signatureName: string) => {
+    if (!signingContract) return
+
+    setSigningId(signingContract.id)
+    try {
+      const response = await fetch(`/api/user/contracts/${signingContract.id}/sign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          signatureMethod: 'click_to_sign'
+          signatureMethod: 'click_to_sign',
+          signatureName: signatureName
         })
       })
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         console.error('[ContractsSection] Failed to sign contract', payload)
+        throw new Error(payload.error || 'Failed to sign contract')
       }
+
+      // Close modal and refresh
+      setSigningContract(null)
+      await mutate()
     } catch (err) {
       console.error('[ContractsSection] Unexpected error signing contract', err)
+      throw err
     } finally {
       setSigningId(null)
-      await mutate()
+    }
+  }
+
+  const handleCloseSigningModal = () => {
+    if (!signingId) {
+      setSigningContract(null)
     }
   }
 
@@ -222,19 +267,21 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                 {t('Contract_View_Button')}
               </button>
               {contract.contract_document_path && (
-                <a
-                  href={contract.contract_document_path}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  className='rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:text-gray-900'
+                <button
+                  type='button'
+                  onClick={() => handleDownload(contract.id)}
+                  disabled={downloadingId === contract.id}
+                  className='rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50'
                 >
-                  {t('Contract_Download_Button')}
-                </a>
+                  {downloadingId === contract.id
+                    ? t('Contract_Downloading') || 'Downloading...'
+                    : t('Contract_Download_Button')}
+                </button>
               )}
               {canSign && !isSigned && (
                 <button
                   type='button'
-                  onClick={() => handleSign(contract)}
+                  onClick={() => handleSignClick(contract)}
                   disabled={signingId === contract.id}
                   className='rounded-lg border border-primary/30 px-3 py-1 text-xs font-semibold text-primary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50'
                 >
@@ -389,6 +436,16 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
             />
           </div>
         </div>
+      )}
+      {signingContract && (
+        <ContractSigningModal
+          contract={signingContract}
+          applicationId={signingContract.loan_application_id}
+          locale={locale}
+          onClose={handleCloseSigningModal}
+          onSign={handleSign}
+          isSigning={signingId === signingContract.id}
+        />
       )}
     </Fragment>
   )

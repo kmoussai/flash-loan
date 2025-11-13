@@ -1,5 +1,6 @@
 'use client'
 import { Link } from '@/src/navigation'
+import NextLink from 'next/link'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
 import { FC, useEffect, useState } from 'react'
@@ -135,7 +136,18 @@ export const Header: FC<Props> = ({ locale }) => {
           {/* Auth Buttons */}
           {!loading && (
             <>
-              {isAuthenticated && isClient ? (
+              {isAuthenticated && !isClient && (
+                <NextLink href={`${window.location.origin}/admin/dashboard`}>
+                  <Button
+                    variant='secondary'
+                    size='small'
+                    className='inline-flex'
+                  >
+                    {t('Admin') || 'Admin'}
+                  </Button>
+                </NextLink>
+              )}
+              {isAuthenticated && isClient && (
                 <Link lang={locale} href='/client/dashboard'>
                   <Button
                     variant='secondary'
@@ -145,7 +157,8 @@ export const Header: FC<Props> = ({ locale }) => {
                     {t('Dashboard') || 'Dashboard'}
                   </Button>
                 </Link>
-              ) : (
+              )}
+              {!isAuthenticated && (
                 /* Login Button */
                 <Link lang={locale} href='/auth/signin'>
                   <Button
@@ -159,7 +172,7 @@ export const Header: FC<Props> = ({ locale }) => {
               )}
             </>
           )}
-          
+
           {/* Apply Now Button - Links to apply page */}
           <Link lang={locale} href='/apply'>
             <Button

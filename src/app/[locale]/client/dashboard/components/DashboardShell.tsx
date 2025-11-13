@@ -95,21 +95,21 @@ export default function DashboardShell({
     router.refresh()
   }
 
-  // useEffect(() => {
-  //   const sectionParam = searchParams.get('section')
-  //   const validSections = new Set(sections.map(section => section.id))
+  useEffect(() => {
+    const sectionParam = searchParams.get('section')
+    const validSections = new Set(sections.map(section => section.id))
 
-  //   if (sectionParam && validSections.has(sectionParam as SectionId)) {
-  //     setActiveSection(prev =>
-  //       prev === sectionParam ? prev : (sectionParam as SectionId)
-  //     )
-  //     return
-  //   }
+    if (sectionParam && validSections.has(sectionParam as SectionId)) {
+      setActiveSection(prev =>
+        prev === sectionParam ? prev : (sectionParam as SectionId)
+      )
+      return
+    }
 
-  //   if (!sectionParam && activeSection !== 'overview') {
-  //     setActiveSection('overview')
-  //   }
-  // }, [searchParams, sections, activeSection])
+    if (!sectionParam && activeSection !== 'overview') {
+      setActiveSection('overview')
+    }
+  }, [searchParams])
 
   const goToApplications = () => handleSectionChange('applications')
   const goToOverview = () => handleSectionChange('overview')

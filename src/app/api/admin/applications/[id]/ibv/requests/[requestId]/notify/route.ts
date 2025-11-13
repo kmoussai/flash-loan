@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { createNotification } from '@/src/lib/supabase'
 import { sendEmail } from '@/src/lib/email/smtp'
 import { generateIbvReminderEmail } from '@/src/lib/email/templates/ibv-reminder'
+import type { NotificationCategory } from '@/src/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -162,6 +164,33 @@ export async function POST(
       })
       .eq('id', ibvRequestId)
       .eq('loan_application_id', applicationId)
+
+    // Create notification for client when pending request notification is sent
+    try {
+      await createNotification(
+        {
+          recipientId: client.id,
+          recipientType: 'client',
+          title: 'Bank verification reminder',
+          message: `Please complete your bank account verification to continue processing your loan application. Check your email for the verification link.`,
+          category: 'ibv_request_notification_sent' as NotificationCategory,
+          metadata: {
+            type: 'ibv_event',
+            loanApplicationId: applicationId,
+            clientId: client.id,
+            provider: 'inverite',
+            status: (ibvRequest as any)?.status || 'pending',
+            requestGuid: requestGuid,
+            requestId: ibvRequestId,
+            notificationSentAt: nowIso
+          }
+        },
+        { client: supabase }
+      )
+    } catch (notificationError) {
+      console.error('[IBV Notify] Failed to create client notification:', notificationError)
+      // Don't fail the request if notification creation fails
+    }
 
     return NextResponse.json({
       success: true,

@@ -222,7 +222,8 @@ export async function POST(
           contract_status: 'generated',
           expires_at: new Date(
             Date.now() + 30 * 24 * 60 * 60 * 1000
-          ).toISOString() // 30 days
+          ).toISOString(), // 30 days
+          bank_account: payload?.account
         },
         true
       )

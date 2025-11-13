@@ -15,7 +15,10 @@ export type NotificationCategory =
   | 'contract_signed'
   | 'contract_viewed'
   | 'application_submitted'
+  | 'application_pre_approved'
   | 'ibv_request_submitted'
+  | 'ibv_request_created'
+  | 'ibv_request_notification_sent'
   | (string & {})
 
 export interface RequestSubmissionNotificationMetadata {
@@ -64,7 +67,10 @@ export interface IbvNotificationMetadata {
   provider: string
   status: string
   requestGuid?: string | null
+  requestId?: string | null
   submittedAt?: string | null
+  createdAt?: string | null
+  notificationSentAt?: string | null
 }
 
 export type NotificationMetadata =

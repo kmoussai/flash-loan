@@ -9,6 +9,7 @@ interface ContractViewerProps {
   onClose: () => void
   onGenerate?: () => void
   onSend?: () => void
+  embedded?: boolean // When true, renders without modal wrapper
 }
 
 export default function ContractViewer({
@@ -16,7 +17,8 @@ export default function ContractViewer({
   applicationId,
   onClose,
   onGenerate,
-  onSend
+  onSend,
+  embedded = false
 }: ContractViewerProps) {
   const [loading, setLoading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -542,6 +544,114 @@ export default function ContractViewer({
     }
   }
 
+  const content = (
+    <>
+      {!embedded && (
+        <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
+          <div>
+            <h2 className='text-xl font-bold text-gray-900'>Loan Contract</h2>
+            {contract && (
+              <p className='text-sm text-gray-500'>
+                Version {contract.contract_version} • {contract.contract_status}
+              </p>
+            )}
+          </div>
+          <div className='flex items-center gap-3'>
+            {onSend && contract && contract.contract_status === 'generated' && (
+              <button
+                onClick={onSend}
+                disabled={loading}
+                className='rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50'
+              >
+                Send Contract
+              </button>
+            )}
+            {contract && (
+              <button
+                onClick={handlePrint}
+                className='rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50'
+              >
+                Print
+              </button>
+            )}
+            {!embedded && (
+              <button
+                onClick={onClose}
+                className='text-gray-400 hover:text-gray-600'
+              >
+                <svg
+                  className='h-6 w-6'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M6 18L18 6M6 6l12 12'
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* PDF Viewer */}
+      <div className={embedded ? 'h-full overflow-auto' : 'h-[calc(90vh-80px)] overflow-auto p-4'}>
+        {!contract ? (
+          <div className='flex h-full items-center justify-center'>
+            <div className='text-center'>
+              <p className='mb-4 text-gray-600'>
+                No contract has been generated for this application yet.
+              </p>
+              {onGenerate && (
+                <button
+                  onClick={onGenerate}
+                  className='rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700'
+                >
+                  Generate Contract
+                </button>
+              )}
+            </div>
+          </div>
+        ) : pdfUrl ? (
+          <iframe
+            src={pdfUrl}
+            className='h-full w-full rounded border'
+            title='Contract PDF'
+          />
+        ) : (
+          <div className='flex h-full items-center justify-center'>
+            <div className='text-center'>
+              <div className='mb-4 text-gray-400'>
+                <svg
+                  className='mx-auto h-12 w-12'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
+                  />
+                </svg>
+              </div>
+              <p className='text-gray-600'>Loading contract...</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  )
+
+  if (embedded) {
+    return <div className='h-full w-full'>{content}</div>
+  }
+
   if (!contract) {
     return (
       <div className='fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50'>
@@ -590,82 +700,7 @@ export default function ContractViewer({
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50'>
       <div className='relative h-[90vh] w-full max-w-6xl rounded-lg bg-white shadow-xl'>
-        {/* Header */}
-        <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
-          <div>
-            <h2 className='text-xl font-bold text-gray-900'>Loan Contract</h2>
-            <p className='text-sm text-gray-500'>
-              Version {contract.contract_version} • {contract.contract_status}
-            </p>
-          </div>
-          <div className='flex items-center gap-3'>
-            {onSend && contract.contract_status === 'generated' && (
-              <button
-                onClick={onSend}
-                disabled={loading}
-                className='rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50'
-              >
-                Send Contract
-              </button>
-            )}
-            <button
-              onClick={handlePrint}
-              className='rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50'
-            >
-              Print
-            </button>
-            <button
-              onClick={onClose}
-              className='text-gray-400 hover:text-gray-600'
-            >
-              <svg
-                className='h-6 w-6'
-                fill='none'
-                viewBox='0 0 24 24'
-                stroke='currentColor'
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M6 18L18 6M6 6l12 12'
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* PDF Viewer */}
-        <div className='h-[calc(90vh-80px)] overflow-auto p-4'>
-          {pdfUrl ? (
-            <iframe
-              src={pdfUrl}
-              className='h-full w-full rounded border'
-              title='Contract PDF'
-            />
-          ) : (
-            <div className='flex h-full items-center justify-center'>
-              <div className='text-center'>
-                <div className='mb-4 text-gray-400'>
-                  <svg
-                    className='mx-auto h-12 w-12'
-                    fill='none'
-                    viewBox='0 0 24 24'
-                    stroke='currentColor'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
-                    />
-                  </svg>
-                </div>
-                <p className='text-gray-600'>Loading contract...</p>
-              </div>
-            </div>
-          )}
-        </div>
+        {content}
       </div>
     </div>
   )

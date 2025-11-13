@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { createNotification } from '@/src/lib/supabase'
+import type { NotificationCategory } from '@/src/types'
 
 // Force dynamic rendering - prevent caching
 export const dynamic = 'force-dynamic'
@@ -221,9 +223,11 @@ export async function POST(
       requested_at: requestedAt
     }
 
-    const { error: insertError } = await (supabase as any)
+    const { data: insertedRequest, error: insertError } = await (supabase as any)
       .from('loan_application_ibv_requests')
       .insert(insertPayload)
+      .select('id')
+      .single()
 
     if (insertError) {
       console.error('[IBV Requests] Failed to insert history row:', insertError)
@@ -232,6 +236,8 @@ export async function POST(
         { status: 500 }
       )
     }
+
+    const ibvRequestId = insertedRequest?.id
 
     const { error: updateError } = await (supabase as any)
       .from('loan_applications')
@@ -255,6 +261,37 @@ export async function POST(
         { error: 'FAILED_TO_UPDATE_APPLICATION' },
         { status: 500 }
       )
+    }
+
+    // Create notification for client when IBV request is created
+    try {
+      const clientFirstName = client.first_name ?? ''
+      const clientLastName = client.last_name ?? ''
+      const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim() || 'Client'
+
+      await createNotification(
+        {
+          recipientId: client.id,
+          recipientType: 'client',
+          title: 'Bank verification requested',
+          message: `We need to verify your bank account information to process your loan application. Please complete the verification process.`,
+          category: 'ibv_request_created' as NotificationCategory,
+          metadata: {
+            type: 'ibv_event',
+            loanApplicationId: applicationId,
+            clientId: client.id,
+            provider: 'inverite',
+            status: 'pending',
+            requestGuid: requestGuid,
+            requestId: ibvRequestId,
+            createdAt: requestedAt
+          }
+        },
+        { client: supabase }
+      )
+    } catch (notificationError) {
+      console.error('[IBV Requests] Failed to create client notification:', notificationError)
+      // Don't fail the request if notification creation fails
     }
 
     return NextResponse.json(

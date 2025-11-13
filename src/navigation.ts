@@ -20,7 +20,8 @@ export const pathnames = {
   '/client/dashboard': '/client/dashboard',
   '/auth/signin': '/auth/signin',
   '/auth/forgot-password': '/auth/forgot-password',
-  '/auth/reset-password': '/auth/reset-password'
+  '/auth/reset-password': '/auth/reset-password',
+  '/admin/dashboard': '/admin/dashboard',
 } satisfies Pathnames<typeof locales>
 
 export const { Link, redirect, usePathname, useRouter, getPathname } =

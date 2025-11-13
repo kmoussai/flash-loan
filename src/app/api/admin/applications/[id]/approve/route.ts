@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { createNotification } from '@/src/lib/supabase'
 import type { LoanApplicationUpdate } from '@/src/lib/supabase/types'
+import type { NotificationCategory } from '@/src/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,10 +34,21 @@ export async function POST(
       payload = {}
     }
 
-    // First, fetch the application details
+    // First, fetch the application details with client info
     const { data: application, error: appError } = await supabase
       .from('loan_applications')
-      .select('id, loan_amount, client_id, application_status, interest_rate')
+      .select(`
+        id, 
+        loan_amount, 
+        client_id, 
+        application_status, 
+        interest_rate,
+        users:client_id (
+          id,
+          first_name,
+          last_name
+        )
+      `)
       .eq('id', applicationId)
       .single()
 
@@ -54,6 +67,11 @@ export async function POST(
       client_id: string
       application_status: string
       interest_rate: number | null
+      users?: {
+        id: string
+        first_name: string | null
+        last_name: string | null
+      } | null
     }
 
     // Check if application is already pre-approved
@@ -115,6 +133,41 @@ export async function POST(
         { error: 'Failed to create loan', details: loanError.message },
         { status: 500 }
       )
+    }
+
+    // Create notification for client
+    try {
+      const clientInfo = app.users
+      const clientFirstName = clientInfo?.first_name ?? ''
+      const clientLastName = clientInfo?.last_name ?? ''
+      const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim() || 'Client'
+      
+      const loanAmountFormatted = new Intl.NumberFormat('en-CA', {
+        style: 'currency',
+        currency: 'CAD'
+      }).format(principalAmount)
+
+      await createNotification(
+        {
+          recipientId: app.client_id,
+          recipientType: 'client',
+          title: 'Loan application pre-approved',
+          message: `Congratulations! Your loan application for ${loanAmountFormatted} has been pre-approved.`,
+          category: 'application_pre_approved' as NotificationCategory,
+          metadata: {
+            type: 'application_event',
+            loanApplicationId: app.id,
+            clientId: app.client_id,
+            status: 'pre_approved',
+            submittedAt: null,
+            preApprovedAt: new Date().toISOString()
+          }
+        },
+        { client: supabase }
+      )
+    } catch (notificationError) {
+      console.error('[POST /api/admin/applications/:id/approve] Failed to create client notification:', notificationError)
+      // Don't fail the request if notification creation fails
     }
 
     return NextResponse.json({
