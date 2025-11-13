@@ -65,6 +65,74 @@ const EMPLOYMENT_DEFAULT_FORM_SCHEMA = {
   ]
 }
 
+const REFERENCE_DEFAULT_FORM_SCHEMA = {
+  title: 'Reference Information',
+  description:
+    'Please provide contact information for 2 references who can verify your character and reliability.',
+  submit_label: 'Submit References',
+  requires_references: true,
+  min_references: 2,
+  max_references: 2,
+  fields: [
+    {
+      id: 'reference1_first_name',
+      label: 'Reference 1 - First Name',
+      type: 'text',
+      required: true,
+      placeholder: 'First name'
+    },
+    {
+      id: 'reference1_last_name',
+      label: 'Reference 1 - Last Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Last name'
+    },
+    {
+      id: 'reference1_phone',
+      label: 'Reference 1 - Phone Number',
+      type: 'phone',
+      required: true,
+      placeholder: '(555) 555-5555'
+    },
+    {
+      id: 'reference1_relationship',
+      label: 'Reference 1 - Relationship',
+      type: 'text',
+      required: true,
+      placeholder: 'e.g., Friend, Family, Colleague'
+    },
+    {
+      id: 'reference2_first_name',
+      label: 'Reference 2 - First Name',
+      type: 'text',
+      required: true,
+      placeholder: 'First name'
+    },
+    {
+      id: 'reference2_last_name',
+      label: 'Reference 2 - Last Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Last name'
+    },
+    {
+      id: 'reference2_phone',
+      label: 'Reference 2 - Phone Number',
+      type: 'phone',
+      required: true,
+      placeholder: '(555) 555-5555'
+    },
+    {
+      id: 'reference2_relationship',
+      label: 'Reference 2 - Relationship',
+      type: 'text',
+      required: true,
+      placeholder: 'e.g., Friend, Family, Colleague'
+    }
+  ]
+}
+
 // POST /api/admin/loan-apps/:id/request-docs
 // Body: {
 //   requests?: Array<{ document_type_id: string, request_kind?: 'document' | 'address' | 'reference' | 'employment' | 'other', form_schema?: Record<string, any> }>,
@@ -141,6 +209,8 @@ export async function POST(
           ? providedFormSchema
           : requestKind === 'employment'
             ? EMPLOYMENT_DEFAULT_FORM_SCHEMA
+            : requestKind === 'reference'
+            ? REFERENCE_DEFAULT_FORM_SCHEMA
             : {}
 
       normalizedRequests.push({

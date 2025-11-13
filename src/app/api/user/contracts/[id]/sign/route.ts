@@ -8,6 +8,10 @@ import type { NotificationCategory } from '@/src/types'
 import { buildContractTermsFromApplication } from '@/src/lib/contracts/terms'
 import type { PaymentFrequency } from '@/src/types'
 import { createAcceptPayCustomer } from '@/src/lib/supabase/accept-pay-helpers'
+import {
+  generateSignedContractPDF,
+  generateComplianceMetadata
+} from '@/src/lib/contracts/pdf-generator'
 
 export async function POST(
   request: NextRequest,
@@ -40,10 +44,7 @@ export async function POST(
       .from('loan_contracts' as any)
       .select(
         `
-          id,
-          loan_application_id,
-          contract_status,
-          client_signed_at,
+          *,
           loan_applications!inner (
             id,
             client_id
@@ -80,7 +81,18 @@ export async function POST(
       typeof body?.signatureMethod === 'string'
         ? body.signatureMethod
         : 'click_to_sign'
+    const signatureName =
+      typeof body?.signatureName === 'string' && body.signatureName.trim()
+        ? body.signatureName.trim()
+        : null
     const device = typeof body?.signedFromDevice === 'string' ? body.signedFromDevice : undefined
+
+    if (!signatureName) {
+      return NextResponse.json(
+        { error: 'Signature name is required' },
+        { status: 400 }
+      )
+    }
 
     const ip =
       request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
@@ -89,17 +101,78 @@ export async function POST(
     const userAgent = request.headers.get('user-agent') ?? 'Unknown'
     const signedAt = new Date().toISOString()
 
+    // Generate signed PDF
+    let pdfResult: Awaited<ReturnType<typeof generateSignedContractPDF>> | null = null
+    let signedDocumentPath: string | null = null
+
+    try {
+      pdfResult = await generateSignedContractPDF(
+        contractRow as any,
+        signatureName,
+        signedAt
+      )
+
+      // Upload PDF to Supabase storage
+      // Convert Uint8Array to Buffer for proper upload
+      const pdfBuffer = Buffer.from(pdfResult.pdfBytes)
+      
+      const bucket = adminClient.storage.from('contracts')
+      const { error: uploadError, data: uploadData } = await bucket.upload(
+        pdfResult.filePath,
+        pdfBuffer,
+        {
+          contentType: 'application/pdf',
+          upsert: false,
+          cacheControl: '3600'
+        }
+      )
+
+      if (uploadError) {
+        console.error(
+          '[POST /api/user/contracts/:id/sign] Failed to upload signed PDF:',
+          uploadError
+        )
+        // Continue even if upload fails - we'll still save the hash
+      } else {
+        // Store the file path (without bucket prefix, as bucket is implicit)
+        signedDocumentPath = pdfResult.filePath
+      }
+    } catch (pdfError) {
+      console.error(
+        '[POST /api/user/contracts/:id/sign] Failed to generate signed PDF:',
+        pdfError
+      )
+      // Continue with signing even if PDF generation fails
+      // The contract can be signed without PDF, but PDF is preferred
+    }
+
+    // Generate compliance metadata
+    const complianceMetadata = pdfResult
+      ? generateComplianceMetadata(
+          contractRow as any,
+          signatureName,
+          signedAt,
+          ip,
+          userAgent,
+          pdfResult.hash
+        )
+      : null
+
     const { data: updated, error: updateError } = await (adminClient as any)
       .from('loan_contracts')
       .update({
         contract_status: 'signed',
         client_signed_at: signedAt,
+        contract_document_path: signedDocumentPath || undefined,
         client_signature_data: {
           signature_method: signatureMethod,
+          signature_name: signatureName,
           ip_address: ip,
           user_agent: userAgent,
           signature_timestamp: signedAt,
-          signed_from_device: device ?? null
+          signed_from_device: device ?? null,
+          pdf_hash: pdfResult?.hash || null,
+          compliance_metadata: complianceMetadata || null
         }
       })
       .eq('id', contractId)
@@ -136,6 +209,7 @@ export async function POST(
 
     try {
       const updatedContract = updated as any
+      // Payment schedule is stored in contract_terms.payment_schedule (source of truth)
       const contractTerms = updatedContract.contract_terms as {
         payment_schedule?: Array<{
           due_date: string
@@ -154,10 +228,11 @@ export async function POST(
           Number(updatedContract.contract_terms?.principal_amount) ||
           null
 
+        // Update loan basic fields
+        // Note: payment_schedule is stored in contract_terms.payment_schedule, not in loans table
         const { error: loanError } = await (adminClient as any)
           .from('loans')
           .update({
-            payment_schedule: schedule,
             disbursement_date: updatedContract.loan?.disbursement_date ?? signedAt,
             due_date: lastDue?.due_date ?? updatedContract.loan?.due_date ?? null,
             remaining_balance:
@@ -167,13 +242,79 @@ export async function POST(
 
         if (loanError) {
           console.error(
-            '[POST /api/user/contracts/:id/sign] Failed to update loan schedule:',
+            '[POST /api/user/contracts/:id/sign] Failed to update loan:',
             loanError
+          )
+        }
+
+        // Populate payment schedule to loan_payment_schedule table for payment processing/tracking
+        // This creates individual records for each scheduled payment
+        if (schedule.length > 0) {
+          try {
+            // Format dates properly (ensure YYYY-MM-DD format for date type)
+            const scheduleEntries = schedule.map((item: any, index: number) => {
+              // Extract date part if it's a full ISO timestamp
+              let scheduledDate = item.due_date
+              if (scheduledDate && scheduledDate.includes('T')) {
+                scheduledDate = scheduledDate.split('T')[0]
+              }
+
+              return {
+                loan_id: updatedContract.loan.id,
+                scheduled_date: scheduledDate,
+                amount: Number(item.amount) || 0,
+                payment_number: index + 1,
+                status: 'pending' as const
+              }
+            })
+
+            // Delete existing schedule entries for this loan (if any) to avoid duplicates
+            const { error: deleteError } = await (adminClient as any)
+              .from('loan_payment_schedule')
+              .delete()
+              .eq('loan_id', updatedContract.loan.id)
+
+            if (deleteError) {
+              console.warn(
+                '[POST /api/user/contracts/:id/sign] Could not delete existing payment schedule entries:',
+                deleteError
+              )
+            }
+
+            // Insert new schedule entries
+            const { data: insertedSchedule, error: scheduleError } = await (adminClient as any)
+              .from('loan_payment_schedule')
+              .insert(scheduleEntries)
+              .select()
+
+            if (scheduleError) {
+              console.error(
+                '[POST /api/user/contracts/:id/sign] Failed to populate payment schedule to loan_payment_schedule table:',
+                scheduleError
+              )
+              // Log but don't fail - contract_terms.payment_schedule is the source of truth
+            } else {
+              console.log(
+                `[POST /api/user/contracts/:id/sign] Successfully populated ${insertedSchedule?.length || scheduleEntries.length} payment schedule entries for loan ${updatedContract.loan.id}`
+              )
+            }
+          } catch (scheduleSyncError: any) {
+            // Non-critical error - payment schedule is in contract_terms
+            console.error(
+              '[POST /api/user/contracts/:id/sign] Error populating payment schedule to loan_payment_schedule table:',
+              scheduleSyncError?.message || scheduleSyncError
+            )
+          }
+        } else {
+          console.warn(
+            '[POST /api/user/contracts/:id/sign] No payment schedule found in contract_terms for loan',
+            updatedContract.loan.id
           )
         }
       }
     } catch (paymentError) {
       console.error('[POST /api/user/contracts/:id/sign] Failed to prepare payment schedule:', paymentError)
+      // Don't fail the request - payment schedule is stored in contract_terms.payment_schedule
     }
 
     try {

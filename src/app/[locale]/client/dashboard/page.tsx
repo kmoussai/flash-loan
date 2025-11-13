@@ -20,8 +20,8 @@ async function fetchDashboardData(
   userId: string
 ): Promise<{ user: User | null; applications: LoanApplication[] }> {
   const [user, applications = []] = await Promise.all([
-    getUserProfile(userId, true)
-    // getClientLoanApplications(userId, true)
+    getUserProfile(userId, true),
+    getClientLoanApplications(userId, true)
   ])
 
   return {
@@ -56,19 +56,6 @@ export default async function ClientDashboardPage({
   }
 
   return (
-    // <div>
-    //   Hello From Server
-    //   <pre>
-    //     {JSON.stringify(
-    //       {
-    //         sectionId,
-    //         profile: user
-    //       },
-    //       null,
-    //       2
-    //     )}
-    //   </pre>
-    // </div>
     <DashboardShell
       locale={locale}
       user={profile}

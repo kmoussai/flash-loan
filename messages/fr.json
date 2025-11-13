@@ -600,6 +600,15 @@
     "Contract_Sign_Button": "Signer le contrat",
     "Contract_Signing_In_Progress": "Signature en cours...",
     "Contract_Close_Viewer": "Fermer la visionneuse",
+    "Contract_Sign_Title": "Signer le contrat",
+    "Contract_Signature_Name_Label": "Nom de signature",
+    "Contract_Signature_Name_Placeholder": "Entrez votre nom complet tel qu'il apparaît sur le contrat",
+    "Contract_Signature_Name_Help": "Ce nom sera placé dans la zone de signature du document",
+    "Contract_Signature_Name_Required": "Veuillez entrer votre nom de signature",
+    "Contract_Sign_Confirmation_Text": "Je confirme avoir lu et compris les termes du contrat et accepte de signer ce contrat",
+    "Contract_Sign_Confirmation_Required": "Veuillez confirmer que vous avez lu et compris le contrat",
+    "Contract_Sign_Cancel": "Annuler",
+    "Contract_Sign_Error": "Échec de la signature du contrat. Veuillez réessayer.",
     "Contract_Status_draft": "Brouillon",
     "Contract_Status_generated": "Généré",
     "Contract_Status_sent": "Envoyé",
@@ -661,6 +670,14 @@
     "Uploaded_Successfully": "Téléversé avec succès",
     "File_Uploaded_Successfully": "Document téléversé avec succès.",
     "Document_Rejected": "Ce document a été refusé. Veuillez téléverser un nouveau fichier.",
-    "Please_Select_File": "Veuillez sélectionner un fichier."
+    "Please_Select_File": "Veuillez sélectionner un fichier.",
+    "References": "Références",
+    "Reference": "Référence",
+    "Name": "Nom",
+    "Phone": "Téléphone",
+    "Relationship": "Relation",
+    "Notes": "Notes",
+    "No_Information_Provided": "Aucune information fournie",
+    "Submitted_Information": "Informations soumises"
   }
 }

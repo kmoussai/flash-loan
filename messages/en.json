@@ -603,6 +603,15 @@
     "Contract_Sign_Button": "Sign contract",
     "Contract_Signing_In_Progress": "Signing...",
     "Contract_Close_Viewer": "Close viewer",
+    "Contract_Sign_Title": "Sign Contract",
+    "Contract_Signature_Name_Label": "Signature Name",
+    "Contract_Signature_Name_Placeholder": "Enter your full name as it appears on the contract",
+    "Contract_Signature_Name_Help": "This name will be placed on the signature area of the document",
+    "Contract_Signature_Name_Required": "Please enter your signature name",
+    "Contract_Sign_Confirmation_Text": "I confirm that I have read and understood the contract terms and agree to sign this contract",
+    "Contract_Sign_Confirmation_Required": "Please confirm that you have read and understood the contract",
+    "Contract_Sign_Cancel": "Cancel",
+    "Contract_Sign_Error": "Failed to sign contract. Please try again.",
     "Contract_Status_draft": "Draft",
     "Contract_Status_generated": "Generated",
     "Contract_Status_sent": "Sent",
@@ -664,6 +673,14 @@
     "Uploaded_Successfully": "Uploaded successfully",
     "File_Uploaded_Successfully": "File uploaded successfully.",
     "Document_Rejected": "Document was rejected. Please upload a new file.",
-    "Please_Select_File": "Please select a file."
+    "Please_Select_File": "Please select a file.",
+    "References": "References",
+    "Reference": "Reference",
+    "Name": "Name",
+    "Phone": "Phone",
+    "Relationship": "Relationship",
+    "Notes": "Notes",
+    "No_Information_Provided": "No information provided",
+    "Submitted_Information": "Submitted Information"
   }
 }
