@@ -455,11 +455,38 @@ export interface AcceptPaySyncLog {
 
 export interface ClientSignatureData {
   signature_method: 'click_to_sign' | 'drawn_signature' | 'uploaded'
+  signature_name?: string
   ip_address: string
   user_agent: string
   signed_from_device?: string
   signature_timestamp: string
-  signature_hash?: string
+  pdf_hash?: string
+  compliance_metadata?: {
+    signed_at: string
+    signature_name: string
+    contract_version: number
+    contract_number: number | null
+    pdf_hash: string
+    pdf_hash_algorithm: string
+    ip_address: string
+    user_agent: string
+    signature_method: string
+    compliance: {
+      electronic_signature_compliant: boolean
+      signature_timestamp: string
+      signature_verification: {
+        method: string
+        verified: boolean
+      }
+      retention_period_years: number
+      retention_until: string
+      document_integrity: {
+        hash: string
+        hash_algorithm: string
+        verified: boolean
+      }
+    }
+  }
 }
 
 // ===========================

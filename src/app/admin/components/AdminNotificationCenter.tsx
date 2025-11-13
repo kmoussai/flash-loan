@@ -161,6 +161,11 @@ export function AdminNotificationCenter({
       return `${basePath}?section=applications`
     }
 
+    if (metadata.type === 'ibv_event' && metadata.loanApplicationId) {
+      // Navigate to applications section for IBV events
+      return `${basePath}?section=applications`
+    }
+
     return null
   }, [isAdminContext, pathname])
 
