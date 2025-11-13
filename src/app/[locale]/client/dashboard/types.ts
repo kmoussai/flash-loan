@@ -1,5 +1,11 @@
 import type { LoanApplication } from '@/src/lib/supabase/types'
 
+export interface Section {
+  id: SectionId
+  labelKey: string
+  isActive?: boolean;
+}
+
 export type SectionId =
   | 'overview'
   | 'applications'
