@@ -91,6 +91,30 @@ export type IncomeSourceType =
   | 'retirement-plan'
 
 // ===========================
+// ACCEPT PAY TYPES
+// ===========================
+
+export type AcceptPayCustomerStatus = 'active' | 'suspended' | null
+
+export type AcceptPayTransactionStatus =
+  | '101'  // Initiated
+  | '102'  // Sent to bank
+  | 'PD'   // Pending
+  | 'AA'   // Approved
+  | string  // Error codes: 9XX (EFT), RXX (ACH)
+
+export type AcceptPayTransactionType = 'DB' | 'CR' // Debit or Credit
+
+export type PaymentScheduleStatus =
+  | 'pending'
+  | 'scheduled'
+  | 'authorized'
+  | 'collected'
+  | 'missed'
+  | 'failed'
+  | 'cancelled'
+
+// ===========================
 // INCOME FIELDS TYPES (JSONB)
 // ===========================
 
@@ -235,6 +259,11 @@ export interface User {
   furniture_loan: number | null
   created_at: string
   updated_at: string | null
+  // Accept Pay fields
+  accept_pay_customer_id: number | null
+  accept_pay_customer_status: AcceptPayCustomerStatus
+  accept_pay_customer_created_at: string | null
+  accept_pay_customer_updated_at: string | null
 }
 
 export interface Staff {
@@ -379,8 +408,46 @@ export interface LoanPayment {
   method: string | null
   status: PaymentStatus
   created_at: string
+  // Accept Pay fields
+  accept_pay_customer_id: number | null
+  accept_pay_transaction_id: number | null
+  process_date: string | null
+  accept_pay_status: AcceptPayTransactionStatus | null
+  accept_pay_reference: string | null
+  authorized_at: string | null
+  authorization_status: string | null
+  collection_initiated_at: string | null
+  collection_completed_at: string | null
+  error_code: string | null
+  retry_count: number
+  voided_at: string | null
+  void_reason: string | null
 }
 
+// ===========================
+// ACCEPT PAY TABLE TYPES
+// ===========================
+
+export interface LoanPaymentSchedule {
+  id: string
+  loan_id: string
+  scheduled_date: string
+  amount: number
+  payment_number: number
+  status: PaymentScheduleStatus
+  accept_pay_transaction_id: number | null
+  loan_payment_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AcceptPaySyncLog {
+  id: string
+  last_sync_at: string
+  transactions_synced: number
+  errors: string[]
+  created_at: string
+}
 
 // ===========================
 // CONTRACT TYPES (JSONB)
@@ -443,6 +510,10 @@ export interface UserInsert {
   heating_electricity_cost?: number
   car_loan?: number
   furniture_loan?: number
+  accept_pay_customer_id?: number | null
+  accept_pay_customer_status?: AcceptPayCustomerStatus
+  accept_pay_customer_created_at?: string | null
+  accept_pay_customer_updated_at?: string | null
 }
 
 export interface StaffInsert {
@@ -518,6 +589,10 @@ export interface UserUpdate {
   heating_electricity_cost?: number
   car_loan?: number
   furniture_loan?: number
+  accept_pay_customer_id?: number | null
+  accept_pay_customer_status?: AcceptPayCustomerStatus
+  accept_pay_customer_created_at?: string | null
+  accept_pay_customer_updated_at?: string | null
 }
 
 export interface StaffUpdate {
@@ -645,6 +720,31 @@ export interface RequestFormSubmissionUpdate {
   form_data?: Record<string, any>
 }
 
+// export interface Loan {
+//   id: string
+//   application_id: string
+//   user_id: string
+//   loan_number: number | null
+//   principal_amount: number
+//   interest_rate: number
+//   term_months: number
+//   disbursement_date: string | null
+//   due_date: string | null
+//   remaining_balance: number
+//   status: LoanStatus
+//   accept_pay_customer_id: number | null
+//   disbursement_transaction_id: number | null
+//   disbursement_process_date: string | null
+//   disbursement_status: string | null
+//   disbursement_authorized_at: string | null
+//   disbursement_initiated_at: string | null
+//   disbursement_completed_at: string | null
+//   disbursement_error_code: string | null
+//   disbursement_reference: string | null
+//   created_at: string
+//   updated_at: string
+// }
+
 export interface LoanInsert {
   application_id: string
   user_id: string
@@ -655,6 +755,15 @@ export interface LoanInsert {
   due_date?: string | null
   remaining_balance?: number
   status?: LoanStatus
+  accept_pay_customer_id?: number | null
+  disbursement_transaction_id?: number | null
+  disbursement_process_date?: string | null
+  disbursement_status?: string | null
+  disbursement_authorized_at?: string | null
+  disbursement_initiated_at?: string | null
+  disbursement_completed_at?: string | null
+  disbursement_error_code?: string | null
+  disbursement_reference?: string | null
 }
 
 export interface LoanPaymentInsert {
@@ -663,6 +772,19 @@ export interface LoanPaymentInsert {
   payment_date?: string
   method?: string | null
   status?: PaymentStatus
+  accept_pay_customer_id?: number | null
+  accept_pay_transaction_id?: number | null
+  process_date?: string | null
+  accept_pay_status?: AcceptPayTransactionStatus | null
+  accept_pay_reference?: string | null
+  authorized_at?: string | null
+  authorization_status?: string | null
+  collection_initiated_at?: string | null
+  collection_completed_at?: string | null
+  error_code?: string | null
+  retry_count?: number
+  voided_at?: string | null
+  void_reason?: string | null
 }
 
 export interface LoanUpdate {
@@ -673,6 +795,15 @@ export interface LoanUpdate {
   due_date?: string | null
   remaining_balance?: number
   status?: LoanStatus
+  accept_pay_customer_id?: number | null
+  disbursement_transaction_id?: number | null
+  disbursement_process_date?: string | null
+  disbursement_status?: string | null
+  disbursement_authorized_at?: string | null
+  disbursement_initiated_at?: string | null
+  disbursement_completed_at?: string | null
+  disbursement_error_code?: string | null
+  disbursement_reference?: string | null
 }
 
 export interface LoanPaymentUpdate {
@@ -680,6 +811,44 @@ export interface LoanPaymentUpdate {
   payment_date?: string
   method?: string | null
   status?: PaymentStatus
+  accept_pay_customer_id?: number | null
+  accept_pay_transaction_id?: number | null
+  process_date?: string | null
+  accept_pay_status?: AcceptPayTransactionStatus | null
+  accept_pay_reference?: string | null
+  authorized_at?: string | null
+  authorization_status?: string | null
+  collection_initiated_at?: string | null
+  collection_completed_at?: string | null
+  error_code?: string | null
+  retry_count?: number
+  voided_at?: string | null
+  void_reason?: string | null
+}
+
+export interface LoanPaymentScheduleInsert {
+  loan_id: string
+  scheduled_date: string
+  amount: number
+  payment_number: number
+  status?: PaymentScheduleStatus
+  accept_pay_transaction_id?: number | null
+  loan_payment_id?: string | null
+}
+
+export interface LoanPaymentScheduleUpdate {
+  scheduled_date?: string
+  amount?: number
+  payment_number?: number
+  status?: PaymentScheduleStatus
+  accept_pay_transaction_id?: number | null
+  loan_payment_id?: string | null
+}
+
+export interface AcceptPaySyncLogInsert {
+  last_sync_at?: string
+  transactions_synced?: number
+  errors?: string[]
 }
 
 export interface LoanContractInsert {
@@ -771,6 +940,16 @@ export interface Database {
         Row: LoanPayment
         Insert: LoanPaymentInsert
         Update: LoanPaymentUpdate
+      }
+      loan_payment_schedule: {
+        Row: LoanPaymentSchedule
+        Insert: LoanPaymentScheduleInsert
+        Update: LoanPaymentScheduleUpdate
+      }
+      accept_pay_sync_log: {
+        Row: AcceptPaySyncLog
+        Insert: AcceptPaySyncLogInsert
+        Update: never
       }
       notifications: {
         Row: Notification

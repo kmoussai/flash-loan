@@ -4,19 +4,24 @@ import { getUserProfile, getUserType } from '@/src/lib/supabase/db-helpers'
 import { getClientLoanApplications } from '@/src/lib/supabase/loan-helpers'
 import type { LoanApplication, User } from '@/src/lib/supabase/types'
 import DashboardShell from './components/DashboardShell'
+import { useEffect } from 'react'
+import { SectionId } from './types'
 
 interface ClientDashboardPageProps {
   params: {
     locale: string
+  }
+  searchParams: {
+    section?: SectionId
   }
 }
 
 async function fetchDashboardData(
   userId: string
 ): Promise<{ user: User | null; applications: LoanApplication[] }> {
-  const [user, applications] = await Promise.all([
-    getUserProfile(userId, true),
-    getClientLoanApplications(userId, true)
+  const [user, applications = []] = await Promise.all([
+    getUserProfile(userId, true)
+    // getClientLoanApplications(userId, true)
   ])
 
   return {
@@ -26,7 +31,8 @@ async function fetchDashboardData(
 }
 
 export default async function ClientDashboardPage({
-  params: { locale }
+  params: { locale },
+  searchParams: { section: sectionId }
 }: ClientDashboardPageProps) {
   const supabase = await createServerSupabaseClient()
   const {
@@ -50,12 +56,24 @@ export default async function ClientDashboardPage({
   }
 
   return (
+    // <div>
+    //   Hello From Server
+    //   <pre>
+    //     {JSON.stringify(
+    //       {
+    //         sectionId,
+    //         profile: user
+    //       },
+    //       null,
+    //       2
+    //     )}
+    //   </pre>
+    // </div>
     <DashboardShell
       locale={locale}
       user={profile}
+      sectionId={sectionId}
       loanApplications={applications}
     />
   )
 }
-
-

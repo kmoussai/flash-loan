@@ -19,4 +19,14 @@ export type Loan = {
   status: LoanStatus
   created_at: string
   updated_at: string
+  // Accept Pay disbursement fields
+  accept_pay_customer_id: number | null
+  disbursement_transaction_id: number | null
+  disbursement_process_date: string | null
+  disbursement_status: string | null
+  disbursement_authorized_at: string | null
+  disbursement_initiated_at: string | null
+  disbursement_completed_at: string | null
+  disbursement_error_code: string | null
+  disbursement_reference: string | null
 }
