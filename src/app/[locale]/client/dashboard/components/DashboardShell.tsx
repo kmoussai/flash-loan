@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
-import { Link, useRouter } from '@/src/navigation'
+import { Link, useRouter, usePathname } from '@/src/navigation'
 import { createClient } from '@/src/lib/supabase/client'
 import type { LoanApplication, User } from '@/src/lib/supabase/types'
-import type { DashboardStats, SectionId } from '../types'
+import type { DashboardStats, SectionId, Section } from '../types'
 import { buildDashboardStats } from '../utils/stats'
 import OverviewSection from './sections/OverviewSection'
 import ApplicationsSection from './sections/ApplicationsSection'
@@ -15,39 +15,43 @@ import ContractsSection from './sections/ContractsSection'
 import SupportSection from './sections/SupportSection'
 import { AdminNotificationCenter } from '@/src/app/admin/components/AdminNotificationCenter'
 
+const sections: Section[] = [
+  { id: 'overview', labelKey: 'Overview' },
+  { id: 'applications', labelKey: 'Applications' },
+  { id: 'documents', labelKey: 'Documents' },
+  { id: 'contracts', labelKey: 'Contracts' },
+  { id: 'support', labelKey: 'Support' }
+]
 interface DashboardShellProps {
   locale: string
   user: User
   loanApplications: LoanApplication[]
-}
-
-interface Section {
-  id: SectionId
-  label: string
+  sectionId?: SectionId
 }
 
 export default function DashboardShell({
   locale,
   user,
-  loanApplications
+  loanApplications,
+  sectionId
 }: DashboardShellProps) {
   const t = useTranslations('Client_Dashboard')
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = useMemo(() => createClient(), [])
-  const [activeSection, setActiveSection] = useState<SectionId>('overview')
+  const [activeSection, setActiveSection] = useState<SectionId>(() => {
+    const validSections = new Set(sections.map(section => section.id))
+    if (sectionId && validSections.has(sectionId)) {
+      return sectionId
+    }
+    router.replace({
+      pathname,
+      query: { section: 'overview' }
+    })
+    return 'overview'
+  })
   const [drawerOpen, setDrawerOpen] = useState(false)
   const searchParams = useSearchParams()
-
-  const sections: Section[] = useMemo(
-    () => [
-      { id: 'overview', label: t('Overview') },
-      { id: 'applications', label: t('Applications') },
-      { id: 'documents', label: t('Documents') },
-      { id: 'contracts', label: t('Contracts') },
-      { id: 'support', label: t('Support') }
-    ],
-    [t]
-  )
 
   const stats: DashboardStats = useMemo(
     () => buildDashboardStats(loanApplications),
@@ -65,13 +69,17 @@ export default function DashboardShell({
     setActiveSection(sectionId)
     setDrawerOpen(false)
 
+    // Update only search params without changing the pathname
     if (sectionId === 'overview') {
-      router.replace('/client/dashboard')
+      router.replace({
+        pathname,
+        query: { section: 'overview' }
+      })
       return
     }
-
+    setActiveSection(sectionId)
     router.replace({
-      pathname: '/client/dashboard',
+      pathname,
       query: { section: sectionId }
     })
   }
@@ -87,21 +95,21 @@ export default function DashboardShell({
     router.refresh()
   }
 
-  useEffect(() => {
-    const sectionParam = searchParams.get('section')
-    const validSections = new Set(sections.map(section => section.id))
+  // useEffect(() => {
+  //   const sectionParam = searchParams.get('section')
+  //   const validSections = new Set(sections.map(section => section.id))
 
-    if (sectionParam && validSections.has(sectionParam as SectionId)) {
-      setActiveSection(prev =>
-        prev === sectionParam ? prev : (sectionParam as SectionId)
-      )
-      return
-    }
+  //   if (sectionParam && validSections.has(sectionParam as SectionId)) {
+  //     setActiveSection(prev =>
+  //       prev === sectionParam ? prev : (sectionParam as SectionId)
+  //     )
+  //     return
+  //   }
 
-    if (!sectionParam && activeSection !== 'overview') {
-      setActiveSection('overview')
-    }
-  }, [searchParams, sections, activeSection])
+  //   if (!sectionParam && activeSection !== 'overview') {
+  //     setActiveSection('overview')
+  //   }
+  // }, [searchParams, sections, activeSection])
 
   const goToApplications = () => handleSectionChange('applications')
   const goToOverview = () => handleSectionChange('overview')
@@ -186,7 +194,7 @@ export default function DashboardShell({
                     : 'bg-background-secondary text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <span>{section.label}</span>
+                <span>{t(section.labelKey)}</span>
                 <span
                   className={`h-2 w-2 rounded-full ${
                     activeSection === section.id ? 'bg-white' : 'bg-gray-300'

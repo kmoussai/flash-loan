@@ -12,6 +12,13 @@ interface Props {
   locale: string
 }
 
+interface AuthStatus {
+  authenticated: boolean
+  isClient: boolean
+  userId: string | null
+  userType?: 'client' | 'staff' | null
+}
+
 export const Header: FC<Props> = ({ locale }) => {
   const t = useTranslations('')
   const router = useRouter()
@@ -23,38 +30,16 @@ export const Header: FC<Props> = ({ locale }) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const {
-          data: { user }
-        } = await supabase.auth.getUser()
-        if (user) {
-          // Check if user is a client (not staff) by querying directly
-          // Check staff table first
-          const { data: staffData } = await supabase
-            .from('staff')
-            .select('id')
-            .eq('id', user.id)
-            .single()
-          
-          if (staffData) {
-            // User is staff, not a client
-            setIsAuthenticated(false)
-            setIsClient(false)
-          } else {
-            // Check users table
-            const { data: userData } = await supabase
-              .from('users')
-              .select('id')
-              .eq('id', user.id)
-              .single()
-            
-            setIsAuthenticated(!!user)
-            setIsClient(!!userData)
-          }
-        } else {
-          setIsAuthenticated(false)
-          setIsClient(false)
+        // Use server-side API route instead of direct database queries
+        const response = await fetch('/api/user/auth-status')
+        if (!response.ok) {
+          throw new Error('Failed to check auth status')
         }
+        const data: AuthStatus = await response.json()
+        setIsAuthenticated(data.authenticated)
+        setIsClient(data.isClient)
       } catch (error) {
+        console.error('Error checking auth status:', error)
         setIsAuthenticated(false)
         setIsClient(false)
       } finally {
