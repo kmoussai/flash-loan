@@ -4,7 +4,6 @@ import { getUserProfile, getUserType } from '@/src/lib/supabase/db-helpers'
 import { getClientLoanApplications } from '@/src/lib/supabase/loan-helpers'
 import type { LoanApplication, User } from '@/src/lib/supabase/types'
 import DashboardShell from './components/DashboardShell'
-import { useEffect } from 'react'
 import { SectionId } from './types'
 
 interface ClientDashboardPageProps {

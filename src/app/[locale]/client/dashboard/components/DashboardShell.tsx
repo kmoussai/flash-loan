@@ -44,10 +44,6 @@ export default function DashboardShell({
     if (sectionId && validSections.has(sectionId)) {
       return sectionId
     }
-    router.replace({
-      pathname,
-      query: { section: 'overview' }
-    })
     return 'overview'
   })
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -94,6 +90,15 @@ export default function DashboardShell({
     router.push('/auth/signin')
     router.refresh()
   }
+
+  useEffect(() => {
+    if (sectionId !== activeSection) {
+      router.replace({
+        pathname: '/client/dashboard',
+        query: { section: 'overview' }
+      })
+    }
+  }, [])
 
   useEffect(() => {
     const sectionParam = searchParams.get('section')

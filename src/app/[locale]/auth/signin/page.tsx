@@ -1,104 +1,33 @@
-'use client'
-
-import { createClient } from '@/src/lib/supabase/client'
-import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
-import { Link, useRouter } from '@/src/navigation'
-import Button from '../../components/Button'
+import { redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
+import { createServerSupabaseClient } from '@/src/lib/supabase/server'
+import { getUserType } from '@/src/lib/supabase/db-helpers'
+import Link from 'next/link'
 import Image from 'next/image'
+import SignInForm from './components/SignInForm'
 
-export default function SignInPage() {
-  const t = useTranslations('')
-  const router = useRouter()
-  const supabase = createClient()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+interface SignInPageProps {
+  params: {
+    locale: string
+  }
+}
 
-  // Check if user is already logged in
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        // Check if user is a client (not staff) by querying directly
-        const { data: staffData } = await supabase
-          .from('staff')
-          .select('id')
-          .eq('id', user.id)
-          .single()
-        
-        // If not staff, check if they're a client
-        if (!staffData) {
-          const { data: userData } = await supabase
-            .from('users')
-            .select('id')
-            .eq('id', user.id)
-            .single()
-          
-          if (userData) {
-            router.push('/client/dashboard')
-            router.refresh()
-          }
-        }
-      }
+export default async function SignInPage({ params: { locale } }: SignInPageProps) {
+  const t = await getTranslations('')
+  const supabase = await createServerSupabaseClient()
+  
+  // Check if user is already authenticated
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (user) {
+    // Check if user is a client (not staff)
+    const userType = await getUserType(user.id, true)
+    
+    if (userType === 'client') {
+      // Already authenticated as client, redirect to dashboard
+      redirect(`/${locale}/client/dashboard`)
     }
-    checkUser()
-  }, [supabase, router])
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
-
-      if (signInError) {
-        setError(signInError.message)
-        setLoading(false)
-        return
-      }
-
-      if (data.session) {
-        // Check if user is a client (not staff/admin) by querying directly
-        const { data: staffData } = await supabase
-          .from('staff')
-          .select('id')
-          .eq('id', data.user.id)
-          .single()
-        
-        if (staffData) {
-          // Staff/admin users should use admin login
-          setError(t('Invalid_Client_Account') || 'This account is for staff/admin use. Please use the admin login.')
-          await supabase.auth.signOut()
-          setLoading(false)
-          return
-        }
-        
-        // Check if they're a client
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', data.user.id)
-          .single()
-        
-        if (userData) {
-          router.push('/client/dashboard')
-          router.refresh()
-        } else {
-          setError(t('Invalid_Client_Account') || 'This account is not registered as a client.')
-          await supabase.auth.signOut()
-          setLoading(false)
-        }
-      }
-    } catch (err: any) {
-      setError(err.message || (t('Login_Error') || 'An unexpected error occurred'))
-      setLoading(false)
-    }
+    // If staff, they should use admin login, so we'll show the signin form
   }
 
   return (
@@ -107,7 +36,7 @@ export default function SignInPage() {
         <div className='rounded-2xl bg-background-secondary border border-gray-200 p-6 sm:p-8 shadow-lg'>
           {/* Logo */}
           <div className='mb-8 flex justify-center'>
-            <Link href='/'>
+            <Link href={`/${locale}`}>
               <div className='relative h-16 w-40'>
                 <Image
                   src='/images/FlashLoanLogo.png'
@@ -130,71 +59,17 @@ export default function SignInPage() {
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className='space-y-6'>
-            {error && (
-              <div className='rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600'>
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label
-                htmlFor='email'
-                className='mb-2 block text-sm font-medium text-primary'
-              >
-                {t('Email_Address') || 'Email Address'}
-              </label>
-              <input
-                id='email'
-                type='email'
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                className='w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20'
-                placeholder={t('Email_Placeholder') || 'your@email.com'}
-                autoComplete='email'
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor='password'
-                className='mb-2 block text-sm font-medium text-primary'
-              >
-                {t('Password') || 'Password'}
-              </label>
-              <input
-                id='password'
-                type='password'
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                className='w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20'
-                placeholder='••••••••'
-                autoComplete='current-password'
-              />
-            </div>
-
-            <Button
-              type='submit'
-              variant='primary'
-              size='large'
-              className='w-full'
-              disabled={loading}
-            >
-              {loading ? (t('Signing_In') || 'Signing in...') : (t('Sign_In') || 'Sign In')}
-            </Button>
-          </form>
+          <SignInForm locale={locale} />
 
           <div className='mt-6 text-center space-y-2'>
             <Link 
-              href='/auth/forgot-password'
+              href={`/${locale}/auth/forgot-password`}
               className='block text-sm text-primary hover:text-primary/80 transition-colors font-medium'
             >
               {t('Forgot_Password') || 'Forgot Password?'}
             </Link>
             <Link 
-              href='/'
+              href={`/${locale}`}
               className='block text-sm text-text-secondary hover:text-primary transition-colors'
             >
               {t('Back_To_Home') || '← Back to Home'}
