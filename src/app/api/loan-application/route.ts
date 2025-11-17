@@ -14,6 +14,9 @@ import {
   Frequency
 } from '@/src/lib/supabase/types'
 import { assertFrequency } from '@/src/lib/utils/frequency'
+import { generateReadablePassword } from '@/src/lib/utils/password'
+import { generateInvitationEmail } from '@/src/lib/email/templates/invitation'
+import { sendEmail } from '@/src/lib/email/smtp'
 
 // ===========================
 // TYPE DEFINITIONS
@@ -395,8 +398,8 @@ export async function POST(request: NextRequest) {
       // The transaction function will handle creating the public.users record
       console.log('Creating new auth user for:', body.email)
 
-      // Generate a random password for the user
-      const tempPassword = `temp_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`
+      // Generate a secure, readable temporary password
+      const tempPassword = generateReadablePassword()
 
       // Create auth user
       const { data: authData, error: signUpError } =
@@ -441,6 +444,35 @@ export async function POST(request: NextRequest) {
 
         // Wait for trigger to create public.users record
         await new Promise(resolve => setTimeout(resolve, 500))
+
+        // Send invitation email with temporary password
+        try {
+          const preferredLanguage = (body.preferredLanguage === 'fr' ? 'fr' : 'en') as 'en' | 'fr'
+          const { subject, html, text } = generateInvitationEmail({
+            firstName: body.firstName,
+            lastName: body.lastName,
+            email: body.email,
+            temporaryPassword: tempPassword,
+            preferredLanguage
+          })
+
+          const emailResult = await sendEmail({
+            to: body.email,
+            subject,
+            html,
+            text
+          })
+
+          if (emailResult.success) {
+            console.log('[Loan Application] Invitation email sent successfully to:', body.email)
+          } else {
+            console.warn('[Loan Application] Failed to send invitation email:', emailResult.error)
+            // Don't fail the application if email fails - account is still created
+          }
+        } catch (emailError: any) {
+          console.error('[Loan Application] Error sending invitation email:', emailError)
+          // Don't fail the application if email fails - account is still created
+        }
       }
     }
 
