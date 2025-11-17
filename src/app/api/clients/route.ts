@@ -6,6 +6,9 @@ import {
   isAdmin
 } from '@/src/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 /**
  * GET /api/clients
  * Get all client users
@@ -33,10 +36,17 @@ export async function GET(request: Request) {
       )
     }
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       users: result.users,
       pagination: result.pagination
     })
+    
+    // Prevent caching
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
   } catch (error: any) {
     console.error('Error fetching clients:', error)
     return NextResponse.json(
