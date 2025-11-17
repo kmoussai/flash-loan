@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: { id: string } }
@@ -49,11 +52,18 @@ export async function GET(
 			return NextResponse.json({ error: 'Failed to fetch applications' }, { status: 500 })
 		}
 
-		return NextResponse.json({
+		const response = NextResponse.json({
 			user,
 			addresses: addresses || [],
 			applications: applications || []
 		})
+		
+		// Prevent caching
+		response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+		response.headers.set('Pragma', 'no-cache')
+		response.headers.set('Expires', '0')
+		
+		return response
 	} catch (error: any) {
 		return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
 	}

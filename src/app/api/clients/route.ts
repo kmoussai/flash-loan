@@ -6,6 +6,9 @@ import {
   isAdmin
 } from '@/src/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 /**
  * GET /api/clients
  * Get all client users
@@ -13,13 +16,18 @@ import {
  */
 export async function GET(request: Request) {
   try {
-    // Parse query parameters for pagination
+    // Parse query parameters for pagination, search, and filters
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = parseInt(searchParams.get('limit') || '50', 10)
+    const search = searchParams.get('search') || undefined
+    const kycStatus = searchParams.get('kycStatus') || undefined
     
     // Use RLS-aware client (respects permissions)
-    const result = await getAllUsersWithPagination(page, limit, true)
+    const result = await getAllUsersWithPagination(page, limit, true, {
+      search,
+      kycStatus
+    })
     
     if (!result.success) {
       return NextResponse.json(
@@ -28,10 +36,17 @@ export async function GET(request: Request) {
       )
     }
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       users: result.users,
       pagination: result.pagination
     })
+    
+    // Prevent caching
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
   } catch (error: any) {
     console.error('Error fetching clients:', error)
     return NextResponse.json(

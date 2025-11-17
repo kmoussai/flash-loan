@@ -128,24 +128,49 @@ export async function POST(
           )
         }
         // Validate each reference has required fields
+        // Support both new format (name) and old format (first_name + last_name) for backward compatibility
         for (let i = 0; i < formData.references.length; i++) {
           const ref = formData.references[i]
-          if (!ref?.first_name || !ref?.last_name || !ref?.phone || !ref?.relationship) {
+          // Check for new format (name) or old format (first_name + last_name)
+          const hasName = ref?.name || (ref?.first_name && ref?.last_name)
+          if (!hasName || !ref?.phone || !ref?.relationship) {
             return NextResponse.json(
-              { error: `Reference ${i + 1} is missing required fields (first name, last name, phone, relationship)` },
+              { error: `Reference ${i + 1} is missing required fields (name, phone, relationship)` },
               { status: 400 }
             )
           }
         }
+
+        // Temporary fix: Split name into first_name and last_name for database compatibility
+        formData.references = formData.references.map((ref: any) => {
+          if (ref.name && !ref.first_name && !ref.last_name) {
+            // Split name by space: first word = first_name, rest = last_name
+            const nameParts = ref.name.trim().split(/\s+/)
+            const first_name = nameParts[0] || ''
+            const last_name = nameParts.slice(1).join(' ') || ''
+            return {
+              ...ref,
+              first_name,
+              last_name,
+              // Keep name field for backward compatibility
+              name: ref.name
+            }
+          }
+          // If already has first_name and last_name, keep as is
+          return ref
+        })
       } else {
         // Convert individual reference fields to array format
+        // Support both new format (name) and old format (first_name + last_name)
         const ref1 = {
+          name: formData.reference1_name,
           first_name: formData.reference1_first_name,
           last_name: formData.reference1_last_name,
           phone: formData.reference1_phone,
           relationship: formData.reference1_relationship
         }
         const ref2 = {
+          name: formData.reference2_name,
           first_name: formData.reference2_first_name,
           last_name: formData.reference2_last_name,
           phone: formData.reference2_phone,
@@ -155,12 +180,15 @@ export async function POST(
         // Validate both references have all required fields
         const missingRef1 = []
         const missingRef2 = []
-        if (!ref1.first_name) missingRef1.push('first name')
-        if (!ref1.last_name) missingRef1.push('last name')
+        
+        // Check for name (new format) or first_name + last_name (old format)
+        const hasName1 = ref1.name || (ref1.first_name && ref1.last_name)
+        const hasName2 = ref2.name || (ref2.first_name && ref2.last_name)
+        
+        if (!hasName1) missingRef1.push('name')
         if (!ref1.phone) missingRef1.push('phone')
         if (!ref1.relationship) missingRef1.push('relationship')
-        if (!ref2.first_name) missingRef2.push('first name')
-        if (!ref2.last_name) missingRef2.push('last name')
+        if (!hasName2) missingRef2.push('name')
         if (!ref2.phone) missingRef2.push('phone')
         if (!ref2.relationship) missingRef2.push('relationship')
 
@@ -178,10 +206,51 @@ export async function POST(
           )
         }
 
+        // Normalize references: if using name format, split into first_name and last_name
+        // Temporary fix to maintain database structure compatibility
+        const normalizeReference = (ref: any) => {
+          if (ref.name && !ref.first_name && !ref.last_name) {
+            // Split name by space: first word = first_name, rest = last_name
+            const nameParts = ref.name.trim().split(/\s+/)
+            const first_name = nameParts[0] || ''
+            const last_name = nameParts.slice(1).join(' ') || ''
+            return {
+              ...ref,
+              first_name,
+              last_name,
+              // Keep name field for backward compatibility
+              name: ref.name
+            }
+          } else if (!ref.name && ref.first_name && ref.last_name) {
+            // Old format: create name field from first_name + last_name
+            return {
+              ...ref,
+              name: `${ref.first_name} ${ref.last_name}`.trim()
+            }
+          }
+          return ref
+        }
+
+        const normalizedRef1 = normalizeReference({
+          name: ref1.name,
+          first_name: ref1.first_name,
+          last_name: ref1.last_name,
+          phone: ref1.phone,
+          relationship: ref1.relationship
+        })
+        
+        const normalizedRef2 = normalizeReference({
+          name: ref2.name,
+          first_name: ref2.first_name,
+          last_name: ref2.last_name,
+          phone: ref2.phone,
+          relationship: ref2.relationship
+        })
+
         // Convert to array format
         formData = {
           ...formData,
-          references: [ref1, ref2]
+          references: [normalizedRef1, normalizedRef2]
         }
       }
     }
