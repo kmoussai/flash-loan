@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ClientDocumentsSection from './ClientDocumentsSection'
 
 type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
 
@@ -72,6 +73,16 @@ export default function DocumentsSection({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewMime, setPreviewMime] = useState<string | null>(null)
   const [previewFileName, setPreviewFileName] = useState<string | null>(null)
+  const [previewClientInfo, setPreviewClientInfo] = useState<{
+    first_name: string | null
+    last_name: string | null
+    email: string | null
+    phone: string | null
+    date_of_birth: string | null
+    national_id: string | null
+  } | null>(null)
+  const [previewIsIdDocument, setPreviewIsIdDocument] = useState(false)
+  const [previewRequestId, setPreviewRequestId] = useState<string | null>(null)
   const [loadingDocumentView, setLoadingDocumentView] = useState(false)
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   // Forward-compatible with future non-file (form) requests
@@ -577,6 +588,9 @@ export default function DocumentsSection({
     setPreviewUrl(null)
     setPreviewMime(null)
     setPreviewFileName(null)
+    setPreviewClientInfo(null)
+    setPreviewIsIdDocument(false)
+    setPreviewRequestId(null)
   }
 
   const openDocumentRequestView = async (requestId: string) => {
@@ -591,6 +605,9 @@ export default function DocumentsSection({
       setPreviewUrl(data.signed_url)
       setPreviewMime(data.mime_type || 'application/octet-stream')
       setPreviewFileName(data.file_name || 'document')
+      setPreviewIsIdDocument(data.is_id_document || false)
+      setPreviewClientInfo(data.client_info || null)
+      setPreviewRequestId(requestId)
     } catch (e: any) {
       alert(e?.message || 'Failed to load document')
     } finally {
@@ -685,6 +702,13 @@ export default function DocumentsSection({
 
   return (
     <>
+      {/* All Client Documents - Only show when applicationId is not provided */}
+      {typeof applicationId === 'undefined' && (
+        <div className='mb-6'>
+          <ClientDocumentsSection clientId={clientId} active={true} />
+        </div>
+      )}
+
       {/* Requested Items Status - Modern Design */}
       {typeof applicationId !== 'undefined' && (
         <div className='mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
@@ -872,6 +896,20 @@ export default function DocumentsSection({
                             r.request_form_submissions.length > 0
                               ? r.request_form_submissions[0]
                               : undefined
+                          
+                          // Check if this is an ID document type
+                          const documentSlug = r.document_type?.slug?.toLowerCase() || ''
+                          const documentName = r.document_type?.name?.toLowerCase() || ''
+                          const isIdDocument = isDocumentRequest && (
+                            documentSlug.includes('id') ||
+                            documentSlug.includes('passport') ||
+                            documentSlug.includes('driver') ||
+                            documentSlug.includes('license') ||
+                            documentName.includes('id') ||
+                            documentName.includes('passport') ||
+                            documentName.includes('driver') ||
+                            documentName.includes('license')
+                          )
 
                           return (
                             <div
@@ -1058,7 +1096,7 @@ export default function DocumentsSection({
                                         View
                                       </button>
                                     )}
-                                  {r.status === 'uploaded' && (
+                                  {r.status === 'uploaded' && isIdDocument && (
                                     <>
                                       <button
                                         onClick={() => handleVerify(r.id)}
@@ -1173,6 +1211,11 @@ export default function DocumentsSection({
             <div className='flex items-center justify-between border-b border-gray-200 px-4 py-2'>
               <h4 className='text-sm font-medium text-gray-900'>
                 {previewFileName || 'Document Preview'}
+                {previewIsIdDocument && (
+                  <span className='ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800'>
+                    ID Document
+                  </span>
+                )}
               </h4>
               <button
                 onClick={closePreview}
@@ -1193,6 +1236,91 @@ export default function DocumentsSection({
                 </svg>
               </button>
             </div>
+            {previewIsIdDocument && previewClientInfo && (
+              <div className='border-b border-gray-200 bg-blue-50 px-4 py-3'>
+                <h5 className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700'>
+                  Client Information (Compare with Document)
+                </h5>
+                <div className='grid grid-cols-2 gap-3 text-sm'>
+                  <div>
+                    <span className='text-xs text-gray-500'>Full Name:</span>
+                    <p className='font-medium text-gray-900'>
+                      {[previewClientInfo.first_name, previewClientInfo.last_name]
+                        .filter(Boolean)
+                        .join(' ') || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className='text-xs text-gray-500'>Date of Birth:</span>
+                    <p className='font-medium text-gray-900'>
+                      {previewClientInfo.date_of_birth
+                        ? new Date(previewClientInfo.date_of_birth).toLocaleDateString('en-CA', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className='text-xs text-gray-500'>Email:</span>
+                    <p className='font-medium text-gray-900'>
+                      {previewClientInfo.email || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className='text-xs text-gray-500'>Phone:</span>
+                    <p className='font-medium text-gray-900'>
+                      {previewClientInfo.phone || 'N/A'}
+                    </p>
+                  </div>
+                  {previewClientInfo.national_id && (
+                    <div className='col-span-2'>
+                      <span className='text-xs text-gray-500'>National ID:</span>
+                      <p className='font-medium text-gray-900'>
+                        {previewClientInfo.national_id}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {previewIsIdDocument && previewRequestId && (
+              <div className='border-b border-gray-200 bg-amber-50 px-4 py-2'>
+                <div className='flex items-center justify-between'>
+                  <p className='text-xs text-amber-800'>
+                    ⚠️ Verify this ID document matches the client information above
+                  </p>
+                  {requests.find(r => r.id === previewRequestId)?.status === 'uploaded' && (
+                    <button
+                      onClick={() => {
+                        if (previewRequestId) {
+                          handleVerify(previewRequestId)
+                          closePreview()
+                        }
+                      }}
+                      disabled={!!submittingRequest[previewRequestId]}
+                      className='flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50'
+                    >
+                      <svg
+                        className='h-3.5 w-3.5'
+                        fill='none'
+                        stroke='currentColor'
+                        viewBox='0 0 24 24'
+                      >
+                        <path
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          strokeWidth={2}
+                          d='M5 13l4 4L19 7'
+                        />
+                      </svg>
+                      Verify KYC
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className='flex-1 overflow-auto bg-gray-50'>
               {previewMime?.includes('pdf') ? (
                 <iframe

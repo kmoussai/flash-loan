@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient, createServerSupabaseClient } from '@/src/lib/supabase/server'
 import { verifyRequestToken } from '@/src/lib/security/token'
+import { createNotification } from '@/src/lib/supabase'
+import type { NotificationCategory } from '@/src/types'
 
 // POST /api/public/document-requests/:id/upload?token=...
 // Body: multipart/form-data with field 'file'
@@ -123,6 +125,88 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .from('document_uploads' as any)
       // @ts-ignore
       .insert({ document_request_id: id, file_key: `documents/${key}`, meta: { name: file.name, size: file.size, type: file.type } })
+
+    // Create notifications for admin/support staff about the document upload
+    try {
+      // Get document request details with loan application and client info
+      const { data: requestDetails } = await admin
+        .from('document_requests' as any)
+        .select(`
+          id,
+          document_type_id,
+          document_type:document_type_id(name, slug),
+          loan_applications!inner(
+            id,
+            client_id,
+            assigned_to,
+            users:client_id(
+              first_name,
+              last_name
+            )
+          )
+        `)
+        .eq('id', id)
+        .single()
+
+      if (requestDetails) {
+        const loanApp = (requestDetails as any).loan_applications
+        const documentType = (requestDetails as any).document_type
+        const documentName = documentType?.name || 'document'
+        const clientFirstName = loanApp?.users?.first_name || ''
+        const clientLastName = loanApp?.users?.last_name || ''
+        const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim() || 'A client'
+
+        // Get all admin and support staff
+        const { data: staffMembers } = await admin
+          .from('staff' as any)
+          .select('id, role')
+          .in('role', ['admin', 'support'])
+
+        const staffRecipients = new Set<string>()
+
+        // Add assigned staff member if exists
+        if (loanApp?.assigned_to) {
+          staffRecipients.add(loanApp.assigned_to)
+        }
+
+        // Add all admin and support staff
+        staffMembers?.forEach((staff: { id: string } | null) => {
+          if (staff?.id) {
+            staffRecipients.add(staff.id)
+          }
+        })
+
+        // Create notifications for all staff recipients
+        if (staffRecipients.size > 0) {
+          await Promise.all(
+            Array.from(staffRecipients).map(staffId =>
+              createNotification(
+                {
+                  recipientId: staffId,
+                  recipientType: 'staff',
+                  title: 'Document uploaded',
+                  message: `${clientName} uploaded ${documentName}.`,
+                  category: 'document_uploaded' as NotificationCategory,
+                  metadata: {
+                    type: 'document_upload' as const,
+                    documentRequestId: id,
+                    loanApplicationId: loanApp?.id,
+                    clientId: loanApp?.client_id,
+                    documentType: documentName,
+                    fileName: file.name,
+                    uploadedAt: new Date().toISOString()
+                  }
+                },
+                { client: admin }
+              )
+            )
+          )
+        }
+      }
+    } catch (notificationError) {
+      console.error('[Document Upload] Failed to create staff notification:', notificationError)
+      // Don't fail the upload if notification fails
+    }
 
     return NextResponse.json({ success: true, path: `documents/${key}` })
   } catch (e: any) {

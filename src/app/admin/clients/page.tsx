@@ -67,7 +67,9 @@ export default function ClientsPage() {
         params.append('kycStatus', kycFilter)
       }
       
-      const response = await fetch(`/api/clients?${params.toString()}`)
+      const response = await fetch(`/api/clients?${params.toString()}`, {
+        cache: 'no-store'
+      })
       
       if (!response.ok) {
         const errorData = await response.json()

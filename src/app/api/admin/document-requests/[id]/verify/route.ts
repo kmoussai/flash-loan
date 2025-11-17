@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isStaff } from '@/src/lib/supabase/admin-helpers'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { updateKycStatus } from '@/src/lib/supabase/db-helpers'
 import type { IncomeSourceType, Frequency } from '@/src/lib/supabase/types'
 
 // POST /api/admin/document-requests/:id/verify
@@ -20,13 +21,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const admin = createServerSupabaseAdminClient()
     
-    // Get the document request with loan application and latest submission
+    // Get the document request with loan application, document type, and latest submission
     const { data: reqRow, error: reqErr } = await admin
       .from('document_requests' as any)
       .select(`
         id,
         loan_application_id,
         request_kind,
+        document_type_id,
+        document_type:document_type_id(id, slug, name),
+        loan_applications!inner(client_id),
         request_form_submissions(id, form_data, submitted_at)
       `)
       .eq('id', reqId)
@@ -40,6 +44,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       id: string
       loan_application_id: string
       request_kind: string
+      document_type_id: string | null
+      document_type?: {
+        id: string
+        slug: string | null
+        name: string | null
+      } | null
+      loan_applications?: {
+        client_id: string
+      }
       request_form_submissions?: Array<{
         id: string
         form_data: Record<string, any>
@@ -127,6 +140,37 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             console.error('Error updating loan application:', updateErr)
             // Don't fail the verify operation if update fails, just log it
           }
+        }
+      }
+    }
+
+    // If verifying an ID document, update client KYC status to verified
+    if (status === 'verified' && requestRow.request_kind === 'document' && requestRow.document_type) {
+      const documentSlug = requestRow.document_type.slug?.toLowerCase() || ''
+      const documentName = requestRow.document_type.name?.toLowerCase() || ''
+      
+      // Check if this is an ID document type
+      const isIdDocument = 
+        documentSlug.includes('id') ||
+        documentSlug.includes('passport') ||
+        documentSlug.includes('driver') ||
+        documentSlug.includes('license') ||
+        documentName.includes('id') ||
+        documentName.includes('passport') ||
+        documentName.includes('driver') ||
+        documentName.includes('license')
+      
+      if (isIdDocument && requestRow.loan_applications?.client_id) {
+        const clientId = requestRow.loan_applications.client_id
+        
+        // Update KYC status to verified
+        const kycResult = await updateKycStatus(clientId, 'verified', true)
+        
+        if (!kycResult.success) {
+          console.error('Error updating KYC status:', kycResult.error)
+          // Don't fail the verify operation if KYC update fails, just log it
+        } else {
+          console.log(`[KYC] Updated client ${clientId} KYC status to verified after ID document verification`)
         }
       }
     }
