@@ -464,12 +464,16 @@ export async function promoteUserToStaff(
 // ===========================
 
 /**
- * Get all users with pagination (admin/support/intern can access)
+ * Get all users with pagination, search, and filters (admin/support/intern can access)
  */
 export async function getAllUsersWithPagination(
   page = 1,
   limit = 50,
-  isServer = false
+  isServer = false,
+  options?: {
+    search?: string
+    kycStatus?: string
+  }
 ) {
   let supabase: SupabaseClient<Database>
   if (isServer) {
@@ -488,9 +492,23 @@ export async function getAllUsersWithPagination(
   const from = (page - 1) * limit
   const to = from + limit - 1
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('users')
     .select('*', { count: 'exact' })
+
+  // Apply search filter (name or email)
+  if (options?.search) {
+    const searchTerm = `%${options.search.trim()}%`
+    query = query.or(`first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},email.ilike.${searchTerm}`)
+  }
+
+  // Apply KYC status filter
+  if (options?.kycStatus && options.kycStatus !== 'all') {
+    query = query.eq('kyc_status', options.kycStatus)
+  }
+
+  // Apply pagination and ordering
+  const { data, error, count } = await query
     .order('created_at', { ascending: false })
     .range(from, to)
 
