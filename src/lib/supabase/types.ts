@@ -95,6 +95,32 @@ export type IncomeSourceType =
 // ===========================
 
 export type AcceptPayCustomerStatus = 'active' | 'suspended' | null
+export enum TransactionType {
+  Debit = 'DB',
+  Credit = 'CR'
+}
+export enum AcceptPayTransactionSchedule {
+  Monthly = 1,
+  Annually = 2,
+  Weekly = 3,
+  BiWeekly = 4,
+  SemiMonthly = 5,
+  SemiAnnually = 6,
+  MonthlyLastDay = 7,
+  OneTime = 8,
+  SemiMonthly15thAnd30th = 9,
+  /*
+  1 Monthly (30 Days)
+  2 Annually (365 Days)
+  3 Weekly
+  4 Bi-Weekly
+  5 Semi-Monthly (15th and last day)
+  6 Semi-Annually
+  7 Monthly (last day of month)
+  8 One Time
+  9 Semi-Monthly (15th and 30th)
+  */
+}
 
 export type AcceptPayTransactionStatus =
   | '101'  // Initiated
@@ -264,6 +290,10 @@ export interface User {
   accept_pay_customer_status: AcceptPayCustomerStatus
   accept_pay_customer_created_at: string | null
   accept_pay_customer_updated_at: string | null
+  // CRM migration fields
+  crm_original_data: Record<string, any> | null
+  // Bank account (populated from IBV results)
+  bank_account: BankAccount | null
 }
 
 export interface Staff {
@@ -541,6 +571,8 @@ export interface UserInsert {
   accept_pay_customer_status?: AcceptPayCustomerStatus
   accept_pay_customer_created_at?: string | null
   accept_pay_customer_updated_at?: string | null
+  crm_original_data?: Record<string, any> | null
+  bank_account?: BankAccount | null
 }
 
 export interface StaffInsert {
@@ -620,6 +652,8 @@ export interface UserUpdate {
   accept_pay_customer_status?: AcceptPayCustomerStatus
   accept_pay_customer_created_at?: string | null
   accept_pay_customer_updated_at?: string | null
+  crm_original_data?: Record<string, any> | null
+  bank_account?: BankAccount | null
 }
 
 export interface StaffUpdate {

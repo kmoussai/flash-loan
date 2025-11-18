@@ -22,6 +22,13 @@ interface ClientDetails {
 		heating_electricity_cost: number | null
 		car_loan: number | null
 		furniture_loan: number | null
+		bank_account: {
+			bank_name: string
+			account_number: string
+			transit_number: string
+			institution_number: string
+			account_name: string
+		} | null
 		created_at: string
 	}
 	addresses: Array<{
@@ -55,7 +62,7 @@ export default function ClientDetailsPage() {
 	const [data, setData] = useState<ClientDetails | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
-	const [activeTab, setActiveTab] = useState<'addresses' | 'documents'>('addresses')
+	const [activeTab, setActiveTab] = useState<'addresses' | 'documents' | 'bank_account'>('addresses')
 
 	useEffect(() => {
 		if (clientId) {
@@ -318,7 +325,7 @@ export default function ClientDetailsPage() {
 									<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
 								</svg>
 							</div>
-							<h3 className='text-xl font-bold text-gray-900'>Addresses & Documents</h3>
+							<h3 className='text-xl font-bold text-gray-900'>Addresses, Bank Account & Documents</h3>
 						</div>
 						<div className='mb-6 flex items-center gap-2 border-b border-gray-200'>
 							<button
@@ -330,6 +337,16 @@ export default function ClientDetailsPage() {
 								}`}
 							>
 								Addresses
+							</button>
+							<button
+								onClick={() => setActiveTab('bank_account')}
+								className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all ${
+									activeTab === 'bank_account'
+										? 'border-b-2 border-purple-500 bg-purple-50/50 text-purple-700'
+										: 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+								}`}
+							>
+								Bank Account
 							</button>
 							<button
 								onClick={() => setActiveTab('documents')}
@@ -401,6 +418,60 @@ export default function ClientDetailsPage() {
 													</div>
 											</div>
 										))}
+									</div>
+								)}
+							</div>
+						)}
+
+						{activeTab === 'bank_account' && (
+							<div>
+								{!user.bank_account ? (
+									<div className='rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-12 text-center'>
+										<svg className='mx-auto h-12 w-12 text-gray-400' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+											<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' />
+										</svg>
+										<p className='mt-4 text-sm font-medium text-gray-900'>No bank account found</p>
+										<p className='mt-1 text-xs text-gray-500'>This client has not provided bank account information yet. Bank account will be populated automatically when IBV verification is completed.</p>
+									</div>
+								) : (
+									<div className='group/item relative overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-purple-300 hover:shadow-md'>
+										<div className='flex items-start gap-4'>
+											<div className='flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-green-100 to-emerald-100'>
+												<svg className='h-6 w-6 text-green-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+													<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' />
+												</svg>
+											</div>
+											<div className='flex-1'>
+												<div className='mb-4 flex items-center gap-2'>
+													<h4 className='text-lg font-semibold text-gray-900'>Bank Account Information</h4>
+													<span className='inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800'>
+														Verified
+													</span>
+												</div>
+												<div className='grid gap-4 md:grid-cols-2'>
+													<div className='rounded-lg border border-gray-200 bg-gray-50/50 p-4'>
+														<label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Bank Name</label>
+														<p className='mt-2 text-base font-semibold text-gray-900'>{user.bank_account.bank_name || 'N/A'}</p>
+													</div>
+													<div className='rounded-lg border border-gray-200 bg-gray-50/50 p-4'>
+														<label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Account Name</label>
+														<p className='mt-2 text-base font-semibold text-gray-900'>{user.bank_account.account_name || 'N/A'}</p>
+													</div>
+													<div className='rounded-lg border border-gray-200 bg-gray-50/50 p-4'>
+														<label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Institution Number</label>
+														<p className='mt-2 text-base font-semibold text-gray-900 font-mono'>{user.bank_account.institution_number || 'N/A'}</p>
+													</div>
+													<div className='rounded-lg border border-gray-200 bg-gray-50/50 p-4'>
+														<label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Transit Number</label>
+														<p className='mt-2 text-base font-semibold text-gray-900 font-mono'>{user.bank_account.transit_number || 'N/A'}</p>
+													</div>
+													<div className='rounded-lg border border-gray-200 bg-gray-50/50 p-4 md:col-span-2'>
+														<label className='text-xs font-semibold uppercase tracking-wide text-gray-500'>Account Number</label>
+														<p className='mt-2 text-base font-semibold text-gray-900 font-mono'>{user.bank_account.account_number || 'N/A'}</p>
+													</div>
+												</div>
+											</div>
+										</div>
 									</div>
 								)}
 							</div>

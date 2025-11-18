@@ -4,12 +4,22 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { createNotification } from '@/src/lib/supabase'
-import type { NotificationCategory } from '@/src/types'
+import {
+  createNotification,
+  getUserProfile,
+  updateUserProfile,
+  UserUpdate
+} from '@/src/lib/supabase'
+import type { BankAccount, NotificationCategory } from '@/src/types'
 import { normalizeFrequency } from '@/src/lib/utils/frequency'
 import type { IBVSummary } from './types'
 
-const PENDING_STATUSES = new Set(['pending', 'processing', 'requested', 'in_progress'])
+const PENDING_STATUSES = new Set([
+  'pending',
+  'processing',
+  'requested',
+  'in_progress'
+])
 
 function resolveStatus(rawData: any): string | null {
   const candidates = [
@@ -58,10 +68,14 @@ function extractSummary(rawData: any, requestGuid: string): IBVSummary {
         income_net: account?.statistics?.income_net ?? 0,
         nsf: {
           all_time: account?.statistics?.quarter_all_time?.number_of_nsf ?? 0,
-          quarter_3_months: account?.statistics?.quarter_3_months?.number_of_nsf ?? 0,
-          quarter_6_months: account?.statistics?.quarter_6_months?.number_of_nsf ?? 0,
-          quarter_9_months: account?.statistics?.quarter_9_months?.number_of_nsf ?? 0,
-          quarter_12_months: account?.statistics?.quarter_12_months?.number_of_nsf ?? 0
+          quarter_3_months:
+            account?.statistics?.quarter_3_months?.number_of_nsf ?? 0,
+          quarter_6_months:
+            account?.statistics?.quarter_6_months?.number_of_nsf ?? 0,
+          quarter_9_months:
+            account?.statistics?.quarter_9_months?.number_of_nsf ?? 0,
+          quarter_12_months:
+            account?.statistics?.quarter_12_months?.number_of_nsf ?? 0
         }
       },
       bank_pdf_statements: Array.isArray(account?.bank_pdf_statements)
@@ -70,25 +84,32 @@ function extractSummary(rawData: any, requestGuid: string): IBVSummary {
       total_transactions: Array.isArray(account?.transactions)
         ? account.transactions.length
         : (account?.transactions ?? []).length,
-      income: Array.isArray(account?.payschedules) ? account.payschedules.map((pay: any) => {
-        const normalizedFrequency = normalizeFrequency(pay?.frequency)
-        const futurePayments = Array.isArray(pay?.future_payments)
-          ? pay.future_payments
-              .map((value: any) => {
-                const parsed = new Date(value)
-                return Number.isNaN(parsed.getTime()) ? null : parsed
-              })
-              .filter((entry: Date | null): entry is Date => entry !== null)
-          : []
+      income: Array.isArray(account?.payschedules)
+        ? account.payschedules.map((pay: any) => {
+            const normalizedFrequency = normalizeFrequency(pay?.frequency)
+            const futurePayments = Array.isArray(pay?.future_payments)
+              ? pay.future_payments
+                  .map((value: any) => {
+                    const parsed = new Date(value)
+                    return Number.isNaN(parsed.getTime()) ? null : parsed
+                  })
+                  .filter((entry: Date | null): entry is Date => entry !== null)
+              : []
 
-        return {
-          frequency: normalizedFrequency,
-          raw_frequency: typeof pay?.frequency === 'string' ? pay.frequency : pay?.frequency ? String(pay.frequency) : null,
-          details: pay?.details ?? '',
-          monthly_income: Number(pay?.monthly_income) || 0,
-          future_payments: futurePayments
-        }
-      }) : []
+            return {
+              frequency: normalizedFrequency,
+              raw_frequency:
+                typeof pay?.frequency === 'string'
+                  ? pay.frequency
+                  : pay?.frequency
+                    ? String(pay.frequency)
+                    : null,
+              details: pay?.details ?? '',
+              monthly_income: Number(pay?.monthly_income) || 0,
+              future_payments: futurePayments
+            }
+          })
+        : []
     }))
   }
 }
@@ -181,9 +202,11 @@ export async function GET(
 
     if (applicationId) {
       // Direct lookup by application ID
-    const { data: application, error: fetchError } = await supabase
+      const { data: application, error: fetchError } = await supabase
         .from('loan_applications')
-        .select('id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)')
+        .select(
+          'id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)'
+        )
         .eq('id', applicationId)
         .eq('ibv_provider', 'inverite')
         .single()
@@ -219,7 +242,9 @@ export async function GET(
       // Fallback: search by request_guid
       const { data: applications, error: fetchError } = await supabase
         .from('loan_applications')
-        .select('id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)')
+        .select(
+          'id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)'
+        )
         .eq('ibv_provider', 'inverite')
         .not('ibv_provider_data', 'is', null)
 
@@ -255,7 +280,9 @@ export async function GET(
     }
 
     const normalizedStatus = resolveStatus(inveriteData)
-    const accountsArray = Array.isArray(inveriteData?.accounts) ? inveriteData.accounts : []
+    const accountsArray = Array.isArray(inveriteData?.accounts)
+      ? inveriteData.accounts
+      : []
     const hasCompleteTimestamp = Boolean(inveriteData?.complete_datetime)
     const treatAsPending =
       (normalizedStatus && PENDING_STATUSES.has(normalizedStatus)) ||
@@ -267,7 +294,8 @@ export async function GET(
           ? normalizedStatus
           : null
       )
-      const targetApplicationId = applicationId || (matchingApplication as any).id
+      const targetApplicationId =
+        applicationId || (matchingApplication as any).id
 
       try {
         await (supabase as any)
@@ -366,7 +394,49 @@ export async function GET(
     // Persist recomputed summary
     const targetApplicationId = applicationId || (matchingApplication as any).id
 
-    const verifiedAt = updatedProviderData.verified_at || new Date().toISOString()
+    const verifiedAt =
+      updatedProviderData.verified_at || new Date().toISOString()
+
+    // Extract bank account from IBV results and populate user's bank_account if not already set
+    // Use the first account from the accounts array
+    // Only declare accountsArray if not already declared above to prevent redeclaration errors
+    const firstAccount =
+      ibvSummary.accounts.length > 0 ? ibvSummary.accounts[0] : null
+
+    if (firstAccount) {
+      // Map Inverite account fields to our BankAccount type
+      const bankAccount: BankAccount = {
+        account_number: firstAccount.number,
+        transit_number: firstAccount.transit,
+        institution_number: firstAccount.institution,
+        // TODO get account name
+        account_name: firstAccount.bank_name,
+        bank_name: firstAccount.bank_name
+      }
+
+      const userData = await getUserProfile(matchingApplication.client_id, true)
+    
+      // Only update if user doesn't have a bank account yet
+      if (userData && !userData.bank_account) {
+        const { success, error: bankAccountError } = await updateUserProfile(
+          matchingApplication.client_id,
+          { bank_account: bankAccount },
+          true
+        )
+
+        if (!success) {
+          console.warn(
+            '[Inverite Fetch] Failed to update user bank account:',
+            bankAccountError
+          )
+        } else {
+          console.log(
+            '[Inverite Fetch] Successfully populated bank account for user:',
+            matchingApplication.client_id
+          )
+        }
+      }
+    }
 
     const { error: updateError } = await (supabase as any)
       .from('loan_applications')
@@ -389,9 +459,11 @@ export async function GET(
         })
         .eq('request_guid', requestGuid)
     } catch (historyError) {
-      console.warn('[Inverite Fetch] Failed to update IBV history row', historyError)
+      console.warn(
+        '[Inverite Fetch] Failed to update IBV history row',
+        historyError
+      )
     }
-
 
     if (updateError) {
       console.error('[Inverite Fetch] Error updating application:', updateError)
@@ -429,9 +501,14 @@ export async function GET(
       })
 
       if (staffRecipients.size > 0) {
-        const clientFirstName = (matchingApplication as any)?.users?.first_name ?? ''
-        const clientLastName = (matchingApplication as any)?.users?.last_name ?? ''
-        const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim()
+        const clientFirstName =
+          (matchingApplication as any)?.users?.first_name ?? ''
+        const clientLastName =
+          (matchingApplication as any)?.users?.last_name ?? ''
+        const clientName = [clientFirstName, clientLastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim()
 
         const statusLabel = normalizedStatus ?? 'pending'
 
@@ -462,7 +539,10 @@ export async function GET(
         )
       }
     } catch (notificationError) {
-      console.error('[Inverite Fetch] Failed to create notification:', notificationError)
+      console.error(
+        '[Inverite Fetch] Failed to create notification:',
+        notificationError
+      )
     }
 
     // Return success with fetched data summary

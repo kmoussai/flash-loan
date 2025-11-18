@@ -35,6 +35,8 @@ export default function ClientsPage() {
   })
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [showCrmModal, setShowCrmModal] = useState(false)
+  const [selectedCrmData, setSelectedCrmData] = useState<Record<string, any> | null>(null)
 
   // Debounce search input
   useEffect(() => {
@@ -457,15 +459,29 @@ export default function ClientsPage() {
                           {formatDate(client.created_at)}
                         </td>
                         <td className='whitespace-nowrap px-4 py-2 text-sm'>
-                          <button 
-                            className='mr-2 text-blue-600 hover:text-blue-800'
-                            onClick={() => router.push(`/admin/clients/${client.id}`)}
-                          >
-                            View
-                          </button>
-                          <button className='text-green-600 hover:text-green-800'>
-                            Verify KYC
-                          </button>
+                          <div className='flex items-center gap-2'>
+                            <button 
+                              className='text-blue-600 hover:text-blue-800'
+                              onClick={() => router.push(`/admin/clients/${client.id}`)}
+                            >
+                              View
+                            </button>
+                            {client.crm_original_data && (
+                              <button
+                                className='text-purple-600 hover:text-purple-800'
+                                onClick={() => {
+                                  setSelectedCrmData(client.crm_original_data)
+                                  setShowCrmModal(true)
+                                }}
+                                title='View CRM Original Data'
+                              >
+                                CRM Data
+                              </button>
+                            )}
+                            <button className='text-green-600 hover:text-green-800'>
+                              Verify KYC
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -517,6 +533,77 @@ export default function ClientsPage() {
             )}
           </div>
         </div>
+
+        {/* CRM Data Modal */}
+        {showCrmModal && selectedCrmData && (
+          <div 
+            className='fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50'
+            onClick={() => {
+              setShowCrmModal(false)
+              setSelectedCrmData(null)
+            }}
+          >
+            <div 
+              className='mx-4 w-full max-w-4xl max-h-[90vh] rounded-lg bg-white shadow-xl flex flex-col'
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className='border-b border-gray-200 px-6 py-4 flex-shrink-0'>
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <h2 className='text-xl font-bold text-gray-900'>
+                      CRM Original Data
+                    </h2>
+                    <p className='text-sm text-gray-500 mt-1'>
+                      Complete JSON data from CRM migration
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowCrmModal(false)
+                      setSelectedCrmData(null)
+                    }}
+                    className='text-gray-400 hover:text-gray-600 transition-colors'
+                  >
+                    <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className='flex-1 overflow-auto px-6 py-4'>
+                <div className='rounded-lg border border-gray-200 bg-gray-50 p-4'>
+                  <pre className='text-xs text-gray-800 overflow-x-auto whitespace-pre-wrap break-words font-mono'>
+                    {JSON.stringify(selectedCrmData, null, 2)}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className='border-t border-gray-200 px-6 py-4 flex-shrink-0 flex items-center justify-end gap-3'>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(selectedCrmData, null, 2))
+                  }}
+                  className='rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
+                >
+                  Copy JSON
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCrmModal(false)
+                    setSelectedCrmData(null)
+                  }}
+                  className='rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors'
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards - Note: These show counts from current filtered view */}
         <div className='grid gap-3 md:grid-cols-3'>

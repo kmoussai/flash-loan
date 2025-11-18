@@ -16,44 +16,53 @@ export async function GET(
 
 		const supabase = await createServerSupabaseAdminClient()
 
-		// Fetch base user
-		const { data: user, error: userError } = await supabase
+		// Fetch user with all fields including bank_account, addresses, and applications in a single query using joins
+		// This reduces database round trips from 3 queries to 1 query
+		// Explicitly specify foreign key relationships to avoid ambiguity:
+		// - addresses!addresses_client_id_fkey: one-to-many (all addresses for this client)
+		// - loan_applications!loan_applications_client_id_fkey: one-to-many (all applications for this client)
+		const { data: userData, error: userError } = await supabase
 			.from('users')
-			.select('*')
+			.select(`
+				*,
+				addresses!addresses_client_id_fkey (
+					*
+				),
+				loan_applications!loan_applications_client_id_fkey (
+					id,
+					loan_amount,
+					income_source,
+					application_status,
+					created_at,
+					submitted_at
+				)
+			`)
 			.eq('id', clientId)
 			.single()
 
 		if (userError) {
+			console.error('Failed to fetch user:', userError)
 			return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 })
 		}
-		if (!user) {
+		if (!userData) {
 			return NextResponse.json({ error: 'User not found' }, { status: 404 })
 		}
 
-		// Fetch addresses
-		const { data: addresses, error: addrError } = await supabase
-			.from('addresses')
-			.select('*')
-			.eq('client_id', clientId)
-			.order('created_at', { ascending: false })
+		// Extract user, addresses, and applications from the joined result
+		// Supabase returns joined data in nested format
+		const user = userData as any
+		const addresses = (user.addresses || []).sort((a: any, b: any) => 
+			new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+		)
+		const applications = (user.loan_applications || []).sort((a: any, b: any) => 
+			new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+		)
 
-		if (addrError) {
-			return NextResponse.json({ error: 'Failed to fetch addresses' }, { status: 500 })
-		}
-
-		// Fetch applications (lightweight list)
-		const { data: applications, error: appsError } = await supabase
-		.from('loan_applications')
-		.select('id, loan_amount, income_source, application_status, created_at, submitted_at')
-			.eq('client_id', clientId)
-			.order('created_at', { ascending: false })
-
-		if (appsError) {
-			return NextResponse.json({ error: 'Failed to fetch applications' }, { status: 500 })
-		}
+		// Remove the joined arrays from user object to maintain clean response format
+		const { addresses: _, loan_applications: __, ...cleanUser } = user
 
 		const response = NextResponse.json({
-			user,
+			user: cleanUser,
 			addresses: addresses || [],
 			applications: applications || []
 		})
