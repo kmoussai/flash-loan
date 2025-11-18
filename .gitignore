@@ -40,3 +40,5 @@ supabase/.temp/
 scripts/seed-auth-users.ts
 .env.integration
 .history
+CRM-Data/
+scripts/

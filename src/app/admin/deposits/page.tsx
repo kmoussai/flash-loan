@@ -182,9 +182,14 @@ export default function DepositsPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to initiate deposit')
+        const errorMessage = errorData.transactionId
+          ? `${errorData.error}\n\nTransaction ID: ${errorData.transactionId}`
+          : errorData.error || 'Failed to initiate deposit'
+        throw new Error(errorMessage)
       }
 
+      const data = await response.json()
+      alert(`Deposit initiated successfully!\nTransaction ID: ${data.transactionId}`)
       await fetchDeposits()
     } catch (err: any) {
       alert(err.message || 'Failed to initiate deposit')

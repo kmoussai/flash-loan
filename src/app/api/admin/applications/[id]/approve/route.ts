@@ -46,7 +46,8 @@ export async function POST(
         users:client_id (
           id,
           first_name,
-          last_name
+          last_name,
+          bank_account
         )
       `)
       .eq('id', applicationId)
@@ -71,6 +72,7 @@ export async function POST(
         id: string
         first_name: string | null
         last_name: string | null
+        bank_account: any | null
       } | null
     }
 
@@ -78,6 +80,22 @@ export async function POST(
     if (app.application_status === 'pre_approved' || app.application_status === 'approved') {
       return NextResponse.json(
         { error: 'Application is already pre-approved' },
+        { status: 400 }
+      )
+    }
+
+    // Check if client has a bank account
+    const userBankAccount = app.users?.bank_account
+    if (!userBankAccount || 
+        !userBankAccount.bank_name || 
+        !userBankAccount.account_number || 
+        !userBankAccount.transit_number || 
+        !userBankAccount.institution_number) {
+      return NextResponse.json(
+        { 
+          error: 'Cannot pre-approve application',
+          details: 'Client must have a verified bank account before pre-approval. Please ensure IBV verification is completed and bank account information is available.'
+        },
         { status: 400 }
       )
     }
