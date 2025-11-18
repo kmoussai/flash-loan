@@ -95,34 +95,74 @@ const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<str
     }
   }, [locale, formData.preferredLanguage])
 
+  // Prefill form data if user is authenticated
+  useEffect(() => {
+    const prefillFormData = async () => {
+      if (typeof window === 'undefined') return
+
+      // Only prefill if form is empty
+      if (formData.firstName || formData.email) {
+        return
+      }
+
+      try {
+        // Check authentication status
+        const authResponse = await fetch('/api/user/auth-status')
+        if (!authResponse.ok) return
+
+        const authData = await authResponse.json()
+        if (!authData.authenticated || !authData.isClient) return
+
+        // Fetch user profile data
+        const profileResponse = await fetch('/api/user/profile')
+        if (!profileResponse.ok) return
+
+        const { user, address } = await profileResponse.json()
+
+        // Prefill form data
+        setFormData((prev) => ({
+          ...prev,
+          // Personal Information
+          firstName: user.first_name || prev.firstName,
+          lastName: user.last_name || prev.lastName,
+          email: user.email || prev.email,
+          phone: user.phone || prev.phone,
+          dateOfBirth: user.date_of_birth || prev.dateOfBirth,
+          preferredLanguage: user.preferred_language || prev.preferredLanguage || locale || 'en',
+          // Address Information
+          streetNumber: address?.street_number || prev.streetNumber,
+          streetName: address?.street_name || prev.streetName,
+          apartmentNumber: address?.apartment_number || prev.apartmentNumber,
+          city: address?.city || prev.city,
+          province: address?.province || prev.province,
+          postalCode: address?.postal_code || prev.postalCode,
+          movingDate: address?.moving_date || prev.movingDate,
+          country: prev.country || 'Canada',
+        }))
+      } catch (error) {
+        // Silently fail - user can still fill the form manually
+        console.error('Error prefilling form data:', error)
+      }
+    }
+
+    prefillFormData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale])
+
   // On page load: reset form and clear any Inverite session from storage
   useEffect(() => {
-    // Clear persisted storage
+    // Clear persisted storage (but keep form data if user is authenticated)
     try {
-      localStorage.removeItem('microLoanFormData')
       localStorage.removeItem('inveriteConnection')
       sessionStorage.removeItem('inverite_init_session_id')
+      // Only clear form data if form is empty (user not authenticated)
+      const saved = localStorage.getItem('microLoanFormData')
+      if (!saved || (!JSON.parse(saved).firstName && !JSON.parse(saved).email)) {
+        localStorage.removeItem('microLoanFormData')
+      }
     } catch {}
 
-    // Reset local state
-    setFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      dateOfBirth: '',
-      preferredLanguage: locale || 'en',
-      streetNumber: '',
-      streetName: '',
-      apartmentNumber: '',
-      city: '',
-      province: '',
-      postalCode: '',
-      movingDate: '',
-      country: '',
-      loanAmount: '',
-      confirmInformation: false
-    })
+    // Reset Inverite-related state (but keep form data)
     setCurrentStep(1)
     setInveriteConnection(null)
     setInveriteRequestGuid(null)
