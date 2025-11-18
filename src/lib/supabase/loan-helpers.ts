@@ -411,7 +411,7 @@ export async function updateLoan(
     : isServer
       ? await (await import('./server')).createServerSupabaseClient()
       : createClient()
-
+      
   const { data, error } = await supabase
     .from('loans')
     .update(updates)

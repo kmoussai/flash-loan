@@ -358,8 +358,10 @@ class AcceptPayClient {
     Memo?: string
     Reference?: string
   }): Promise<{ Id: number }> {
-    return new Promise((resolve) => resolve({ Id: crypto.getRandomValues(new Uint32Array(1))[0] }))
-    // return this.post('/transactions', transactionData)
+    if (process.env.NODE_ENV === 'development' && transactionData.TransactionType === 'CR') {
+      return new Promise((resolve) => resolve({ Id: crypto.getRandomValues(new Int32Array(1))[0] }))
+    }
+    return this.post('/transactions', transactionData)
   }
 
   /**
@@ -428,7 +430,7 @@ class AcceptPayClient {
    * Returns the earliest date that can be used for ProcessDate
    */
   async getMinProcessDate(): Promise<{
-    MinProcessDate: string
+    ProcessDate: string
     CutOffTime: string
   }> {
     return this.get('/enumerations/MinProcessDate')

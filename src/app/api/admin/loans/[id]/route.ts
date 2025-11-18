@@ -84,6 +84,18 @@ export async function GET(
       // Don't fail if payments can't be fetched, just log it
     }
 
+    // Fetch payment schedule for this loan
+    const { data: paymentSchedule, error: scheduleError } = await supabase
+      .from('loan_payment_schedule')
+      .select('*')
+      .eq('loan_id', loanId)
+      .order('scheduled_date', { ascending: true })
+
+    if (scheduleError) {
+      console.error('Error fetching payment schedule:', scheduleError)
+      // Don't fail if schedule can't be fetched, just log it
+    }
+
     // Calculate payment statistics
     const paymentsList = (payments || []) as any[]
     const totalPaid = paymentsList
@@ -101,6 +113,7 @@ export async function GET(
     return NextResponse.json({
       loan: loanData,
       payments: paymentsList,
+      paymentSchedule: paymentSchedule || [],
       statistics: {
         totalPaid,
         totalPending,

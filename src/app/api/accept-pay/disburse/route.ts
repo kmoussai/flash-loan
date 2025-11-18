@@ -37,7 +37,15 @@ export async function POST(request: NextRequest) {
     const result = await initiateDisbursement(loanId, true)
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
+      // If transaction already exists, return 409 Conflict instead of 400
+      const statusCode = result.transactionId ? 409 : 400
+      return NextResponse.json(
+        { 
+          error: result.error,
+          transactionId: result.transactionId || null
+        }, 
+        { status: statusCode }
+      )
     }
 
     return NextResponse.json({

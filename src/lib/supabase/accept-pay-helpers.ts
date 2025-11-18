@@ -30,6 +30,7 @@ import { Loan } from '@/src/types'
 import { createClient } from './client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAcceptPayClient } from '@/src/lib/accept-pay/client'
+import { updateLoan } from './loan-helpers'
 
 // ===========================
 // ACCEPT PAY CONSTANTS
@@ -338,6 +339,32 @@ export async function initiateDisbursement(
 
     const loan = loanData as Loan & { users: User }
 
+    // Check if loan already has a disbursement transaction
+    if (loan.disbursement_transaction_id) {
+      const statusMessage = loan.disbursement_status === 'AA' 
+        ? 'already completed'
+        : loan.disbursement_authorized_at
+        ? 'already authorized'
+        : loan.disbursement_initiated_at
+        ? 'already initiated'
+        : 'already has a transaction'
+      
+      return {
+        success: false,
+        transactionId: loan.disbursement_transaction_id,
+        error: `Loan disbursement ${statusMessage}. Transaction ID: ${loan.disbursement_transaction_id}`
+      }
+    }
+
+    // Check if loan status is already active (disbursed)
+    if (loan.status === 'active' && loan.disbursement_completed_at) {
+      return {
+        success: false,
+        transactionId: loan.disbursement_transaction_id || null,
+        error: 'Loan has already been disbursed and is active'
+      }
+    }
+
     const user = loan.users as User
 
     // Get or create Accept Pay customer
@@ -357,7 +384,7 @@ export async function initiateDisbursement(
     // Get minimum process date
     const acceptPayClient = getAcceptPayClient()
     const minDateResponse = await acceptPayClient.getMinProcessDate()
-    const processDate = minDateResponse.MinProcessDate
+    const processDate = minDateResponse.ProcessDate
 
     // Create disbursement transaction (CR = Credit)
     const transactionResponse = await acceptPayClient.createTransaction({
@@ -379,18 +406,25 @@ export async function initiateDisbursement(
       disbursement_transaction_id: transactionResponse.Id,
       disbursement_process_date: processDate,
       disbursement_status: '101', // Initiated
-      disbursement_initiated_at: new Date().toISOString()
+      disbursement_initiated_at: new Date().toISOString(),
+      status: 'active'
     }
-    const { error: updateError } = await (supabase.from('loans') as any)
-      .update(loanUpdatePayload)
-      .eq('id', loanId)
+    const updateResult = await updateLoan(loanId, loanUpdatePayload, { 
+      isServer: true, 
+      useAdminClient: true 
+    })
 
-    if (updateError) {
+    if (!updateResult.success) {
       console.error(
         'Error updating loan with disbursement details:',
-        updateError
+        updateResult.error,
+        loanId
       )
-      return { success: false, transactionId: null, error: updateError.message }
+      return { 
+        success: false, 
+        transactionId: null, 
+        error: updateResult.error || 'Failed to update loan' 
+      }
     }
 
     return { success: true, transactionId: transactionResponse.Id, error: null }
@@ -503,6 +537,10 @@ export async function updateDisbursementStatus(
       if (!scheduleResult.success) {
         console.warn('Failed to create payment schedule:', scheduleResult.error)
         // Don't fail the disbursement update if schedule creation fails
+      } else {
+        // Create Accept Pay collection transactions for all scheduled payments
+        // Accept Pay will automatically process them on their due dates
+        await createCollectionTransactionsForSchedule(loanId, isServer)
       }
     }
   } else if (errorCode) {
@@ -605,7 +643,114 @@ export async function createPaymentSchedule(
 }
 
 /**
+ * Create Accept Pay collection transactions for all scheduled payments
+ * This is called automatically when a loan is disbursed
+ * Accept Pay will process these transactions on their scheduled dates
+ */
+async function createCollectionTransactionsForSchedule(
+  loanId: string,
+  isServer = true
+): Promise<void> {
+  const supabase: SupabaseClient<Database> = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  try {
+    // Get all pending payment schedules for this loan
+    const { data: schedules, error: scheduleError } = await supabase
+      .from('loan_payment_schedule')
+      .select('*')
+      .eq('loan_id', loanId)
+      .eq('status', 'pending')
+      .order('payment_number', { ascending: true })
+
+    if (scheduleError || !schedules || schedules.length === 0) {
+      console.warn('No payment schedules found for loan:', loanId)
+      return
+    }
+
+    const paymentSchedules = schedules as LoanPaymentSchedule[]
+
+    // Get loan with customer info
+    const { data: loanData, error: loanError } = await supabase
+      .from('loans')
+      .select('*, users!loans_user_id_fkey(*)')
+      .eq('id', loanId)
+      .single()
+
+    if (loanError || !loanData) {
+      console.error('Loan not found:', loanId)
+      return
+    }
+
+    const loan = loanData as Loan & { users: User }
+    const customerId =
+      loan.accept_pay_customer_id || loan.users.accept_pay_customer_id
+
+    if (!customerId) {
+      console.error('Accept Pay customer not found for loan:', loanId)
+      return
+    }
+
+    // Get minimum process date
+    const acceptPayClient = getAcceptPayClient()
+    const minDateResponse = await acceptPayClient.getMinProcessDate()
+    const minDate = new Date(minDateResponse.ProcessDate)
+
+    // Create Accept Pay transaction for each scheduled payment
+    for (const schedule of paymentSchedules) {
+      try {
+        const scheduledDate = new Date(schedule.scheduled_date)
+        // Use scheduled date if it's >= min process date, otherwise use min process date
+        const finalProcessDate =
+          scheduledDate >= minDate
+            ? schedule.scheduled_date
+            : minDateResponse.ProcessDate
+
+        // Create collection transaction (DB = Debit) - Accept Pay will process on ProcessDate
+        const transactionResponse = await acceptPayClient.createTransaction({
+          CustomerId: customerId,
+          ProcessDate: finalProcessDate,
+          Amount: schedule.amount,
+          TransactionType: 'DB', // Debit = collect from borrower
+          PaymentType: ACCEPT_PAY_PAYMENT_TYPES.PersonalLoans,
+          PADTType: 'Personal',
+          Status: 'Authorized', // Authorized so Accept Pay processes automatically
+          Schedule: AcceptPayTransactionSchedule.OneTime, // One-time payment
+          Memo: `Loan payment #${schedule.payment_number} - Loan #${loan.loan_number || loanId}`,
+          Reference: `PAYMENT-${schedule.id}`
+        })
+
+        // Update schedule with transaction ID
+        const updatePayload: LoanPaymentScheduleUpdate = {
+          accept_pay_transaction_id: transactionResponse.Id,
+          status: 'scheduled'
+        }
+        await (supabase.from('loan_payment_schedule') as any)
+          .update(updatePayload)
+          .eq('id', schedule.id)
+
+        console.log(
+          `Created Accept Pay collection transaction ${transactionResponse.Id} for payment #${schedule.payment_number}`
+        )
+      } catch (error: any) {
+        console.error(
+          `Failed to create collection transaction for schedule ${schedule.id}:`,
+          error
+        )
+        // Continue with other schedules even if one fails
+      }
+    }
+  } catch (error: any) {
+    console.error('Error creating collection transactions:', error)
+    // Don't throw - this is called from updateDisbursementStatus
+  }
+}
+
+/**
  * Initiate payment collection transaction in Accept Pay
+ * Note: This is now mainly used for manual retries. Collection transactions
+ * are automatically created when a loan is disbursed.
  */
 export async function initiatePaymentCollection(
   scheduleId: string,
@@ -656,15 +801,15 @@ export async function initiatePaymentCollection(
     // Get minimum process date
     const acceptPayClient = getAcceptPayClient()
     const minDateResponse = await acceptPayClient.getMinProcessDate()
-    const processDate = minDateResponse.MinProcessDate
+    const processDate = minDateResponse.ProcessDate
 
     // Use scheduled date if it's >= min process date, otherwise use min process date
     const scheduledDate = new Date(scheduleData.scheduled_date)
-    const minDate = new Date(minDateResponse.MinProcessDate)
+    const minDate = new Date(minDateResponse.ProcessDate)
     const finalProcessDate =
       scheduledDate >= minDate
         ? scheduleData.scheduled_date
-        : minDateResponse.MinProcessDate
+        : minDateResponse.ProcessDate
 
     // Create collection transaction (DB = Debit)
     const transactionResponse = await acceptPayClient.createTransaction({
@@ -672,8 +817,8 @@ export async function initiatePaymentCollection(
       ProcessDate: finalProcessDate,
       Amount: scheduleData.amount,
       TransactionType: 'DB', // Debit = collect from borrower
-      PaymentType: 450, // EFT payment type
-      PADTType: 'Business',
+      PaymentType: ACCEPT_PAY_PAYMENT_TYPES.PersonalLoans,
+      PADTType: 'Personal',
       Status: 'Authorized',
       Memo: `Loan payment #${scheduleData.payment_number}`,
       Reference: `PAYMENT-${scheduleData.id}`
