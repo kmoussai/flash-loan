@@ -292,6 +292,8 @@ export interface User {
   accept_pay_customer_updated_at: string | null
   // CRM migration fields
   crm_original_data: Record<string, any> | null
+  // Bank account (populated from IBV results)
+  bank_account: BankAccount | null
 }
 
 export interface Staff {
@@ -570,6 +572,7 @@ export interface UserInsert {
   accept_pay_customer_created_at?: string | null
   accept_pay_customer_updated_at?: string | null
   crm_original_data?: Record<string, any> | null
+  bank_account?: BankAccount | null
 }
 
 export interface StaffInsert {
@@ -650,6 +653,7 @@ export interface UserUpdate {
   accept_pay_customer_created_at?: string | null
   accept_pay_customer_updated_at?: string | null
   crm_original_data?: Record<string, any> | null
+  bank_account?: BankAccount | null
 }
 
 export interface StaffUpdate {
