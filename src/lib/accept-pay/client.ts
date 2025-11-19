@@ -441,40 +441,76 @@ class AcceptPayClient {
   // ===========================
 
   /**
+   * Format date string to YYYY-MM-DD format for Accept Pay API
+   * Accepts ISO 8601 timestamps or date strings
+   * @param dateString - ISO 8601 date string or YYYY-MM-DD format
+   * @returns Date in YYYY-MM-DD format
+   */
+  private formatDateForAPI(dateString: string): string {
+    try {
+      // If already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return dateString
+      }
+      
+      // Parse the date string and format to YYYY-MM-DD
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date string: ${dateString}`)
+      }
+      
+      const year = date.getUTCFullYear()
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+      const day = String(date.getUTCDate()).padStart(2, '0')
+      
+      return `${year}-${month}-${day}`
+    } catch (error) {
+      console.error('[Accept Pay] Error formatting date:', error, dateString)
+      throw new Error(`Failed to format date: ${dateString}`)
+    }
+  }
+
+  /**
    * Get transaction updates since a specific date
-   * @param changedSince - ISO 8601 date string
+   * @param changedSince - ISO 8601 date string or YYYY-MM-DD format
    * @param page - Optional page number for pagination
    */
   async getTransactionUpdates(
     changedSince: string,
     page?: number
   ): Promise<unknown[]> {
+    // Format date to YYYY-MM-DD (Accept Pay expects this format, not ISO timestamp)
+    const dateStr = this.formatDateForAPI(changedSince)
     const endpoint = page
-      ? `/updates/transactions/${changedSince}/${page}`
-      : `/updates/transactions/${changedSince}`
+      ? `/updates/transactions/${dateStr}/${page}`
+      : `/updates/transactions/${dateStr}/1`
     return this.get(endpoint)
   }
 
   /**
    * Get NOCs (Notification of Changes) since a specific date
-   * @param changedSince - ISO 8601 date string
+   * @param changedSince - ISO 8601 date string or YYYY-MM-DD format
    */
   async getNOCs(changedSince: string): Promise<unknown[]> {
-    return this.get(`/updates/nocs/${changedSince}`)
+    // Format date to YYYY-MM-DD (Accept Pay expects this format, not ISO timestamp)
+    const dateStr = this.formatDateForAPI(changedSince)
+    return this.get(`/updates/nocs/${dateStr}`)
   }
 
   /**
    * Get customer updates since a specific date
-   * @param changedSince - ISO 8601 date string
+   * @param changedSince - ISO 8601 date string or YYYY-MM-DD format
    * @param page - Optional page number for pagination
    */
   async getCustomerUpdates(
     changedSince: string,
     page?: number
   ): Promise<unknown[]> {
+    // Format date to YYYY-MM-DD (Accept Pay expects this format, not ISO timestamp)
+    const dateStr = this.formatDateForAPI(changedSince)
     const endpoint = page
-      ? `/updates/customer/${changedSince}/${page}`
-      : `/updates/customer/${changedSince}`
+      ? `/updates/customer/${dateStr}/${page}`
+      : `/updates/customer/${dateStr}`
     return this.get(endpoint)
   }
 

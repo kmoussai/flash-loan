@@ -278,7 +278,7 @@ export async function getLoanApplicationById(
     : createClient()
   const { data, error } = await supabase
     .from('loan_applications')
-    .select('ibv_results')
+    .select('ibv_results, client_id')
     .eq('id', applicationId)
     .single()
 
