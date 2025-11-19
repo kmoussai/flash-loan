@@ -11,7 +11,7 @@ import { createAcceptPayCustomer } from '@/src/lib/supabase/accept-pay-helpers'
 import {
   generateSignedContractPDF,
   generateComplianceMetadata
-} from '@/src/lib/contracts/pdf-generator'
+} from '@/src/lib/contracts/html-to-pdf'
 
 export async function POST(
   request: NextRequest,
@@ -48,6 +48,17 @@ export async function POST(
           loan_applications!inner (
             id,
             client_id
+          ),
+          loan:loans (
+            id,
+            loan_number,
+            principal_amount,
+            interest_rate,
+            term_months,
+            disbursement_date,
+            due_date,
+            remaining_balance,
+            status
           )
         `
       )

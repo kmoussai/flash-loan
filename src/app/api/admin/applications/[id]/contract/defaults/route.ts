@@ -223,6 +223,8 @@ export async function GET(
   }
 
   try {
+    const adminClient = createServerSupabaseAdminClient()
+    
     const [contractResult, loanResponse, loanApplicationResponse] =
       await Promise.all([
         getContractByApplicationId(applicationId, true),
@@ -233,7 +235,40 @@ export async function GET(
     const contractData = contractResult.data
     const loanData = loanResponse.data
     const loanApplicationData = loanApplicationResponse.data
+    
+    // Get client's bank account from users table
+    let clientBankAccount: BankAccount | null = null
+    if (loanApplicationData?.client_id) {
+      const { data: userData } = await (adminClient as any)
+        .from('users')
+        .select('bank_account')
+        .eq('id', loanApplicationData.client_id)
+        .maybeSingle()
+      
+      if (userData?.bank_account) {
+        clientBankAccount = userData.bank_account as BankAccount
+      }
+    }
+    
     const tmpAccounts = extractAccountsFromIbv(loanApplicationData?.ibv_results)
+    
+    // Combine accounts: client's saved account first, then IBV accounts
+    const allAccountOptions: BankAccount[] = []
+    if (clientBankAccount) {
+      allAccountOptions.push(clientBankAccount)
+    }
+    // Add IBV accounts that aren't duplicates
+    for (const ibvAccount of tmpAccounts) {
+      const isDuplicate = allAccountOptions.some(
+        acc => 
+          acc.account_number === ibvAccount.account_number &&
+          acc.institution_number === ibvAccount.institution_number &&
+          acc.transit_number === ibvAccount.transit_number
+      )
+      if (!isDuplicate) {
+        allAccountOptions.push(ibvAccount)
+      }
+    }
     const paymentFrequency =
       contractData?.contract_terms.payment_frequency ??
       loanApplicationData?.ibv_results?.accounts?.[0]?.income?.[0]?.frequency ??
@@ -249,8 +284,8 @@ export async function GET(
       success: true,
       defaults: {
         loanAmount,
-        account: contractData?.bank_account ?? tmpAccounts[0] ?? null,
-        accountOptions: tmpAccounts,
+        account: contractData?.bank_account ?? clientBankAccount ?? allAccountOptions[0] ?? null,
+        accountOptions: allAccountOptions,
         numberOfPayments,
         paymentFrequency,
         nextPaymentDate: resolveNextPaymentDate(
