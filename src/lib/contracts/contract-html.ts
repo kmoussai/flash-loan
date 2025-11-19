@@ -1,13 +1,23 @@
 /**
  * Contract HTML Generation Utility
- * 
+ *
  * Extracted from ContractViewer to be used for PDF generation
  */
 
 import type { LoanContract } from '@/src/lib/supabase/types'
 import type { ContractTerms } from '@/src/lib/supabase/types'
+import path from 'path'
+import fs from 'fs/promises'
 
-export function createContractHTML(contractData: LoanContract): string {
+async function imageFileToBase64(filePath: string): Promise<string> {
+  const file = path.join(process.cwd(), filePath)
+  const fileData = await fs.readFile(file)
+  return `data:image/png;base64,${fileData.toString('base64')}`
+}
+
+export async function createContractHTML(
+  contractData: LoanContract
+): Promise<string> {
   const terms = (contractData.contract_terms || {}) as ContractTerms &
     Record<string, any>
 
@@ -49,9 +59,10 @@ export function createContractHTML(contractData: LoanContract): string {
     }
   }
 
-  const flashLoanLogo =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABLAAAAMACAYAAAA0TJ40AAAGRGlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNS41LjAiPgogPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4KICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgeG1sbnM6dGlmZj0iaHR0cDovL25zLmFkb2JlLmNvbS90aWZmLzEuMC8iCiAgICB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iCiAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyIKICAgIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIKICAgIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIKICAgIHhtbG5zOnhtcE1NPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvbW0vIgogICAgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIKICAgdGlmZjpJbWFnZUxlbmd0aD0iNzY4IgogICB0aWZmOkltYWdlV2lkdGg9IjEyMDAiCiAgIHRpZmY6UmVzb2x1dGlvblVuaXQ9IjIiCiAgIHRpZmY6WFJ [... omitted end of long line]'
-
+  const flashLoanLogo = await imageFileToBase64(
+    'public/images/FlashLoanLogo.png'
+  )
+  const signatureImage = await imageFileToBase64('private/signature.png')
   // Borrower basics from terms only
   const borrowerFirst = terms.first_name ?? ''
   const borrowerLast = terms.last_name ?? ''
@@ -70,8 +81,7 @@ export function createContractHTML(contractData: LoanContract): string {
 
   // Basic dates and schedule
   const dateCreated =
-    formatDate(contractData.created_at) ||
-    formatDate(new Date().toISOString())
+    formatDate(contractData.created_at) || formatDate(new Date().toISOString())
   const schedule = Array.isArray(terms.payment_schedule)
     ? terms.payment_schedule
     : []
@@ -79,12 +89,13 @@ export function createContractHTML(contractData: LoanContract): string {
   const principalAmount =
     typeof terms.principal_amount === 'number' ? terms.principal_amount : 0
   const totalAmount =
-    typeof terms.total_amount === 'number' ? terms.total_amount : principalAmount
+    typeof terms.total_amount === 'number'
+      ? terms.total_amount
+      : principalAmount
   const interestRate =
     typeof terms.interest_rate === 'number' ? terms.interest_rate : 0
   const paymentAmount = contractData.contract_terms.payment_amount
-  const firstPaymentDue =
-    schedule[0]?.due_date ?? terms.effective_date ?? null
+  const firstPaymentDue = schedule[0]?.due_date ?? terms.effective_date ?? null
   const lastPaymentDue =
     schedule[schedule.length - 1]?.due_date ?? terms.maturity_date ?? null
 
@@ -95,19 +106,19 @@ export function createContractHTML(contractData: LoanContract): string {
 
   // Contract meta
   const loanNumber = String(
-    contractData.loan.loan_number ??
-    contractData.loan_application_id ??
-    contractData.id
+    contractData.loan?.loan_number ??
+      contractData.loan_application_id ??
+      contractData.id
   )
   const signatureDateClient = formatDate(contractData.client_signed_at)
   const signatureDateStaff = formatDate(contractData.staff_signed_at)
-  const signatureMethod = contractData.client_signature_data?.signature_method
-  const signatureIp = contractData.client_signature_data?.ip_address
+  const signatureName = contractData.client_signature_data?.signature_name || ''
   const personalService = true
   const businessService = false
   const payeeName = 'Accept Pay Global (Payee)'
 
-  const borrowerFullName = [borrowerFirst, borrowerLast].filter(Boolean).join(' ').trim() || 'N/A'
+  const borrowerFullName =
+    [borrowerFirst, borrowerLast].filter(Boolean).join(' ').trim() || 'N/A'
 
   // Banking info (BankAccount doesn't have address fields)
   const bankingAddress = ''
@@ -123,12 +134,27 @@ export function createContractHTML(contractData: LoanContract): string {
     return stringValue.length > 0 ? stringValue : fallback
   }
 
+  // Escape HTML to prevent XSS
+  const escapeHtml = (text: string) => {
+    const map: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    }
+    return text.replace(/[&<>"']/g, (m) => map[m])
+  }
+
   return `
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
   <meta charset="UTF-8">
   <title>Loan Contract - ${contractData.id.slice(0, 8)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
@@ -237,9 +263,17 @@ export function createContractHTML(contractData: LoanContract): string {
     }
     .signature-line .line {
       display: block;
-      margin: 48px 0 10px;
+      margin: 10px 0 10px;
       border-top: 1px solid #000;
       height: 0;
+    }
+    .signature-name {
+      font-family: 'Dancing Script', cursive;
+      font-size: 24px;
+      font-weight: 600;
+      color: #000;
+      margin: 8px 0;
+      min-height: 30px;
     }
     .footer-note {
       position: absolute;
@@ -318,13 +352,12 @@ export function createContractHTML(contractData: LoanContract): string {
 
       <div class="signature-block">
         <div class="signature-line">
-          <span class="line"></span>
+          ${signatureName ? `<div class="signature-name">${escapeHtml(signatureName)}</div>` : '<span class="line"></span>'}
           <div>Client Signature</div>
           ${signatureDateClient ? `<div>Signed on ${signatureDateClient}</div>` : ''}
-          ${signatureMethod ? `<div>Method: ${signatureMethod}</div>` : ''}
-          ${signatureIp ? `<div>IP: ${signatureIp}</div>` : ''}
         </div>
     <div class="signature-line">
+          <img src="${signatureImage}" alt="Signature" class="signature-image" />
           <span class="line"></span>
           <div>Representative Signature</div>
           ${signatureDateStaff ? `<div>Signed on ${signatureDateStaff}</div>` : ''}
@@ -455,11 +488,12 @@ export function createContractHTML(contractData: LoanContract): string {
 
       <div class="signature-block">
         <div class="signature-line">
-          <span class="line"></span>
+          ${signatureName ? `<div class="signature-name">${escapeHtml(signatureName)}</div>` : '<span class="line"></span>'}
           <div>Debtor signature</div>
           ${signatureDateClient ? `<div>Signed on ${signatureDateClient}</div>` : ''}
         </div>
         <div class="signature-line">
+          <img src="${signatureImage}" alt="Signature" class="signature-image" />
           <span class="line"></span>
           <div>Creditor signature</div>
           ${signatureDateStaff ? `<div>Signed on ${signatureDateStaff}</div>` : ''}
@@ -471,4 +505,3 @@ export function createContractHTML(contractData: LoanContract): string {
 </html>
     `
 }
-

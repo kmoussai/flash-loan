@@ -196,9 +196,9 @@ export function buildContractTermsFromApplication(
     number_of_payments: numberOfPayments,
     payment_amount: paymentAmount,
     fees: {
-      origination_fee: 0,
-      processing_fee: 0,
-      other_fees: 0
+      origination_fee: 55, // Fee for preauthorized payments returned to the creditor
+      processing_fee: 0, // Debit fee for every payment
+      other_fees: 35 // Fee to postpone a payment
     },
     payment_schedule: paymentSchedule,
     terms_and_conditions:
