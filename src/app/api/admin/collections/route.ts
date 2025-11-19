@@ -51,7 +51,6 @@ export async function GET(request: NextRequest) {
           collection_completed_at
         )
       `)
-      .in('status', ['pending', 'scheduled'])
       .order('scheduled_date', { ascending: true })
 
     if (error) {
@@ -69,7 +68,6 @@ export async function GET(request: NextRequest) {
 
     const collections = (schedules || []).map((schedule: any) => {
       const status = schedule.status
-      
       const loan = schedule.loans
       const payment = Array.isArray(schedule.loan_payments) 
         ? schedule.loan_payments[0] 
@@ -77,7 +75,12 @@ export async function GET(request: NextRequest) {
 
       if (status === 'pending') {
         statusCounts.pending++
-      } else if (status === 'scheduled') {
+
+      } 
+      else if (status === 'authorized') {
+        statusCounts.authorized++
+      }
+      else if (status === 'scheduled') {
         if (payment?.accept_pay_status === 'AA') {
           statusCounts.authorized++
         } else {

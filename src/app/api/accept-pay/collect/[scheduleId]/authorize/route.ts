@@ -43,7 +43,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: 'Payment collection transaction authorized successfully'
+      message: 'Payment collection transaction authorized successfully',
     })
   } catch (error: any) {
     console.error('Error authorizing payment collection:', error)

@@ -414,6 +414,8 @@ export async function initiateDisbursement(
       useAdminClient: true 
     })
 
+    await createCollectionTransactionsForSchedule(loanId, isServer)
+
     if (!updateResult.success) {
       console.error(
         'Error updating loan with disbursement details:',
@@ -724,7 +726,7 @@ async function createCollectionTransactionsForSchedule(
         // Update schedule with transaction ID
         const updatePayload: LoanPaymentScheduleUpdate = {
           accept_pay_transaction_id: transactionResponse.Id,
-          status: 'scheduled'
+          status: 'authorized'
         }
         await (supabase.from('loan_payment_schedule') as any)
           .update(updatePayload)
