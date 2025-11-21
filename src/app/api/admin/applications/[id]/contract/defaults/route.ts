@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
-import type {
-  IncomeSourceType
-} from '@/src/lib/supabase/types'
+import type { IncomeSourceType } from '@/src/lib/supabase/types'
 import { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
 import {
   FREQUENCY_OPTIONS,
@@ -12,12 +10,17 @@ import {
   normalizeFrequency
 } from '@/src/lib/utils/frequency'
 import { buildContractTermsFromApplication } from '@/src/lib/contracts/terms'
-import {  ContractDefaultsResponse, PaymentFrequency, ContractTerms } from '@/src/types'
+import {
+  ContractDefaultsResponse,
+  PaymentFrequency,
+  ContractTerms
+} from '@/src/types'
 import {
   getLoanApplicationById,
   getLoanByApplicationId
 } from '@/src/lib/supabase/loan-helpers'
 import { BankAccount } from '@/src/types'
+import { calculateNumberOfPayments, calculatePaymentAmount } from '@/src/lib/utils/loan'
 
 const getLowestPaymentFrequencyFromIbv = (
   ibvResults?: IBVSummary | null
@@ -86,6 +89,32 @@ const getEarliestDate = (dates: Date[]): Date | null => {
   return dates.sort((a, b) => a.getTime() - b.getTime())[0]
 }
 
+/**
+ * Extract next payment date from employment information in loan application
+ */
+const getNextPayDateFromEmploymentInfo = (
+  incomeSource?: IncomeSourceType | null,
+  incomeFields?: Record<string, any> | null
+): string | null => {
+  if (!incomeSource || !incomeFields) {
+    return null
+  }
+
+  // For employed: use next_pay_date
+  if (incomeSource === 'employed' && incomeFields.next_pay_date) {
+    const parsedDate = parseDateValue(incomeFields.next_pay_date)
+    return parsedDate ? toIsoDate(parsedDate) : null
+  }
+
+  // For self-employed and others: use next_deposit_date
+  if (incomeFields.next_deposit_date) {
+    const parsedDate = parseDateValue(incomeFields.next_deposit_date)
+    return parsedDate ? toIsoDate(parsedDate) : null
+  }
+
+  return null
+}
+
 const getNextPayDateFromIbv = (
   ibvResults?: IBVSummary | null
 ): string | null => {
@@ -130,12 +159,22 @@ const getNextPayDateFromIbv = (
   return candidate ? toIsoDate(candidate) : null
 }
 
+/**
+ * Resolve next payment date with priority:
+ * 1. Contract terms (payment schedule or effective date)
+ * 2. Employment information (next_pay_date or next_deposit_date)
+ * 3. IBV results (future payments)
+ * 4. Default to today
+ */
 const resolveNextPaymentDate = (
   terms: ContractTerms | null | undefined,
+  incomeSource?: IncomeSourceType | null,
+  incomeFields?: Record<string, any> | null,
   ibvResults?: IBVSummary | null
 ): string => {
   const todayIso = toIsoDate(new Date())
 
+  // Priority 1: Contract terms - payment schedule
   const scheduleEntries = Array.isArray(terms?.payment_schedule)
     ? terms?.payment_schedule
     : []
@@ -160,23 +199,71 @@ const resolveNextPaymentDate = (
     return toIsoDate(upcomingScheduleDate ?? fallbackScheduleDate!)
   }
 
-  const ibvNextDate = getNextPayDateFromIbv(ibvResults)
-  if (ibvNextDate) {
-    return ibvNextDate
-  }
-
+  // Priority 1 (fallback): Contract terms - effective date
   const effectiveDate = parseDateValue(terms?.effective_date)
   if (effectiveDate) {
     return toIsoDate(effectiveDate)
   }
 
+  // Priority 2: Employment information
+  const employmentNextDate = getNextPayDateFromEmploymentInfo(incomeSource, incomeFields)
+  if (employmentNextDate) {
+    return employmentNextDate
+  }
+
+  // Priority 3: IBV results
+  const ibvNextDate = getNextPayDateFromIbv(ibvResults)
+  if (ibvNextDate) {
+    return ibvNextDate
+  }
+
+  // Priority 4: Default to today
   return todayIso
 }
 
+/**
+ * Extract payment frequency from employment information in loan application
+ */
+const getFrequencyFromEmploymentInfo = (
+  incomeSource?: IncomeSourceType | null,
+  incomeFields?: Record<string, any> | null
+): PaymentFrequency | null => {
+  if (!incomeSource || !incomeFields) {
+    return null
+  }
+
+  // For employed: use payroll_frequency
+  if (incomeSource === 'employed' && incomeFields.payroll_frequency) {
+    return normalizeFrequency(
+      incomeFields.payroll_frequency
+    ) as PaymentFrequency | null
+  }
+
+  // For self-employed: use deposits_frequency
+  if (incomeSource === 'self-employed' && incomeFields.deposits_frequency) {
+    return normalizeFrequency(
+      incomeFields.deposits_frequency
+    ) as PaymentFrequency | null
+  }
+
+  return null
+}
+
+/**
+ * Resolve payment frequency with priority:
+ * 1. Contract terms frequency
+ * 2. Employment information frequency
+ * 3. IBV results frequency
+ * 4. Default to 'monthly'
+ */
 const resolvePaymentFrequency = (
   terms: ContractTerms | null | undefined,
+  incomeSource?: IncomeSourceType | null,
+  incomeFields?: Record<string, any> | null,
   ibvResults?: IBVSummary | null
 ): PaymentFrequency => {
+  console.log('resolvePaymentFrequency', { incomeSource })
+  // Priority 1: Contract terms frequency
   const fromTerms = normalizeFrequency(
     terms?.payment_frequency
   ) as PaymentFrequency | null
@@ -185,12 +272,22 @@ const resolvePaymentFrequency = (
     return fromTerms
   }
 
-  const fromIbv = getLowestPaymentFrequencyFromIbv(ibvResults)
+  // Priority 2: Employment information frequency
+  const fromEmployment = getFrequencyFromEmploymentInfo(
+    incomeSource,
+    incomeFields
+  )
+  if (fromEmployment) {
+    return fromEmployment
+  }
 
+  // Priority 3: IBV results frequency
+  const fromIbv = getLowestPaymentFrequencyFromIbv(ibvResults)
   if (fromIbv) {
     return fromIbv
   }
 
+  // Priority 4: Default to monthly
   return 'monthly'
 }
 
@@ -224,7 +321,7 @@ export async function GET(
 
   try {
     const adminClient = createServerSupabaseAdminClient()
-    
+
     const [contractResult, loanResponse, loanApplicationResponse] =
       await Promise.all([
         getContractByApplicationId(applicationId, true),
@@ -235,7 +332,7 @@ export async function GET(
     const contractData = contractResult.data
     const loanData = loanResponse.data
     const loanApplicationData = loanApplicationResponse.data
-    
+
     // Get client's bank account from users table
     let clientBankAccount: BankAccount | null = null
     if (loanApplicationData?.client_id) {
@@ -244,14 +341,14 @@ export async function GET(
         .select('bank_account')
         .eq('id', loanApplicationData.client_id)
         .maybeSingle()
-      
+
       if (userData?.bank_account) {
         clientBankAccount = userData.bank_account as BankAccount
       }
     }
-    
+
     const tmpAccounts = extractAccountsFromIbv(loanApplicationData?.ibv_results)
-    
+
     // Combine accounts: client's saved account first, then IBV accounts
     const allAccountOptions: BankAccount[] = []
     if (clientBankAccount) {
@@ -260,7 +357,7 @@ export async function GET(
     // Add IBV accounts that aren't duplicates
     for (const ibvAccount of tmpAccounts) {
       const isDuplicate = allAccountOptions.some(
-        acc => 
+        acc =>
           acc.account_number === ibvAccount.account_number &&
           acc.institution_number === ibvAccount.institution_number &&
           acc.transit_number === ibvAccount.transit_number
@@ -269,12 +366,15 @@ export async function GET(
         allAccountOptions.push(ibvAccount)
       }
     }
-    const paymentFrequency =
-      contractData?.contract_terms.payment_frequency ??
-      loanApplicationData?.ibv_results?.accounts?.[0]?.income?.[0]?.frequency ??
-      'monthly'
+    const paymentFrequency = resolvePaymentFrequency(
+      contractData?.contract_terms,
+      loanApplicationData?.income_source,
+      loanApplicationData?.income_fields,
+      loanApplicationData?.ibv_results
+    )
     const numberOfPayments =
-      contractData?.contract_terms.number_of_payments ?? 6
+      contractData?.contract_terms.number_of_payments ??
+      calculateNumberOfPayments(paymentFrequency)
     const loanAmount =
       contractData?.contract_terms?.principal_amount ??
       loanData?.principal_amount ??
@@ -283,26 +383,30 @@ export async function GET(
     const defaultsresponse: ContractDefaultsResponse = {
       success: true,
       defaults: {
+        brokerageFee: contractData?.contract_terms?.fees?.brokerage_fee ?? 200,
         loanAmount,
-        account: contractData?.bank_account ?? clientBankAccount ?? allAccountOptions[0] ?? null,
+        account:
+          contractData?.bank_account ??
+          clientBankAccount ??
+          allAccountOptions[0] ??
+          null,
         accountOptions: allAccountOptions,
         numberOfPayments,
         paymentFrequency,
         nextPaymentDate: resolveNextPaymentDate(
           contractData?.contract_terms,
+          loanApplicationData?.income_source,
+          loanApplicationData?.income_fields,
           loanApplicationData?.ibv_results
         ),
         paymentAmount:
           contractData?.contract_terms?.payment_amount ??
-          (loanAmount * 1.76) / (numberOfPayments ?? 6) 
-
-          // calculatePaymentAmount(
-          //   paymentFrequency,
-          //   loanAmount ?? 0,
-          //   29,
-          //   numberOfPayments
-          // ) ??
-          // 0
+          calculatePaymentAmount(
+            paymentFrequency,
+            loanAmount + 250.61,
+            29,
+            numberOfPayments ?? 6
+          )
       }
     }
 
@@ -314,40 +418,4 @@ export async function GET(
       { status: 500 }
     )
   }
-}
-
-function calculatePaymentAmount(
-  payment_frequency: PaymentFrequency,
-  loan_amount: number,
-  interest_rate: number, // annual rate in percent, e.g. 24
-  num_payments: number
-): number | undefined {
-  if (
-    !payment_frequency ||
-    loan_amount <= 0 ||
-    interest_rate < 0 ||
-    num_payments <= 0
-  ) {
-    return undefined
-  }
-
-  const paymentsPerYearMap: Record<PaymentFrequency, number> = {
-    weekly: 52,
-    'bi-weekly': 26,
-    'twice-monthly': 24,
-    monthly: 12
-  }
-
-  const paymentsPerYear = paymentsPerYearMap[payment_frequency]
-  const periodicRate = interest_rate / 100 / paymentsPerYear
-
-  // amortized payment formula
-  const payment =
-    periodicRate === 0
-      ? loan_amount / num_payments
-      : (loan_amount *
-          (periodicRate * Math.pow(1 + periodicRate, num_payments))) /
-        (Math.pow(1 + periodicRate, num_payments) - 1)
-
-  return Number(payment.toFixed(2))
 }

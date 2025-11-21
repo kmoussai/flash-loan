@@ -133,6 +133,50 @@ const REFERENCE_DEFAULT_FORM_SCHEMA = {
   ]
 }
 
+const BANK_DEFAULT_FORM_SCHEMA = {
+  title: 'Bank Information',
+  description:
+    'Please provide your bank account information for loan disbursement and repayment processing.',
+  submit_label: 'Submit Bank Information',
+  fields: [
+    {
+      id: 'bank_name',
+      label: 'Bank Name',
+      type: 'text',
+      required: true,
+      placeholder: 'e.g., TD Bank, RBC, BMO'
+    },
+    {
+      id: 'account_name',
+      label: 'Account Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Name on the account'
+    },
+    {
+      id: 'institution_number',
+      label: 'Institution Number',
+      type: 'text',
+      required: true,
+      placeholder: '3-digit institution number'
+    },
+    {
+      id: 'transit_number',
+      label: 'Transit Number',
+      type: 'text',
+      required: true,
+      placeholder: '5-digit transit number'
+    },
+    {
+      id: 'account_number',
+      label: 'Account Number',
+      type: 'text',
+      required: true,
+      placeholder: 'Account number'
+    }
+  ]
+}
+
 // POST /api/admin/loan-apps/:id/request-docs
 // Body: {
 //   requests?: Array<{ document_type_id: string, request_kind?: 'document' | 'address' | 'reference' | 'employment' | 'other', form_schema?: Record<string, any> }>,
@@ -170,11 +214,11 @@ export async function POST(
     const requestedBy: string | null =
       typeof body?.requested_by === 'string' ? body.requested_by : null
 
-    const allowedKinds = new Set(['document', 'address', 'reference', 'employment', 'other'])
+    const allowedKinds = new Set(['document', 'address', 'reference', 'employment', 'bank', 'other'])
 
     const normalizedRequests: Array<{
       document_type_id: string
-      request_kind: 'document' | 'address' | 'reference' | 'employment' | 'other'
+      request_kind: 'document' | 'address' | 'reference' | 'employment' | 'bank' | 'other'
       form_schema: Record<string, any>
     }> = []
     const invalidRequestIndexes: number[] = []
@@ -211,6 +255,8 @@ export async function POST(
             ? EMPLOYMENT_DEFAULT_FORM_SCHEMA
             : requestKind === 'reference'
             ? REFERENCE_DEFAULT_FORM_SCHEMA
+            : requestKind === 'bank'
+            ? BANK_DEFAULT_FORM_SCHEMA
             : {}
 
       normalizedRequests.push({

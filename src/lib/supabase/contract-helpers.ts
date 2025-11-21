@@ -240,3 +240,50 @@ export async function sendContract(
   return { success: true, data: contract, error: null }
 }
 
+/**
+ * Delete contract (only if not sent)
+ */
+export async function deleteContract(contractId: string, isServer = false) {
+  const supabase: any = isServer 
+    ? await (await import('./server')).createServerSupabaseAdminClient()
+    : createClient()
+  
+  // First, check if contract exists and can be deleted
+  const { data: contract, error: fetchError } = await supabase
+    .from('loan_contracts')
+    .select('id, sent_at, contract_status')
+    .eq('id', contractId)
+    .single()
+  
+  if (fetchError) {
+    console.error('Error fetching contract:', fetchError)
+    return { success: false, error: fetchError.message, data: null }
+  }
+  
+  if (!contract) {
+    return { success: false, error: 'Contract not found', data: null }
+  }
+  
+  // Only allow deletion if contract hasn't been sent
+  if (contract.sent_at) {
+    return { 
+      success: false, 
+      error: 'Cannot delete contract that has already been sent', 
+      data: null 
+    }
+  }
+  
+  // Delete the contract
+  const { error: deleteError } = await supabase
+    .from('loan_contracts')
+    .delete()
+    .eq('id', contractId)
+  
+  if (deleteError) {
+    console.error('Error deleting contract:', deleteError)
+    return { success: false, error: deleteError.message, data: null }
+  }
+  
+  return { success: true, data: null, error: null }
+}
+

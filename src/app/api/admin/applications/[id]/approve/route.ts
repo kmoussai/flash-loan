@@ -93,7 +93,7 @@ export async function POST(
         !userBankAccount.institution_number) {
       return NextResponse.json(
         { 
-          error: 'Cannot pre-approve application',
+          error: 'Cannot pre-approve application Missing bank account information',
           details: 'Client must have a verified bank account before pre-approval. Please ensure IBV verification is completed and bank account information is available.'
         },
         { status: 400 }

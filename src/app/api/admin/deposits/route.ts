@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabaseAdminClient()
 
     // Fetch loans with pending_disbursement status and Accept Pay details
+    // Only include loans where the contract has been signed
     const { data: loans, error } = await supabase
       .from('loans')
       .select(`
@@ -39,7 +40,8 @@ export async function GET(request: NextRequest) {
         ),
         loan_applications:application_id (
           id,
-          loan_amount
+          loan_amount,
+          contract_signed_at
         )
       `)
       .eq('status', 'pending_disbursement')
@@ -50,6 +52,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch deposits' }, { status: 500 })
     }
 
+    // Filter to only include loans where contract has been signed
+    const loansWithSignedContracts = (loans || []).filter((loan: any) => {
+      return loan.loan_applications?.contract_signed_at !== null && 
+             loan.loan_applications?.contract_signed_at !== undefined
+    })
+
     // Count by status
     const statusCounts = {
       pending: 0, // No transaction created yet
@@ -59,7 +67,7 @@ export async function GET(request: NextRequest) {
       failed: 0 // Has error code
     }
 
-    const deposits = (loans || []).map((loan: any) => {
+    const deposits = loansWithSignedContracts.map((loan: any) => {
       const status = loan.disbursement_status
       
       if (!status) {

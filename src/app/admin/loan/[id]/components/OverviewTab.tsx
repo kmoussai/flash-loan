@@ -97,6 +97,40 @@ export default function OverviewTab({
     }
   }
 
+  const handleDeleteContract = async () => {
+    if (!contract || !applicationId) return
+
+    // Confirm deletion
+    if (!confirm('Are you sure you want to delete this contract? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      setLoadingContract(true)
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/contract`,
+        { method: 'DELETE' }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete contract')
+      }
+
+      // Clear contract and close viewer
+      setContract(null)
+      setHasContract(false)
+      setContractStatus(null)
+      setShowContractViewer(false)
+      alert('Contract deleted successfully!')
+    } catch (error: any) {
+      console.error('Error deleting contract:', error)
+      alert(`Error: ${error.message || 'Failed to delete contract'}`)
+    } finally {
+      setLoadingContract(false)
+    }
+  }
+
   if (error) {
     return (
       <div className='rounded-xl border border-red-200 bg-red-50 p-6'>
@@ -348,6 +382,7 @@ export default function OverviewTab({
               setLoadingContract(false)
             }
           }}
+          onDelete={handleDeleteContract}
         />
       )}
     </div>

@@ -18,6 +18,7 @@ export type ContractTerms = {
   payment_amount?: number
   number_of_payments?: number
   fees?: {
+    brokerage_fee?: number
     origination_fee?: number
     processing_fee?: number
     other_fees?: number
@@ -94,11 +95,13 @@ export type GenerateContractPayload = {
   interestRate?: number
   termMonths?: number
   paymentSchedule?: Array<PayementScheduleItem>
+  brokerageFee?: number
 }
 
 export type ContractDefaultsResponse = {
   success: boolean
   defaults: {
+    brokerageFee?: number
     paymentFrequency: PaymentFrequency
     numberOfPayments?: number
     loanAmount?: number
