@@ -22,6 +22,7 @@ interface ContractViewerProps {
   onClose: () => void
   onGenerate?: () => void
   onSend?: () => void
+  onDelete?: () => void
   embedded?: boolean // When true, renders without modal wrapper
 }
 
@@ -31,6 +32,7 @@ export default function ContractViewer({
   onClose,
   onGenerate,
   onSend,
+  onDelete,
   embedded = false
 }: ContractViewerProps) {
   const [loading, setLoading] = useState(false)
@@ -53,7 +55,9 @@ export default function ContractViewer({
     try {
       // Try to get signed PDF URL from API (server-side)
       try {
-        const response = await fetch(`/api/admin/applications/${applicationId}/contract/view`)
+        const response = await fetch(
+          `/api/admin/applications/${applicationId}/contract/view`
+        )
         if (response.ok) {
           const data = await response.json()
           if (data.signed_url) {
@@ -63,7 +67,10 @@ export default function ContractViewer({
           }
         }
       } catch (apiError) {
-        console.warn('Failed to get PDF URL from API, falling back to HTML:', apiError)
+        console.warn(
+          'Failed to get PDF URL from API, falling back to HTML:',
+          apiError
+        )
       }
 
       // Fallback: Generate HTML representation if no PDF is stored or API fails
@@ -158,7 +165,9 @@ export default function ContractViewer({
       : []
     const numberOfPayments = terms.number_of_payments ?? schedule.length ?? 0
     const principalAmount =
-      typeof terms.principal_amount === 'number' ? terms.principal_amount : 0
+      typeof terms.principal_amount === 'number'
+        ? terms.principal_amount + (terms.fees?.brokerage_fee ?? 0)
+        : 0
     const totalAmount =
       typeof terms.total_amount === 'number'
         ? terms.total_amount
@@ -605,6 +614,15 @@ export default function ContractViewer({
                 className='rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50'
               >
                 Send Contract
+              </button>
+            )}
+            {onDelete && contract && !contract.sent_at && (
+              <button
+                onClick={onDelete}
+                disabled={loading}
+                className='rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50'
+              >
+                Delete Contract
               </button>
             )}
             {contract && (

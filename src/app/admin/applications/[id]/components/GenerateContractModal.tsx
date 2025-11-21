@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import Button from '@/src/app/[locale]/components/Button'
 import Select from '@/src/app/[locale]/components/Select'
 import { addDays, addMonths } from 'date-fns'
-import { PaymentFrequency, GenerateContractPayload, PayementScheduleItem } from '@/src/types'
+import {
+  PaymentFrequency,
+  GenerateContractPayload,
+  PayementScheduleItem
+} from '@/src/types'
 
 const frequencyConfig: Record<
   PaymentFrequency,
@@ -20,6 +24,7 @@ import useSWR from 'swr'
 import { calculateLoanSchedule, fetcher } from '@/lib/utils'
 import PaymentScheduleList from '@/src/app/[locale]/components/PaymentScheduleList'
 import { ContractDefaultsResponse } from '@/src/types'
+import { calculatePaymentAmount } from '@/src/lib/utils/loan'
 
 const frequencyOptions = [
   { value: 'monthly', label: 'Monthly' },
@@ -54,6 +59,7 @@ export const GenerateContractModal = ({
   const [nextPaymentDate, setNextPaymentDate] = useState('')
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [interestRate, setInterestRate] = useState(29)
+  const [brokerageFee, setBrokerageFee] = useState<number>(200)
   const [formError, setFormError] = useState<string | null>(null)
   const [loadingContract, setLoadingContract] = useState(false)
 
@@ -69,10 +75,29 @@ export const GenerateContractModal = ({
     setNumberOfPayments(defaults.numberOfPayments ?? 0)
     setNextPaymentDate(defaults.nextPaymentDate ?? '')
     setPaymentAmount(defaults.paymentAmount ?? 0)
+    setBrokerageFee(defaults.brokerageFee ?? 200)
     if (defaults.accountOptions?.[0])
       setSelectedAccountId(defaults.accountOptions[0].account_number)
   }, [data])
 
+  const recalculatePaymentAmount = () => {
+    if (
+      !loanAmount ||
+      !paymentFrequency ||
+      !numberOfPayments ||
+      !nextPaymentDate
+    )
+      return
+    const paymentAmount = calculatePaymentAmount(
+      paymentFrequency,
+      loanAmount + brokerageFee,
+      interestRate,
+      numberOfPayments
+    )
+    if (paymentAmount) {
+      setPaymentAmount(paymentAmount)
+    }
+  }
   // === Submit handler ===
   const handleSubmit = () => {
     setFormError(null)
@@ -91,6 +116,7 @@ export const GenerateContractModal = ({
       account: accounts.find(acc => acc.account_number === selectedAccountId),
       interestRate: Number(interestRate),
       paymentAmount: Number(paymentAmount),
+      brokerageFee: brokerageFee,
       paymentSchedule: buildSchedule({
         paymentAmount: Number(paymentAmount),
         paymentFrequency,
@@ -168,10 +194,11 @@ export const GenerateContractModal = ({
                   type='number'
                   min={0}
                   step='0.01'
-                  value={loanAmount === '' ? '' : loanAmount}
+                  value={loanAmount}
+                  onBlur={recalculatePaymentAmount}
                   onChange={e => {
                     const value = e.target.value
-                    setLoanAmount(value === '' ? '' : Number(value))
+                    setLoanAmount(Number(value))
                   }}
                   disabled={isLoading}
                   className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50'
@@ -204,6 +231,7 @@ export const GenerateContractModal = ({
                   type='number'
                   min={1}
                   value={numberOfPayments}
+                  onBlur={recalculatePaymentAmount}
                   onChange={e =>
                     setNumberOfPayments(e.target.value as unknown as number)
                   }
@@ -220,10 +248,10 @@ export const GenerateContractModal = ({
                   type='number'
                   min={0}
                   step='0.01'
-                  value={paymentAmount === '' ? '' : paymentAmount}
+                  value={paymentAmount}
                   onChange={e => {
                     const value = e.target.value
-                    setPaymentAmount(value === '' ? '' : Number(value))
+                    setPaymentAmount(Number(value))
                   }}
                   disabled={isLoading}
                   className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
@@ -261,6 +289,30 @@ export const GenerateContractModal = ({
               </div>
             </div>
 
+            {/* Brokerage Fee */}
+            <div>
+              <label className='mb-1 block text-sm font-medium text-gray-700'>
+                Brokerage Fee (CAD)
+              </label>
+              <input
+                type='number'
+                min={0}
+                step='0.01'
+                onBlur={recalculatePaymentAmount}
+                value={brokerageFee}
+                onChange={e => {
+                  const value = e.target.value
+                  setBrokerageFee(Number(value))
+                }}
+                disabled={isLoading}
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
+                placeholder='0.00'
+              />
+              <p className='mt-1 text-xs text-gray-500'>
+                Brokerage fee for loan broker services.
+              </p>
+            </div>
+
             {/* Account select */}
             <div>
               <label className='mb-1 block text-sm font-medium text-gray-700'>
@@ -268,7 +320,10 @@ export const GenerateContractModal = ({
               </label>
               <Select
                 value={selectedAccountId}
-                onValueChange={e => setSelectedAccountId(e as string)}
+                onValueChange={e => {
+                  setSelectedAccountId(e as string)
+                  recalculatePaymentAmount()
+                }}
                 disabled={isLoading}
                 className='w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
                 options={

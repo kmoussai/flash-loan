@@ -214,6 +214,49 @@ export default function ClientsPage() {
             </div>
           </div>
         </div>
+           {/* Stats Cards - Note: These show counts from current filtered view */}
+           <div className='grid gap-3 md:grid-cols-3'>
+          <div className='rounded-lg bg-green-50 p-3 shadow-sm'>
+            <div className='mb-1 flex items-center justify-between'>
+              <h3 className='text-xs font-medium text-green-800'>Verified</h3>
+              <span className='text-lg'>✓</span>
+            </div>
+            <p className='text-2xl font-bold text-green-900'>
+              {clients.filter(c => c.kyc_status === 'verified').length}
+            </p>
+            {kycFilter !== 'all' && kycFilter !== 'verified' && (
+              <p className='mt-1 text-xs text-gray-500'>Filtered view</p>
+            )}
+          </div>
+
+          <div className='rounded-lg bg-yellow-50 p-3 shadow-sm'>
+            <div className='mb-1 flex items-center justify-between'>
+              <h3 className='text-xs font-medium text-yellow-800'>
+                Pending KYC
+              </h3>
+              <span className='text-lg'>⏳</span>
+            </div>
+            <p className='text-2xl font-bold text-yellow-900'>
+              {clients.filter(c => c.kyc_status === 'pending').length}
+            </p>
+            {kycFilter !== 'all' && kycFilter !== 'pending' && (
+              <p className='mt-1 text-xs text-gray-500'>Filtered view</p>
+            )}
+          </div>
+
+          <div className='rounded-lg bg-red-50 p-3 shadow-sm'>
+            <div className='mb-1 flex items-center justify-between'>
+              <h3 className='text-xs font-medium text-red-800'>Rejected</h3>
+              <span className='text-lg'>✗</span>
+            </div>
+            <p className='text-2xl font-bold text-red-900'>
+              {clients.filter(c => c.kyc_status === 'rejected').length}
+            </p>
+            {kycFilter !== 'all' && kycFilter !== 'rejected' && (
+              <p className='mt-1 text-xs text-gray-500'>Filtered view</p>
+            )}
+          </div>
+        </div>
 
         {/* Search and Filters */}
         <div className='rounded-lg bg-white p-4 shadow-sm'>
@@ -604,50 +647,6 @@ export default function ClientsPage() {
             </div>
           </div>
         )}
-
-        {/* Stats Cards - Note: These show counts from current filtered view */}
-        <div className='grid gap-3 md:grid-cols-3'>
-          <div className='rounded-lg bg-green-50 p-3 shadow-sm'>
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-green-800'>Verified</h3>
-              <span className='text-lg'>✓</span>
-            </div>
-            <p className='text-2xl font-bold text-green-900'>
-              {clients.filter(c => c.kyc_status === 'verified').length}
-            </p>
-            {kycFilter !== 'all' && kycFilter !== 'verified' && (
-              <p className='mt-1 text-xs text-gray-500'>Filtered view</p>
-            )}
-          </div>
-
-          <div className='rounded-lg bg-yellow-50 p-3 shadow-sm'>
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-yellow-800'>
-                Pending KYC
-              </h3>
-              <span className='text-lg'>⏳</span>
-            </div>
-            <p className='text-2xl font-bold text-yellow-900'>
-              {clients.filter(c => c.kyc_status === 'pending').length}
-            </p>
-            {kycFilter !== 'all' && kycFilter !== 'pending' && (
-              <p className='mt-1 text-xs text-gray-500'>Filtered view</p>
-            )}
-          </div>
-
-          <div className='rounded-lg bg-red-50 p-3 shadow-sm'>
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-red-800'>Rejected</h3>
-              <span className='text-lg'>✗</span>
-            </div>
-            <p className='text-2xl font-bold text-red-900'>
-              {clients.filter(c => c.kyc_status === 'rejected').length}
-            </p>
-            {kycFilter !== 'all' && kycFilter !== 'rejected' && (
-              <p className='mt-1 text-xs text-gray-500'>Filtered view</p>
-            )}
-          </div>
-        </div>
       </div>
     </AdminDashboardLayout>
   )

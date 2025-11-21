@@ -20,6 +20,7 @@ import type { ClientDocumentRequest } from './request-forms/types'
 import DocumentRequestForm from './request-forms/DocumentRequestForm'
 import EmploymentRequestForm from './request-forms/EmploymentRequestForm'
 import ReferenceRequestForm from './request-forms/ReferenceRequestForm'
+import BankInformationRequestForm from './request-forms/BankInformationRequestForm'
 import GenericRequestForm from './request-forms/GenericRequestForm'
 import SubmittedInformationDisplay from './request-forms/SubmittedInformationDisplay'
 
@@ -33,6 +34,7 @@ const requestKindKeys: Partial<Record<RequestKind, string>> = {
   address: 'Request_Kind_address',
   reference: 'Request_Kind_reference',
   employment: 'Request_Kind_employment',
+  bank: 'Request_Kind_bank',
   other: 'Request_Kind_other'
 }
 
@@ -68,7 +70,7 @@ export default function DocumentsSection({
   useEffect(() => {
     const nextValues: Record<string, Record<string, any>> = {}
     ;(data?.documentRequests || []).forEach(req => {
-      if (req.request_kind === 'document' || req.request_kind === 'employment' || req.request_kind === 'reference') return
+      if (req.request_kind === 'document' || req.request_kind === 'employment' || req.request_kind === 'reference' || req.request_kind === 'bank') return
 
       const latest = (req.request_form_submissions || []).slice().sort((a, b) => {
         const at = a.submitted_at ? new Date(a.submitted_at).getTime() : 0
@@ -422,6 +424,15 @@ export default function DocumentsSection({
                       if (request.request_kind === 'reference') {
                         return (
                           <ReferenceRequestForm
+                            request={request}
+                            onSuccess={mutate}
+                          />
+                        )
+                      }
+
+                      if (request.request_kind === 'bank') {
+                        return (
+                          <BankInformationRequestForm
                             request={request}
                             onSuccess={mutate}
                           />

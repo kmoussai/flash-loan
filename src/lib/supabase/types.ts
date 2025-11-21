@@ -81,6 +81,7 @@ export type RequestKind =
   | 'address'
   | 'reference'
   | 'employment'
+  | 'bank'
   | 'other'
 export type IncomeSourceType =
   | 'employed'
