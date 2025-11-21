@@ -48,6 +48,14 @@ export default function DepositsPage() {
     completed: 0,
     failed: 0
   })
+  const [showDepositModal, setShowDepositModal] = useState(false)
+  const [selectedDeposit, setSelectedDeposit] = useState<Deposit | null>(null)
+  const [depositInfo, setDepositInfo] = useState<{
+    loan: { id: string; loan_number: number | null; principal_amount: number } | null
+    bank_account: any | null
+  } | null>(null)
+  const [loadingDepositInfo, setLoadingDepositInfo] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   const fetchDeposits = async () => {
     try {
@@ -172,44 +180,57 @@ export default function DepositsPage() {
     }).format(amount)
   }
 
-  const handleInitiateDeposit = async (loanId: string) => {
-    try {
-      const response = await fetch('/api/accept-pay/disburse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ loanId })
-      })
+  const handleOpenDepositModal = async (deposit: Deposit) => {
+    setSelectedDeposit(deposit)
+    setShowDepositModal(true)
+    setLoadingDepositInfo(true)
+    setDepositInfo(null)
 
+    try {
+      const response = await fetch(`/api/admin/deposits/${deposit.id}`)
+      
       if (!response.ok) {
         const errorData = await response.json()
-        const errorMessage = errorData.transactionId
-          ? `${errorData.error}\n\nTransaction ID: ${errorData.transactionId}`
-          : errorData.error || 'Failed to initiate deposit'
-        throw new Error(errorMessage)
+        throw new Error(errorData.error || 'Failed to fetch deposit information')
       }
 
       const data = await response.json()
-      alert(`Deposit initiated successfully!\nTransaction ID: ${data.transactionId}`)
-      await fetchDeposits()
+      setDepositInfo(data)
     } catch (err: any) {
-      alert(err.message || 'Failed to initiate deposit')
+      alert(err.message || 'Failed to load deposit information')
+      setShowDepositModal(false)
+    } finally {
+      setLoadingDepositInfo(false)
     }
   }
 
-  const handleAuthorizeDeposit = async (loanId: string) => {
+  const handleCloseDepositModal = () => {
+    setShowDepositModal(false)
+    setSelectedDeposit(null)
+    setDepositInfo(null)
+  }
+
+  const handleConfirmDeposit = async () => {
+    if (!selectedDeposit) return
+
     try {
-      const response = await fetch(`/api/accept-pay/disburse/${loanId}/authorize`, {
+      setConfirming(true)
+      const response = await fetch(`/api/admin/deposits/${selectedDeposit.id}/confirm`, {
         method: 'POST'
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to authorize deposit')
+        throw new Error(errorData.error || 'Failed to confirm deposit')
       }
 
+      alert('Deposit confirmed successfully! Loan is now active and collection transactions have been created.')
+      handleCloseDepositModal()
       await fetchDeposits()
     } catch (err: any) {
-      alert(err.message || 'Failed to authorize deposit')
+      alert(err.message || 'Failed to confirm deposit')
+    } finally {
+      setConfirming(false)
     }
   }
 
@@ -223,7 +244,7 @@ export default function DepositsPage() {
               Deposit Requests
             </h1>
             <p className='text-xs text-gray-600'>
-              Manage loan disbursements via Accept Pay
+              Manage manual loan deposits and disbursements
             </p>
           </div>
           <div className='flex items-center gap-3'>
@@ -477,28 +498,18 @@ export default function DepositsPage() {
                       <td className='whitespace-nowrap px-4 py-3 text-sm' onClick={(e) => e.stopPropagation()}>
                         {!deposit.disbursement_status && (
                           <button
-                            onClick={() => handleInitiateDeposit(deposit.id)}
+                            onClick={() => handleOpenDepositModal(deposit)}
                             className='mr-2 rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700'
                           >
-                            Initiate
+                            Deposit
                           </button>
                         )}
-                        {deposit.disbursement_initiated_at && !deposit.disbursement_authorized_at && (
-                          <button
-                            onClick={() => handleAuthorizeDeposit(deposit.id)}
-                            className='rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700'
-                          >
-                            Authorize
-                          </button>
-                        )}
-                        {deposit.disbursement_transaction_id && (
-                          <button
-                            onClick={() => router.push(`/admin/loan/${deposit.id}`)}
-                            className='ml-2 text-blue-600 hover:text-blue-800 text-xs'
-                          >
-                            View Loan
-                          </button>
-                        )}
+                        <button
+                          onClick={() => router.push(`/admin/loan/${deposit.id}`)}
+                          className='text-blue-600 hover:text-blue-800 text-xs'
+                        >
+                          View Loan
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -507,9 +518,129 @@ export default function DepositsPage() {
             )}
           </div>
         </div>
+
+        {/* Deposit Confirmation Modal */}
+        {showDepositModal && (
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50' onClick={handleCloseDepositModal}>
+            <div className='mx-4 w-full max-w-lg rounded-lg border border-gray-200 bg-white p-6 shadow-xl' onClick={(e) => e.stopPropagation()}>
+              <div className='mb-4'>
+                <h3 className='text-lg font-semibold text-gray-900'>
+                  Confirm Manual Deposit
+                </h3>
+                <p className='mt-1 text-sm text-gray-600'>
+                  Review the deposit details and bank account information before confirming.
+                </p>
+              </div>
+
+              {loadingDepositInfo ? (
+                <div className='py-8 text-center'>
+                  <div className='mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600'></div>
+                  <p className='mt-2 text-sm text-gray-600'>Loading deposit information...</p>
+                </div>
+              ) : depositInfo ? (
+                <div className='space-y-4'>
+                  {/* Deposit Amount */}
+                  <div className='rounded-lg bg-gray-50 p-4'>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-sm font-medium text-gray-700'>Deposit Amount:</span>
+                      <span className='text-xl font-bold text-gray-900'>
+                        {formatCurrency(depositInfo.loan?.principal_amount || 0)}
+                      </span>
+                    </div>
+                    {depositInfo.loan?.loan_number && (
+                      <div className='mt-2 text-xs text-gray-500'>
+                        Loan #{depositInfo.loan.loan_number}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bank Account Information */}
+                  {depositInfo.bank_account ? (
+                    <div className='rounded-lg border border-gray-200 p-4'>
+                      <h4 className='mb-3 text-sm font-semibold text-gray-900'>Bank Account Information</h4>
+                      <div className='space-y-2 text-sm'>
+                        {depositInfo.bank_account.bank_name && (
+                          <div className='flex justify-between'>
+                            <span className='text-gray-600'>Bank Name:</span>
+                            <span className='font-medium text-gray-900'>{depositInfo.bank_account.bank_name}</span>
+                          </div>
+                        )}
+                        {depositInfo.bank_account.institution_number && (
+                          <div className='flex justify-between'>
+                            <span className='text-gray-600'>Institution Number:</span>
+                            <span className='font-medium text-gray-900'>{depositInfo.bank_account.institution_number}</span>
+                          </div>
+                        )}
+                        {depositInfo.bank_account.transit_number && (
+                          <div className='flex justify-between'>
+                            <span className='text-gray-600'>Transit Number:</span>
+                            <span className='font-medium text-gray-900'>{depositInfo.bank_account.transit_number}</span>
+                          </div>
+                        )}
+                        {depositInfo.bank_account.account_number && (
+                          <div className='flex justify-between'>
+                            <span className='text-gray-600'>Account Number:</span>
+                            <span className='font-medium text-gray-900'>{depositInfo.bank_account.account_number}</span>
+                          </div>
+                        )}
+                        {depositInfo.bank_account.account_name && (
+                          <div className='flex justify-between'>
+                            <span className='text-gray-600'>Account Name:</span>
+                            <span className='font-medium text-gray-900'>{depositInfo.bank_account.account_name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className='rounded-lg border border-yellow-200 bg-yellow-50 p-4'>
+                      <p className='text-sm text-yellow-800'>
+                        ⚠️ Bank account information not found. Please verify the contract has been signed and contains bank account details.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Confirmation Message */}
+                  <div className='rounded-lg border border-blue-200 bg-blue-50 p-4'>
+                    <p className='text-sm text-blue-900'>
+                      <strong>By confirming this deposit:</strong>
+                    </p>
+                    <ul className='mt-2 list-inside list-disc space-y-1 text-xs text-blue-800'>
+                      <li>The loan status will be updated to &quot;active&quot;</li>
+                      <li>Accept Pay collection transactions will be automatically created for all scheduled payments</li>
+                      <li>This action cannot be undone</li>
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <div className='py-4 text-center text-sm text-red-600'>
+                  Failed to load deposit information. Please try again.
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className='mt-6 flex justify-end gap-3'>
+                <button
+                  onClick={handleCloseDepositModal}
+                  disabled={confirming}
+                  className='rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDeposit}
+                  disabled={confirming || loadingDepositInfo || !depositInfo || !depositInfo.bank_account}
+                  className='rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  {confirming ? 'Confirming...' : 'Confirm Deposit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminDashboardLayout>
   )
 }
+
 
 

@@ -196,6 +196,7 @@ export function buildContractTermsFromApplication(
     number_of_payments: numberOfPayments,
     payment_amount: paymentAmount,
     fees: {
+      brokerage_fee: typeof payload?.brokerageFee === 'number' ? payload.brokerageFee : 0, // Brokerage fee for loan broker services
       origination_fee: 55, // Fee for preauthorized payments returned to the creditor
       processing_fee: 0, // Debit fee for every payment
       other_fees: 35 // Fee to postpone a payment

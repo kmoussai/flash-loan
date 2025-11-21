@@ -202,17 +202,36 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           }
           
           // Insert new references
+          // Handle both new format (name) and old format (first_name + last_name)
           const referencesToInsert = references
-            .filter((ref: any) => 
-              ref?.first_name && ref?.last_name && ref?.phone && ref?.relationship
-            )
-            .map((ref: any) => ({
-              loan_application_id: requestRow.loan_application_id,
-              first_name: String(ref.first_name).trim(),
-              last_name: String(ref.last_name).trim(),
-              phone: String(ref.phone).trim(),
-              relationship: String(ref.relationship).trim()
-            }))
+            .filter((ref: any) => {
+              // Check if reference has required fields
+              const hasName = ref?.name || (ref?.first_name && ref?.last_name)
+              return hasName && ref?.phone && ref?.relationship
+            })
+            .map((ref: any) => {
+              let first_name = ''
+              let last_name = ''
+              
+              // If already has first_name and last_name, use them
+              if (ref.first_name && ref.last_name) {
+                first_name = String(ref.first_name).trim()
+                last_name = String(ref.last_name).trim()
+              } else if (ref.name) {
+                // Split name by space: first word = first_name, rest = last_name
+                const nameParts = String(ref.name).trim().split(/\s+/)
+                first_name = nameParts[0] || ''
+                last_name = nameParts.slice(1).join(' ') || ''
+              }
+              
+              return {
+                loan_application_id: requestRow.loan_application_id,
+                first_name,
+                last_name,
+                phone: String(ref.phone).trim(),
+                relationship: String(ref.relationship).trim()
+              }
+            })
           
           if (referencesToInsert.length > 0) {
             const { error: insertErr } = await admin
@@ -224,6 +243,53 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               console.error('Error inserting references:', insertErr)
               // Don't fail the verify operation if insert fails, just log it
             }
+          }
+        }
+      }
+    }
+
+    // If verifying a bank information request, populate user's bank_account
+    if (status === 'verified' && requestRow.request_kind === 'bank') {
+      const submissions = Array.isArray(requestRow.request_form_submissions) 
+        ? requestRow.request_form_submissions 
+        : []
+      
+      if (submissions.length > 0 && requestRow.loan_applications?.client_id) {
+        const latestSubmission = submissions.sort((a: any, b: any) => 
+          new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+        )[0]
+        
+        const formData = latestSubmission.form_data || {}
+        
+        // Validate required bank fields
+        if (
+          formData.bank_name &&
+          formData.account_number &&
+          formData.transit_number &&
+          formData.institution_number &&
+          formData.account_name
+        ) {
+          const bankAccount = {
+            bank_name: String(formData.bank_name).trim(),
+            account_number: String(formData.account_number).trim(),
+            transit_number: String(formData.transit_number).trim(),
+            institution_number: String(formData.institution_number).trim(),
+            account_name: String(formData.account_name).trim()
+          }
+          
+          // Update user's bank_account
+          const { error: updateErr } = await admin
+            .from('users' as any)
+            // @ts-ignore
+            .update({
+              bank_account: bankAccount,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', requestRow.loan_applications.client_id)
+          
+          if (updateErr) {
+            console.error('Error updating bank account:', updateErr)
+            // Don't fail the verify operation if update fails, just log it
           }
         }
       }

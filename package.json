@@ -8,7 +8,10 @@
     "dev:network": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "migrate:all-crm": "./scripts/migrate-all-crm.sh",
+    "merge:profiles": "npx tsx scripts/merge-crm-profiles.ts",
+    "filter:banks": "npx tsx scripts/filter-bank-accounts.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.0.4",

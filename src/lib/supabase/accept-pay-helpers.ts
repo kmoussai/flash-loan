@@ -649,7 +649,7 @@ export async function createPaymentSchedule(
  * This is called automatically when a loan is disbursed
  * Accept Pay will process these transactions on their scheduled dates
  */
-async function createCollectionTransactionsForSchedule(
+export async function createCollectionTransactionsForSchedule(
   loanId: string,
   isServer = true
 ): Promise<void> {
@@ -686,12 +686,25 @@ async function createCollectionTransactionsForSchedule(
     }
 
     const loan = loanData as Loan & { users: User }
-    const customerId =
+    let customerId =
       loan.accept_pay_customer_id || loan.users.accept_pay_customer_id
 
+    // If customer doesn't exist, create it
     if (!customerId) {
-      console.error('Accept Pay customer not found for loan:', loanId)
-      return
+      console.log('Accept Pay customer not found, creating customer for user:', loan.users.id)
+      const customerResult = await createAcceptPayCustomer(loan.users.id, isServer)
+      
+      if (!customerResult.success || !customerResult.customerId) {
+        console.error(
+          'Failed to create Accept Pay customer for loan:',
+          loanId,
+          customerResult.error
+        )
+        return
+      }
+      
+      customerId = customerResult.customerId
+      console.log('Created Accept Pay customer:', customerId, 'for loan:', loanId)
     }
 
     // Get minimum process date
@@ -789,15 +802,23 @@ export async function initiatePaymentCollection(
     }
     const loan = scheduleData.loans
 
-    // Get customer ID
-    const customerId =
+    // Get or create customer ID
+    let customerId =
       loan.accept_pay_customer_id || loan.users.accept_pay_customer_id
     if (!customerId) {
-      return {
-        success: false,
-        transactionId: null,
-        error: 'Accept Pay customer not found'
+      console.log('Accept Pay customer not found, creating customer for user:', loan.users.id)
+      const customerResult = await createAcceptPayCustomer(loan.users.id, isServer)
+      
+      if (!customerResult.success || !customerResult.customerId) {
+        return {
+          success: false,
+          transactionId: null,
+          error: `Failed to create Accept Pay customer: ${customerResult.error || 'Unknown error'}`
+        }
       }
+      
+      customerId = customerResult.customerId
+      console.log('Created Accept Pay customer:', customerId, 'for user:', loan.users.id)
     }
 
     // Get minimum process date

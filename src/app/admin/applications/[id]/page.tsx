@@ -500,6 +500,39 @@ export default function ApplicationDetailsPage() {
     }
   }
 
+  const handleDeleteContract = async () => {
+    if (!contract) return
+
+    // Confirm deletion
+    if (!confirm('Are you sure you want to delete this contract? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      setLoadingContract(true)
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/contract`,
+        { method: 'DELETE' }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete contract')
+      }
+
+      // Clear contract and close viewer
+      setContract(null)
+      setShowContractViewer(false)
+      await fetchApplicationDetails()
+      alert('Contract deleted successfully!')
+    } catch (error: any) {
+      console.error('Error deleting contract:', error)
+      alert(`Error: ${error.message || 'Failed to delete contract'}`)
+    } finally {
+      setLoadingContract(false)
+    }
+  }
+
   if (loading) {
     return (
       <AdminDashboardLayout>
@@ -831,6 +864,7 @@ export default function ApplicationDetailsPage() {
             }}
             onGenerate={handleGenerateContract}
             onSend={handleSendContract}
+            onDelete={handleDeleteContract}
           />
         )}
       </div>

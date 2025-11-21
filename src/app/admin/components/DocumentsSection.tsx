@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import ClientDocumentsSection from './ClientDocumentsSection'
 
-type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'other'
+type RequestKind = 'document' | 'address' | 'reference' | 'employment' | 'bank' | 'other'
 
 interface DocumentItem {
   name: string
@@ -1097,6 +1097,52 @@ export default function DocumentsSection({
                                       </button>
                                     )}
                                   {r.status === 'uploaded' && isIdDocument && (
+                                    <>
+                                      <button
+                                        onClick={() => handleVerify(r.id)}
+                                        disabled={!!submittingRequest[r.id]}
+                                        className='flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50'
+                                      >
+                                        <svg
+                                          className='h-3.5 w-3.5'
+                                          fill='none'
+                                          stroke='currentColor'
+                                          viewBox='0 0 24 24'
+                                        >
+                                          <path
+                                            strokeLinecap='round'
+                                            strokeLinejoin='round'
+                                            strokeWidth={2}
+                                            d='M5 13l4 4L19 7'
+                                          />
+                                        </svg>
+                                        Verify
+                                      </button>
+                                      <button
+                                        onClick={() => handleReject(r.id)}
+                                        disabled={!!submittingRequest[r.id]}
+                                        className='flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50'
+                                      >
+                                        <svg
+                                          className='h-3.5 w-3.5'
+                                          fill='none'
+                                          stroke='currentColor'
+                                          viewBox='0 0 24 24'
+                                        >
+                                          <path
+                                            strokeLinecap='round'
+                                            strokeLinejoin='round'
+                                            strokeWidth={2}
+                                            d='M6 18L18 6M6 6l12 12'
+                                          />
+                                        </svg>
+                                        Reject
+                                      </button>
+                                    </>
+                                  )}
+                                  {r.status === 'uploaded' && 
+                                   (r.request_kind === 'reference' || r.request_kind === 'employment' || r.request_kind === 'bank') &&
+                                   latestSubmission && (
                                     <>
                                       <button
                                         onClick={() => handleVerify(r.id)}

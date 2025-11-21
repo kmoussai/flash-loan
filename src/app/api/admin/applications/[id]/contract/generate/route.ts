@@ -43,7 +43,8 @@ export async function POST(
       paymentFrequency: 'monthly',
       numberOfPayments: 6,
       loanAmount: 0,
-      paymentAmount: 0
+      paymentAmount: 0,
+      brokerageFee: 0
     }
     try {
       payload = await request.json()
@@ -198,6 +199,7 @@ export async function POST(
         nextPaymentDate: payload?.nextPaymentDate,
         firstPaymentDate: payload?.firstPaymentDate,
         paymentAmount: payload.paymentAmount,
+        brokerageFee: payload.brokerageFee,
         paymentSchedule: payload?.paymentSchedule ?? buildPaymentSchedule({
           payment_frequency: payload?.paymentFrequency,
           loan_amount: resolvedLoanAmount,
