@@ -605,7 +605,7 @@ export default function DepositsPage() {
                       <strong>By confirming this deposit:</strong>
                     </p>
                     <ul className='mt-2 list-inside list-disc space-y-1 text-xs text-blue-800'>
-                      <li>The loan status will be updated to "active"</li>
+                      <li>The loan status will be updated to &quot;active&quot;</li>
                       <li>Accept Pay collection transactions will be automatically created for all scheduled payments</li>
                       <li>This action cannot be undone</li>
                     </ul>

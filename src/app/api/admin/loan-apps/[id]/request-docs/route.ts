@@ -240,7 +240,7 @@ export async function POST(
           : 'document'
 
       const requestKind = allowedKinds.has(rawKind)
-        ? (rawKind as 'document' | 'address' | 'reference' | 'employment' | 'other')
+        ? (rawKind as 'document' | 'address' | 'reference' | 'employment' | 'bank' | 'other')
         : 'document'
 
       const providedFormSchema =
