@@ -12,7 +12,45 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerSupabaseAdminClient()
     
-    // Fetch applications with client details using a join
+    // Parse pagination parameters
+    const searchParams = request.nextUrl.searchParams
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.max(1, Math.min(1000, parseInt(searchParams.get('limit') || '100', 10))) // Default 100, max 1000
+    const offset = (page - 1) * limit
+
+    // Get total count for pagination
+    const { count: totalCount, error: totalError } = await supabase
+      .from('loan_applications')
+      .select('*', { count: 'exact', head: true })
+
+    if (totalError) {
+      console.error('Error fetching total count:', totalError)
+    }
+
+    // Get status counts using count queries (more efficient)
+    const statusQueries = await Promise.all([
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'pending'),
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'processing'),
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'pre_approved'),
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'contract_pending'),
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'contract_signed'),
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'approved'),
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'rejected'),
+      supabase.from('loan_applications').select('*', { count: 'exact', head: true }).eq('application_status', 'cancelled')
+    ])
+
+    const statusCounts = {
+      pending: statusQueries[0].count || 0,
+      processing: statusQueries[1].count || 0,
+      pre_approved: statusQueries[2].count || 0,
+      contract_pending: statusQueries[3].count || 0,
+      contract_signed: statusQueries[4].count || 0,
+      approved: statusQueries[5].count || 0,
+      rejected: statusQueries[6].count || 0,
+      cancelled: statusQueries[7].count || 0
+    }
+
+    // Fetch paginated applications with client details using a join
     const { data: applications, error } = await supabase
       .from('loan_applications')
       .select(`
@@ -22,6 +60,7 @@ export async function GET(request: NextRequest) {
         ibv_provider,
         ibv_status,
         created_at,
+        income_source,
         users!loan_applications_client_id_fkey (
           id,
           first_name,
@@ -34,6 +73,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (error) {
       console.error('Error fetching applications:', error)
@@ -44,23 +84,20 @@ export async function GET(request: NextRequest) {
     }
 
     const apps = applications || []
-
-    // Get counts by status
-    const statusCounts = {
-      pending: apps.filter((app: any) => app.application_status === 'pending').length,
-      processing: apps.filter((app: any) => app.application_status === 'processing').length,
-      pre_approved: apps.filter((app: any) => app.application_status === 'pre_approved').length,
-      contract_pending: apps.filter((app: any) => app.application_status === 'contract_pending').length,
-      contract_signed: apps.filter((app: any) => app.application_status === 'contract_signed').length,
-      approved: apps.filter((app: any) => app.application_status === 'approved').length,
-      rejected: apps.filter((app: any) => app.application_status === 'rejected').length,
-      cancelled: apps.filter((app: any) => app.application_status === 'cancelled').length
-    }
+    const total = totalCount || 0
+    const totalPages = Math.ceil(total / limit)
 
     return NextResponse.json({
       applications: apps,
       statusCounts,
-      total: apps.length
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
     })
   } catch (error: any) {
     console.error('Error in applications API:', error)
