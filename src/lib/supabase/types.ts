@@ -355,6 +355,8 @@ export interface LoanApplication {
   flinks_institution: string | null
   flinks_verification_status: string | null
   flinks_connected_at: string | null
+  // CRM migration fields
+  crm_original_data: Record<string, any> | null
 }
 
 export interface LoanApplicationIbvRequest {
@@ -604,6 +606,7 @@ export interface LoanApplicationInsert {
   application_status?: ApplicationStatus
   bankruptcy_plan?: boolean
   interest_rate?: number
+  crm_original_data?: Record<string, any> | null
 }
 
 export interface LoanApplicationIbvRequestInsert {
@@ -698,6 +701,8 @@ export interface LoanApplicationUpdate {
   ibv_status?: IbvStatus | null
   ibv_provider_data?: IbvProviderData | null
   ibv_verified_at?: string | null
+  // CRM migration fields
+  crm_original_data?: Record<string, any> | null
 }
 
 export interface LoanApplicationIbvRequestUpdate {
