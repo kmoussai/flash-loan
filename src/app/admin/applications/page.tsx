@@ -54,6 +54,10 @@ export default function ApplicationsPage() {
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | 'all'>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [limit] = useState(100) // Default limit per page
   const [statusCounts, setStatusCounts] = useState<StatusCounts>({
     pending: 0,
     processing: 0,
@@ -65,10 +69,14 @@ export default function ApplicationsPage() {
     cancelled: 0
   })
 
-  const fetchApplications = async () => {
+  const fetchApplications = async (page: number = currentPage) => {
     try {
       setLoading(true)
-      const response = await fetch('/api/admin/applications')
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString()
+      })
+      const response = await fetch(`/api/admin/applications?${params}`)
       
       if (!response.ok) {
         const errorData = await response.json()
@@ -88,6 +96,11 @@ export default function ApplicationsPage() {
         rejected: 0,
         cancelled: 0
       })
+      if (data.pagination) {
+        setTotalPages(data.pagination.totalPages || 1)
+        setTotal(data.pagination.total || 0)
+        setCurrentPage(data.pagination.page || 1)
+      }
       setError(null)
     } catch (err: any) {
       console.error('Error fetching applications:', err)
@@ -98,35 +111,51 @@ export default function ApplicationsPage() {
   }
 
   useEffect(() => {
-    fetchApplications()
+    fetchApplications(1)
   }, [])
 
   useEffect(() => {
-    let filtered = applications
+    // When status filter or search changes, reset to page 1 and refetch
+    if (statusFilter !== 'all' || searchTerm) {
+      // Note: For now, filtering is done client-side on the current page
+      // In a production app, you might want to move filtering to the API
+      let filtered = applications
 
-    // Filter by status
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(app => app.application_status === statusFilter)
+      // Filter by status
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter(app => app.application_status === statusFilter)
+      }
+
+      // Filter by search term (name, email, phone)
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        filtered = filtered.filter(app => {
+          const firstName = app.users?.first_name?.toLowerCase() || ''
+          const lastName = app.users?.last_name?.toLowerCase() || ''
+          const email = app.users?.email?.toLowerCase() || ''
+          const phone = app.users?.phone?.toLowerCase() || ''
+          
+          return firstName.includes(term) || 
+                 lastName.includes(term) || 
+                 email.includes(term) || 
+                 phone.includes(term)
+        })
+      }
+
+      setFilteredApplications(filtered)
+    } else {
+      setFilteredApplications(applications)
     }
-
-    // Filter by search term (name, email, phone)
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(app => {
-        const firstName = app.users?.first_name?.toLowerCase() || ''
-        const lastName = app.users?.last_name?.toLowerCase() || ''
-        const email = app.users?.email?.toLowerCase() || ''
-        const phone = app.users?.phone?.toLowerCase() || ''
-        
-        return firstName.includes(term) || 
-               lastName.includes(term) || 
-               email.includes(term) || 
-               phone.includes(term)
-      })
-    }
-
-    setFilteredApplications(filtered)
   }, [statusFilter, searchTerm, applications])
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage)
+      fetchApplications(newPage)
+      // Scroll to top of table
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
 
   const getStatusBadgeColor = (status: ApplicationStatus) => {
     switch (status) {
@@ -211,7 +240,7 @@ const formatIncomeSource = (source?: string | null) => {
           </div>
           <div className='flex items-center gap-3'>
             <button
-              onClick={fetchApplications}
+              onClick={() => fetchApplications()}
               disabled={loading}
               className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
             >
@@ -229,7 +258,10 @@ const formatIncomeSource = (source?: string | null) => {
               <div className='flex items-center gap-2'>
                 <span className='text-xl'>📝</span>
                 <span className='text-2xl font-bold text-gray-900'>
-                  {applications.length}
+                  {total}
+                </span>
+                <span className='text-xs text-gray-500'>
+                  total
                 </span>
               </div>
             </div>
@@ -347,7 +379,7 @@ const formatIncomeSource = (source?: string | null) => {
                 {statusFilter === 'all' ? 'All Applications' : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Applications`}
               </h2>
               <span className='text-xs text-gray-500'>
-                {filteredApplications.length} {filteredApplications.length === 1 ? 'result' : 'results'}
+                Showing {((currentPage - 1) * limit) + 1}-{Math.min(currentPage * limit, total)} of {total} {total === 1 ? 'result' : 'results'}
               </span>
             </div>
           </div>
@@ -484,6 +516,60 @@ const formatIncomeSource = (source?: string | null) => {
               </table>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {!loading && !error && totalPages > 1 && (
+            <div className='border-t border-gray-200 px-4 py-3'>
+              <div className='flex items-center justify-between'>
+                <div className='text-sm text-gray-700'>
+                  Page {currentPage} of {totalPages}
+                </div>
+                <div className='flex items-center gap-2'>
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className='rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
+                  >
+                    Previous
+                  </button>
+                  <div className='flex items-center gap-1'>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = currentPage - 2 + i
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => handlePageChange(pageNum)}
+                          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                            currentPage === pageNum
+                              ? 'bg-blue-600 text-white'
+                              : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className='rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </AdminDashboardLayout>
