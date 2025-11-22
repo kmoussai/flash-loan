@@ -29,7 +29,9 @@ export interface IBVSummary {
     total_transactions: number
   }[]
   request_guid: string
+  ibvDocUrl?: string
 }
+
 /**
 Done: 
 Number of NSF:
