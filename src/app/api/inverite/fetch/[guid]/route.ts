@@ -230,13 +230,22 @@ export async function GET(
       }
     }
 
-    // Check if Inverite data has already been fetched
-    const providerData = (matchingApplication as any)?.ibv_provider_data as any
+    // Check if Inverite data has already been fetched by checking loan_application_ibv_requests
+    // If status is not pending/processing, data has already been fetched
+    const { data: ibvRequest, error: ibvRequestError } = await (supabase as any)
+      .from('loan_application_ibv_requests')
+      .select('id, status, results, provider_data, completed_at')
+      .eq('request_guid', requestGuid)
+      .eq('loan_application_id', applicationId)
+      .order('requested_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const pendingStatuses = new Set(['pending', 'processing'])
     const hasExistingData = 
-      (matchingApplication as any)?.ibv_results ||
-      providerData?.account_data_fetched_at ||
-      providerData?.accounts?.length > 0 ||
-      providerData?.account_info
+      ibvRequest && 
+      ibvRequest.status && 
+      !pendingStatuses.has(ibvRequest.status)
 
     if (hasExistingData) {
       console.log(
@@ -244,13 +253,16 @@ export async function GET(
         {
           requestGuid,
           applicationId: matchingApplication.id,
-          hasIbvResults: !!(matchingApplication as any)?.ibv_results,
-          accountDataFetchedAt: providerData?.account_data_fetched_at
+          ibvRequestStatus: ibvRequest.status,
+          hasResults: !!ibvRequest.results,
+          completedAt: ibvRequest.completed_at
         }
       )
       
       // Return existing data without calling Inverite API
-      const existingIbvResults = (matchingApplication as any)?.ibv_results
+      const existingIbvResults = ibvRequest.results || (matchingApplication as any)?.ibv_results
+      const providerData = (matchingApplication as any)?.ibv_provider_data as any
+      
       return NextResponse.json({
         success: true,
         message: 'Data already fetched',
@@ -258,9 +270,9 @@ export async function GET(
         request_guid: requestGuid,
         cached: true,
         data: {
-          status: providerData?.status || (matchingApplication as any)?.ibv_status,
+          status: ibvRequest.status || providerData?.status || (matchingApplication as any)?.ibv_status,
           accounts_count: existingIbvResults?.accounts?.length || providerData?.accounts?.length || 0,
-          complete_datetime: providerData?.complete_datetime || providerData?.verified_at
+          complete_datetime: ibvRequest.completed_at || providerData?.complete_datetime || providerData?.verified_at
         },
         ibv_results: existingIbvResults
       })
