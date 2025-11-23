@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
-import type { LoanApplication, ApplicationStatus } from '@/src/lib/supabase/types'
+import type {
+  LoanApplication,
+  ApplicationStatus
+} from '@/src/lib/supabase/types'
 
 // Extended type for application with client details
 interface ApplicationWithDetails extends LoanApplication {
@@ -25,14 +28,16 @@ interface ApplicationWithDetails extends LoanApplication {
     city: string
     province: string
     postal_code: string
-  }[] | null
-  references: {
-    id: string
-    first_name: string
-    last_name: string
-    phone: string
-    relationship: string
-  }[] | null
+  } | null
+  references:
+    | {
+        id: string
+        first_name: string
+        last_name: string
+        phone: string
+        relationship: string
+      }[]
+    | null
 }
 
 interface StatusCounts {
@@ -49,11 +54,13 @@ interface StatusCounts {
 export default function ApplicationsPage() {
   const router = useRouter()
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([])
-  const [filteredApplications, setFilteredApplications] = useState<ApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | 'all'>(
+    'all'
+  )
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
@@ -69,6 +76,16 @@ export default function ApplicationsPage() {
     cancelled: 0
   })
 
+  // Debounce search input (500ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setCurrentPage(1) // Reset to page 1 when search changes
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
   const fetchApplications = async (page: number = currentPage) => {
     try {
       setLoading(true)
@@ -76,26 +93,38 @@ export default function ApplicationsPage() {
         page: page.toString(),
         limit: limit.toString()
       })
+
+      // Add status filter if not 'all'
+      if (statusFilter !== 'all') {
+        params.append('status', statusFilter)
+      }
+
+      // Add search term if provided
+      if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
+        params.append('search', debouncedSearchTerm.trim())
+      }
+
       const response = await fetch(`/api/admin/applications?${params}`)
-      
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || 'Failed to fetch applications')
       }
-      
+
       const data = await response.json()
       setApplications(data.applications || [])
-      setFilteredApplications(data.applications || [])
-      setStatusCounts(data.statusCounts || {
-        pending: 0,
-        processing: 0,
-        pre_approved: 0,
-        contract_pending: 0,
-        contract_signed: 0,
-        approved: 0,
-        rejected: 0,
-        cancelled: 0
-      })
+      setStatusCounts(
+        data.statusCounts || {
+          pending: 0,
+          processing: 0,
+          pre_approved: 0,
+          contract_pending: 0,
+          contract_signed: 0,
+          approved: 0,
+          rejected: 0,
+          cancelled: 0
+        }
+      )
       if (data.pagination) {
         setTotalPages(data.pagination.totalPages || 1)
         setTotal(data.pagination.total || 0)
@@ -110,51 +139,28 @@ export default function ApplicationsPage() {
     }
   }
 
+  // Reset to page 1 when filters change
   useEffect(() => {
-    fetchApplications(1)
-  }, [])
+    setCurrentPage(1)
+  }, [statusFilter, debouncedSearchTerm])
 
+  // Fetch applications when page or filters change
   useEffect(() => {
-    // When status filter or search changes, reset to page 1 and refetch
-    if (statusFilter !== 'all' || searchTerm) {
-      // Note: For now, filtering is done client-side on the current page
-      // In a production app, you might want to move filtering to the API
-      let filtered = applications
-
-      // Filter by status
-      if (statusFilter !== 'all') {
-        filtered = filtered.filter(app => app.application_status === statusFilter)
-      }
-
-      // Filter by search term (name, email, phone)
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase()
-        filtered = filtered.filter(app => {
-          const firstName = app.users?.first_name?.toLowerCase() || ''
-          const lastName = app.users?.last_name?.toLowerCase() || ''
-          const email = app.users?.email?.toLowerCase() || ''
-          const phone = app.users?.phone?.toLowerCase() || ''
-          
-          return firstName.includes(term) || 
-                 lastName.includes(term) || 
-                 email.includes(term) || 
-                 phone.includes(term)
-        })
-      }
-
-      setFilteredApplications(filtered)
-    } else {
-      setFilteredApplications(applications)
-    }
-  }, [statusFilter, searchTerm, applications])
+    fetchApplications(currentPage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, statusFilter, debouncedSearchTerm])
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage)
-      fetchApplications(newPage)
       // Scroll to top of table
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
+  }
+
+  const handleStatusFilterChange = (newStatus: ApplicationStatus | 'all') => {
+    setStatusFilter(newStatus)
+    setCurrentPage(1) // Reset to page 1 when filter changes
   }
 
   const getStatusBadgeColor = (status: ApplicationStatus) => {
@@ -204,26 +210,20 @@ export default function ApplicationsPage() {
     return firstName || lastName ? `${firstName} ${lastName}`.trim() : 'N/A'
   }
 
-  const getClientAddress = (app: ApplicationWithDetails) => {
-    if (!app.addresses || app.addresses.length === 0) return 'N/A'
-    const addr = app.addresses[0]
-    return `${addr.street_number || ''} ${addr.street_name || ''}, ${addr.city}, ${addr.province}`.trim()
+  const formatIncomeSource = (source?: string | null) => {
+    if (!source) return 'N/A'
+
+    const labels: Record<string, string> = {
+      employed: 'Employed',
+      'employment-insurance': 'Employment Insurance',
+      'self-employed': 'Self-Employed',
+      'csst-saaq': 'CSST/SAAQ',
+      'parental-insurance': 'Parental Insurance',
+      'retirement-plan': 'Retirement Plan'
+    }
+
+    return labels[source] || source
   }
-
-const formatIncomeSource = (source?: string | null) => {
-  if (!source) return 'N/A'
-
-  const labels: Record<string, string> = {
-    employed: 'Employed',
-    'employment-insurance': 'Employment Insurance',
-    'self-employed': 'Self-Employed',
-    'csst-saaq': 'CSST/SAAQ',
-    'parental-insurance': 'Parental Insurance',
-    'retirement-plan': 'Retirement Plan'
-  }
-
-  return labels[source] || source
-}
 
   return (
     <AdminDashboardLayout>
@@ -242,15 +242,20 @@ const formatIncomeSource = (source?: string | null) => {
             <button
               onClick={() => fetchApplications()}
               disabled={loading}
-              className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
+              className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:scale-105 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
             >
-              <svg 
-                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} 
-                fill='none' 
-                viewBox='0 0 24 24' 
+              <svg
+                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+                fill='none'
+                viewBox='0 0 24 24'
                 stroke='currentColor'
               >
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
+                />
               </svg>
               {loading ? 'Refreshing...' : 'Refresh'}
             </button>
@@ -260,9 +265,7 @@ const formatIncomeSource = (source?: string | null) => {
                 <span className='text-2xl font-bold text-gray-900'>
                   {total}
                 </span>
-                <span className='text-xs text-gray-500'>
-                  total
-                </span>
+                <span className='text-xs text-gray-500'>total</span>
               </div>
             </div>
           </div>
@@ -270,8 +273,10 @@ const formatIncomeSource = (source?: string | null) => {
 
         {/* Stats Cards */}
         <div className='grid gap-3 md:grid-cols-5'>
-          <div className='cursor-pointer rounded-lg bg-yellow-50 p-3 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('pending')}>
+          <div
+            className='cursor-pointer rounded-lg bg-yellow-50 p-3 shadow-sm transition-all hover:shadow-md'
+            onClick={() => handleStatusFilterChange('pending')}
+          >
             <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-yellow-800'>Pending</h3>
               <span className='text-lg'>⏳</span>
@@ -281,8 +286,10 @@ const formatIncomeSource = (source?: string | null) => {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-blue-50 p-3 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('processing')}>
+          <div
+            className='cursor-pointer rounded-lg bg-blue-50 p-3 shadow-sm transition-all hover:shadow-md'
+            onClick={() => handleStatusFilterChange('processing')}
+          >
             <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-blue-800'>Processing</h3>
               <span className='text-lg'>🔄</span>
@@ -292,8 +299,10 @@ const formatIncomeSource = (source?: string | null) => {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-green-50 p-3 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('approved')}>
+          <div
+            className='cursor-pointer rounded-lg bg-green-50 p-3 shadow-sm transition-all hover:shadow-md'
+            onClick={() => handleStatusFilterChange('approved')}
+          >
             <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-green-800'>Approved</h3>
               <span className='text-lg'>✅</span>
@@ -303,8 +312,10 @@ const formatIncomeSource = (source?: string | null) => {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-red-50 p-3 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('rejected')}>
+          <div
+            className='cursor-pointer rounded-lg bg-red-50 p-3 shadow-sm transition-all hover:shadow-md'
+            onClick={() => handleStatusFilterChange('rejected')}
+          >
             <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-red-800'>Rejected</h3>
               <span className='text-lg'>❌</span>
@@ -314,8 +325,10 @@ const formatIncomeSource = (source?: string | null) => {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-lg bg-gray-50 p-3 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('cancelled')}>
+          <div
+            className='cursor-pointer rounded-lg bg-gray-50 p-3 shadow-sm transition-all hover:shadow-md'
+            onClick={() => handleStatusFilterChange('cancelled')}
+          >
             <div className='mb-1 flex items-center justify-between'>
               <h3 className='text-xs font-medium text-gray-800'>Cancelled</h3>
               <span className='text-lg'>🚫</span>
@@ -336,7 +349,9 @@ const formatIncomeSource = (source?: string | null) => {
               <div className='w-48'>
                 <Select
                   value={statusFilter}
-                  onValueChange={(value) => setStatusFilter(value as ApplicationStatus | 'all')}
+                  onValueChange={value =>
+                    handleStatusFilterChange(value as ApplicationStatus | 'all')
+                  }
                   options={[
                     { value: 'all', label: 'All Applications' },
                     { value: 'pending', label: 'Pending' },
@@ -346,18 +361,18 @@ const formatIncomeSource = (source?: string | null) => {
                     { value: 'cancelled', label: 'Cancelled' }
                   ]}
                   placeholder='Select status'
-                  className='!py-2 !px-3 !text-sm'
+                  className='!px-3 !py-2 !text-sm'
                 />
               </div>
             </div>
-            
+
             <div className='flex items-center gap-2'>
               <input
                 type='text'
                 placeholder='Search by name, email, or phone...'
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm md:w-64 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                onChange={e => setSearchTerm(e.target.value)}
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 md:w-64'
               />
               {searchTerm && (
                 <button
@@ -376,10 +391,14 @@ const formatIncomeSource = (source?: string | null) => {
           <div className='border-b border-gray-200 px-4 py-2'>
             <div className='flex items-center justify-between'>
               <h2 className='text-sm font-semibold text-gray-900'>
-                {statusFilter === 'all' ? 'All Applications' : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Applications`}
+                {statusFilter === 'all'
+                  ? 'All Applications'
+                  : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Applications`}
               </h2>
               <span className='text-xs text-gray-500'>
-                Showing {((currentPage - 1) * limit) + 1}-{Math.min(currentPage * limit, total)} of {total} {total === 1 ? 'result' : 'results'}
+                Showing {(currentPage - 1) * limit + 1}-
+                {Math.min(currentPage * limit, total)} of {total}{' '}
+                {total === 1 ? 'result' : 'results'}
               </span>
             </div>
           </div>
@@ -395,13 +414,13 @@ const formatIncomeSource = (source?: string | null) => {
                 <span className='mb-4 block text-4xl'>⚠️</span>
                 <p className='text-red-600'>{error}</p>
               </div>
-            ) : filteredApplications.length === 0 ? (
+            ) : applications.length === 0 ? (
               <div className='p-12 text-center'>
                 <span className='mb-4 block text-4xl'>📝</span>
                 <p className='text-gray-600'>No applications found</p>
                 <p className='mt-2 text-sm text-gray-400'>
-                  {searchTerm || statusFilter !== 'all' 
-                    ? 'Try adjusting your filters' 
+                  {debouncedSearchTerm || statusFilter !== 'all'
+                    ? 'Try adjusting your filters'
                     : 'Applications will appear here once they are submitted'}
                 </p>
               </div>
@@ -436,7 +455,7 @@ const formatIncomeSource = (source?: string | null) => {
                   </tr>
                 </thead>
                 <tbody className='divide-y divide-gray-200 bg-white'>
-                  {filteredApplications.map(app => (
+                  {applications.map(app => (
                     <tr
                       key={app.id}
                       className='transition-colors hover:bg-gray-50'
@@ -469,39 +488,74 @@ const formatIncomeSource = (source?: string | null) => {
                           {formatIncomeSource(app.income_source)}
                         </span>
                       </td>
-                      <td className='whitespace-nowrap px-4 py-2'>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeColor(app.application_status)}`}
-                        >
-                          {app.application_status.toUpperCase()}
-                        </span>
+                      <td className='px-4 py-2'>
+                        <div className='flex flex-col gap-1'>
+                          <span
+                            className={`inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeColor(app.application_status)}`}
+                          >
+                            {app.application_status.toUpperCase()}
+                          </span>
+                          {app.application_status === 'rejected' && app.rejection_reason && (
+                            <div className='group relative'>
+                              <div className='flex items-start gap-1.5 text-xs text-red-700 cursor-help'>
+                                <svg
+                                  className='h-3.5 w-3.5 flex-shrink-0 mt-0.5'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  viewBox='0 0 24 24'
+                                >
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                                  />
+                                </svg>
+                                <span className='truncate max-w-[200px] leading-tight'>
+                                  {app.rejection_reason}
+                                </span>
+                              </div>
+                              {/* Tooltip on hover for full reason */}
+                              <div className='pointer-events-none absolute left-0 top-full z-20 mt-1 hidden max-w-sm rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 shadow-xl group-hover:block'>
+                                <p className='whitespace-normal font-medium text-gray-900 mb-1'>
+                                  Rejection Reason:
+                                </p>
+                                <p className='whitespace-normal'>{app.rejection_reason}</p>
+                                <div className='absolute -top-1 left-3 h-2 w-2 rotate-45 border-l border-t border-gray-200 bg-white'></div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className='whitespace-nowrap px-4 py-2 text-sm text-gray-900'>
-                        {app.addresses && app.addresses.length > 0 
-                          ? app.addresses[0].province 
-                          : 'N/A'}
+                        {app.addresses ? app.addresses.province : 'N/A'}
                       </td>
                       <td className='whitespace-nowrap px-4 py-2'>
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          app.ibv_status === 'verified' 
-                            ? 'bg-green-100 text-green-800' 
-                            : app.ibv_status === 'failed'
-                            ? 'bg-red-100 text-red-800'
-                            : app.ibv_status === 'cancelled'
-                            ? 'bg-gray-100 text-gray-800'
-                            : app.ibv_status === 'processing'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {app.ibv_status?.toUpperCase() || 'PENDING'} {app.ibv_provider ? `(${app.ibv_provider})` : ''}
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            app.ibv_status === 'verified'
+                              ? 'bg-green-100 text-green-800'
+                              : app.ibv_status === 'failed'
+                                ? 'bg-red-100 text-red-800'
+                                : app.ibv_status === 'cancelled'
+                                  ? 'bg-gray-100 text-gray-800'
+                                  : app.ibv_status === 'processing'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {app.ibv_status?.toUpperCase() || 'PENDING'}{' '}
+                          {app.ibv_provider ? `(${app.ibv_provider})` : ''}
                         </span>
                       </td>
                       <td className='whitespace-nowrap px-4 py-2 text-xs text-gray-500'>
                         {formatDate(app.created_at)}
                       </td>
                       <td className='whitespace-nowrap px-4 py-2 text-sm'>
-                        <button 
-                          onClick={() => router.push(`/admin/applications/${app.id}`)}
+                        <button
+                          onClick={() =>
+                            router.push(`/admin/applications/${app.id}`)
+                          }
                           className='mr-2 text-blue-600 hover:text-blue-800'
                         >
                           View
@@ -575,4 +629,3 @@ const formatIncomeSource = (source?: string | null) => {
     </AdminDashboardLayout>
   )
 }
-
