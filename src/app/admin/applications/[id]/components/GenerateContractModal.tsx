@@ -107,6 +107,24 @@ export const GenerateContractModal = ({
       return
     }
 
+    // Validate next payment date is at least tomorrow
+    if (!nextPaymentDate) {
+      setFormError('Next payment date is required.')
+      return
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const selectedDate = new Date(nextPaymentDate)
+    selectedDate.setHours(0, 0, 0, 0)
+
+    if (selectedDate < tomorrow) {
+      setFormError('Next payment date must be at least tomorrow (today + 1 day).')
+      return
+    }
+
     setLoadingContract(true)
     const payload: GenerateContractPayload = {
       loanAmount: Number(loanAmount),
@@ -282,10 +300,18 @@ export const GenerateContractModal = ({
                 <input
                   type='date'
                   value={nextPaymentDate}
+                  min={(() => {
+                    const tomorrow = new Date()
+                    tomorrow.setDate(tomorrow.getDate() + 1)
+                    return tomorrow.toISOString().split('T')[0]
+                  })()}
                   onChange={e => setNextPaymentDate(e.target.value)}
                   disabled={isLoading}
                   className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'
                 />
+                <p className='mt-1 text-xs text-gray-500'>
+                  Must be at least tomorrow (today + 1 day)
+                </p>
               </div>
             </div>
 

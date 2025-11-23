@@ -1,9 +1,11 @@
 'use client'
 import { useTranslations } from 'next-intl'
+import { useState, useEffect } from 'react'
 import type {
   QuickApplyFormData,
   QuickApplyUpdateHandler
 } from '../types'
+import { validateMinimumAge } from '@/src/lib/utils/age'
 
 interface Step1PersonalInfoProps {
   formData: Pick<
@@ -11,13 +13,46 @@ interface Step1PersonalInfoProps {
     'firstName' | 'lastName' | 'email' | 'phone' | 'dateOfBirth'
   >
   onUpdate: QuickApplyUpdateHandler
+  disabled?: boolean
 }
 
 export default function Step1PersonalInfo({
   formData,
-  onUpdate
+  onUpdate,
+  disabled = false
 }: Step1PersonalInfoProps) {
   const t = useTranslations('')
+  const [ageError, setAgeError] = useState<string | null>(null)
+
+  // Validate age when date of birth changes
+  useEffect(() => {
+    if (formData.dateOfBirth) {
+      const validation = validateMinimumAge(formData.dateOfBirth, 18)
+      if (!validation.isValid) {
+        setAgeError(validation.error)
+      } else {
+        setAgeError(null)
+      }
+    } else {
+      setAgeError(null)
+    }
+  }, [formData.dateOfBirth])
+
+  const handleDateOfBirthChange = (value: string) => {
+    onUpdate('dateOfBirth', value)
+    
+    // Validate immediately
+    if (value) {
+      const validation = validateMinimumAge(value, 18)
+      if (!validation.isValid) {
+        setAgeError(validation.error)
+      } else {
+        setAgeError(null)
+      }
+    } else {
+      setAgeError(null)
+    }
+  }
 
   return (
     <div className='space-y-6'>
@@ -37,7 +72,10 @@ export default function Step1PersonalInfo({
             type='text'
             value={formData.firstName}
             onChange={e => onUpdate('firstName', e.target.value)}
-            className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+            disabled={disabled}
+            className={`focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2 ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
+            }`}
             placeholder='Jean'
           />
         </div>
@@ -49,7 +87,10 @@ export default function Step1PersonalInfo({
             type='text'
             value={formData.lastName}
             onChange={e => onUpdate('lastName', e.target.value)}
-            className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+            disabled={disabled}
+            className={`focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2 ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
+            }`}
             placeholder='Tremblay'
           />
         </div>
@@ -64,7 +105,10 @@ export default function Step1PersonalInfo({
             type='email'
             value={formData.email}
             onChange={e => onUpdate('email', e.target.value)}
-            className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+            disabled={disabled}
+            className={`focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2 ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
+            }`}
             placeholder='jean@email.com'
           />
         </div>
@@ -76,7 +120,10 @@ export default function Step1PersonalInfo({
             type='tel'
             value={formData.phone}
             onChange={e => onUpdate('phone', e.target.value)}
-            className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+            disabled={disabled}
+            className={`focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2 ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
+            }`}
             placeholder='514-555-1234'
           />
         </div>
@@ -89,9 +136,18 @@ export default function Step1PersonalInfo({
         <input
           type='date'
           value={formData.dateOfBirth}
-          onChange={e => onUpdate('dateOfBirth', e.target.value)}
-          className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
+          onChange={e => handleDateOfBirthChange(e.target.value)}
+          max={new Date().toISOString().split('T')[0]}
+          disabled={disabled}
+          className={`focus:ring-primary/20 w-full rounded-lg border bg-background p-3 text-primary focus:outline-none focus:ring-2 ${
+            ageError
+              ? 'border-red-500 focus:border-red-500'
+              : 'border-gray-300 focus:border-primary'
+          } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
         />
+        {ageError && (
+          <p className='mt-2 text-sm text-red-600'>{ageError}</p>
+        )}
       </div>
     </div>
   )

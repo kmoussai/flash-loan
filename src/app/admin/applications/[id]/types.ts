@@ -55,6 +55,13 @@ export interface ApplicationWithDetails extends LoanApplication {
     heating_electricity_cost: number | null
     car_loan: number | null
     furniture_loan: number | null
+    bank_account: {
+      bank_name: string
+      account_number: string
+      transit_number: string
+      institution_number: string
+      account_name: string
+    } | null
   } | null
   addresses:
     | {

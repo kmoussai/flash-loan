@@ -4,6 +4,7 @@ import { createClient } from '@/src/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { AdminNotificationCenter } from './AdminNotificationCenter'
+import { clearApplicationStorage } from '@/src/lib/utils/storage'
 
 export default function AdminTopBar() {
   const router = useRouter()
@@ -23,6 +24,8 @@ export default function AdminTopBar() {
   }, [supabase])
 
   const handleLogout = async () => {
+    // Clear all application storage (localStorage and sessionStorage)
+    clearApplicationStorage()
     await supabase.auth.signOut()
     router.push('/admin/login')
     router.refresh()

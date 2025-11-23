@@ -22,6 +22,7 @@ import type {
   QuickApplyUpdateHandler
 } from './types'
 import { PROVINCE_CODES, provinceNameToCode } from './constants/provinces'
+import { validateMinimumAge } from '@/src/lib/utils/age'
 
 export default function MicroLoanApplicationPage() {
   const t = useTranslations('')
@@ -81,8 +82,9 @@ export default function MicroLoanApplicationPage() {
   const [hasSubmittedApplication, setHasSubmittedApplication] = useState(false)
   const [lastSubmittedRequestGuid, setLastSubmittedRequestGuid] = useState<string | null>(null)
   const [applicationReferenceNumber, setApplicationReferenceNumber] = useState<string | null>(null)
-const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<string | null>(null)
+  const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<string | null>(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
+  const [isPrefilling, setIsPrefilling] = useState(false)
   const verifiedFetchInFlight = useRef(false)
 
   // Development mode detection
@@ -105,17 +107,28 @@ const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<str
         return
       }
 
+      setIsPrefilling(true)
+
       try {
         // Check authentication status
         const authResponse = await fetch('/api/user/auth-status')
-        if (!authResponse.ok) return
+        if (!authResponse.ok) {
+          setIsPrefilling(false)
+          return
+        }
 
         const authData = await authResponse.json()
-        if (!authData.authenticated || !authData.isClient) return
+        if (!authData.authenticated || !authData.isClient) {
+          setIsPrefilling(false)
+          return
+        }
 
         // Fetch user profile data
         const profileResponse = await fetch('/api/user/profile')
-        if (!profileResponse.ok) return
+        if (!profileResponse.ok) {
+          setIsPrefilling(false)
+          return
+        }
 
         const { user, address } = await profileResponse.json()
 
@@ -142,6 +155,8 @@ const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<str
       } catch (error) {
         // Silently fail - user can still fill the form manually
         console.error('Error prefilling form data:', error)
+      } finally {
+        setIsPrefilling(false)
       }
     }
 
@@ -622,13 +637,22 @@ const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<str
   const isStepValid = () => {
     switch (currentStep) {
       case 1:
-        return (
+        // Validate all required fields and age (must be at least 18)
+        const hasAllFields = (
           formData.firstName &&
           formData.lastName &&
           formData.email &&
           formData.phone &&
           formData.dateOfBirth
         )
+        if (!hasAllFields) return false
+        
+        // Validate age if date of birth is provided
+        if (formData.dateOfBirth) {
+          const ageValidation = validateMinimumAge(formData.dateOfBirth, 18)
+          return ageValidation.isValid
+        }
+        return false
       case 2:
         return (
           formData.streetNumber &&
@@ -810,10 +834,26 @@ const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<str
         </div>
 
         {/* Form Container */}
-        <div className='rounded-2xl border border-white/20 bg-white/80 p-4 shadow-xl shadow-[#097fa5]/10 backdrop-blur-xl sm:p-6 md:p-8'>
+        <div className='relative rounded-2xl border border-white/20 bg-white/80 p-4 shadow-xl shadow-[#097fa5]/10 backdrop-blur-xl sm:p-6 md:p-8'>
+          {/* Loading Overlay */}
+          {isPrefilling && (
+            <div className='absolute inset-0 z-50 flex items-center justify-center rounded-2xl bg-white/90 backdrop-blur-sm'>
+              <div className='flex flex-col items-center space-y-4'>
+                <div className='h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-[#097fa5]'></div>
+                <p className='text-sm font-medium text-gray-700'>
+                  {t('Loading_Your_Information')}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
-            <Step1PersonalInfo formData={formData} onUpdate={updateFormData} />
+            <Step1PersonalInfo 
+              formData={formData} 
+              onUpdate={updateFormData}
+              disabled={isPrefilling}
+            />
           )}
 
           {/* Step 2: Address Details */}

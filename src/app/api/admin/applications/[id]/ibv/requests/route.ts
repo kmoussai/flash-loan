@@ -136,7 +136,11 @@ export async function POST(
       request.headers.get('origin') ||
       process.env.NEXT_PUBLIC_SITE_URL ||
       'http://localhost:3000'
-    const redirectUrl = `${origin}/${requestedLocale}/quick-apply/inverite/callback?ts=${Date.now().toString()}`
+    // Include application_id in callback URL so we can fetch Inverite data
+    const callbackUrl = new URL(`${origin}/${requestedLocale}/quick-apply/inverite/callback`)
+    callbackUrl.searchParams.set('application_id', applicationId)
+    callbackUrl.searchParams.set('ts', Date.now().toString())
+    const redirectUrl = callbackUrl.toString()
     payload.redirecturl = redirectUrl
 
     const url = `${baseUrl}${createPath}`
@@ -284,7 +288,8 @@ export async function POST(
             status: 'pending',
             requestGuid: requestGuid,
             requestId: ibvRequestId,
-            createdAt: requestedAt
+            createdAt: requestedAt,
+            iframeUrl: startUrl || iframeUrl || null
           }
         },
         { client: supabase }

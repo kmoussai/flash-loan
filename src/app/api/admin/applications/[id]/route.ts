@@ -78,7 +78,8 @@ export async function GET(
           rent_or_mortgage_cost,
           heating_electricity_cost,
           car_loan,
-          furniture_loan
+          furniture_loan,
+          bank_account
         ),
         addresses!loan_applications_address_id_fkey (
           id,

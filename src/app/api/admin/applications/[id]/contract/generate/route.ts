@@ -182,6 +182,26 @@ export async function POST(
     const resolvedTermMonths = payload?.termMonths ?? 3
     const resolvedInterestRate = payload?.interestRate ?? 29
 
+    // Validate next payment date is at least tomorrow
+    if (payload?.nextPaymentDate) {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const selectedDate = new Date(payload.nextPaymentDate)
+      selectedDate.setHours(0, 0, 0, 0)
+
+      if (selectedDate < tomorrow) {
+        return NextResponse.json(
+          {
+            error:
+              'Next payment date must be at least tomorrow (today + 1 day)'
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     // Build contract terms (calculation + borrower details + viewer aliases)
     const contractTerms = buildContractTermsFromApplication(
       {

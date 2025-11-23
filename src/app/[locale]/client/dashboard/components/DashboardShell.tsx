@@ -15,6 +15,7 @@ import ContractsSection from './sections/ContractsSection'
 import SupportSection from './sections/SupportSection'
 import { AdminNotificationCenter } from '@/src/app/admin/components/AdminNotificationCenter'
 import LangSwitcher from '@/src/app/[locale]/components/LangSwitcher'
+import { clearApplicationStorage } from '@/src/lib/utils/storage'
 
 const sections: Section[] = [
   { id: 'overview', labelKey: 'Overview' },
@@ -87,6 +88,8 @@ export default function DashboardShell({
       : t('Client')
 
   const handleSignOut = async () => {
+    // Clear all application storage (localStorage and sessionStorage)
+    clearApplicationStorage()
     await supabase.auth.signOut()
     router.push('/auth/signin')
     router.refresh()

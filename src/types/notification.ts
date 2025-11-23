@@ -71,6 +71,7 @@ export interface IbvNotificationMetadata {
   submittedAt?: string | null
   createdAt?: string | null
   notificationSentAt?: string | null
+  iframeUrl?: string | null
 }
 
 export type NotificationMetadata =

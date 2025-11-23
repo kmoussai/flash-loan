@@ -17,6 +17,7 @@ import { assertFrequency } from '@/src/lib/utils/frequency'
 import { generateReadablePassword } from '@/src/lib/utils/password'
 import { generateInvitationEmail } from '@/src/lib/email/templates/invitation'
 import { sendEmail } from '@/src/lib/email/smtp'
+import { validateMinimumAge } from '@/src/lib/utils/age'
 
 // ===========================
 // TYPE DEFINITIONS
@@ -243,6 +244,19 @@ function validateLoanAmount(amount: string): boolean {
   return !isNaN(numAmount) && numAmount > 0 && numAmount <= 1500
 }
 
+function validateAge(dateOfBirth: string): string | null {
+  if (!dateOfBirth) {
+    return 'Date of birth is required'
+  }
+
+  const validation = validateMinimumAge(dateOfBirth, 18)
+  if (!validation.isValid) {
+    return validation.error || 'Age validation failed'
+  }
+
+  return null
+}
+
 // ===========================
 // INCOME FIELDS BUILDER
 // ===========================
@@ -328,6 +342,15 @@ export async function POST(request: NextRequest) {
     if (!validateLoanAmount(body.loanAmount)) {
       return NextResponse.json(
         { error: 'Loan amount must be between $1 and $1,500' },
+        { status: 400 }
+      )
+    }
+
+    // Validate age (must be at least 18 years old)
+    const ageValidationError = validateAge(body.dateOfBirth)
+    if (ageValidationError) {
+      return NextResponse.json(
+        { error: ageValidationError },
         { status: 400 }
       )
     }
