@@ -171,6 +171,19 @@ export function AdminNotificationCenter({
 
   const handleNotificationClick = useCallback(
     async (notification: Notification) => {
+      const metadata = notification.metadata as Record<string, any> | null | undefined
+      
+      // Check if this is an IBV notification with an iframe URL
+      if (metadata?.type === 'ibv_event' && metadata?.iframeUrl) {
+        // Open IBV iframe URL in a new tab
+        if (!notification.read_at) {
+          await markNotificationsAsRead([notification.id], { silent: true })
+        }
+        setOpen(false)
+        window.open(metadata.iframeUrl, '_blank', 'noopener,noreferrer')
+        return
+      }
+
       const target = resolveNotificationTarget(notification)
       
 

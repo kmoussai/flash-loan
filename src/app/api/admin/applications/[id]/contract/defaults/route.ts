@@ -202,23 +202,43 @@ const resolveNextPaymentDate = (
   // Priority 1 (fallback): Contract terms - effective date
   const effectiveDate = parseDateValue(terms?.effective_date)
   if (effectiveDate) {
-    return toIsoDate(effectiveDate)
+    const normalizedEffective = new Date(effectiveDate)
+    normalizedEffective.setHours(0, 0, 0, 0)
+    if (normalizedEffective.getTime() >= today.getTime()) {
+      return toIsoDate(normalizedEffective)
+    }
   }
 
   // Priority 2: Employment information
   const employmentNextDate = getNextPayDateFromEmploymentInfo(incomeSource, incomeFields)
   if (employmentNextDate) {
-    return employmentNextDate
+    const parsedEmploymentDate = parseDateValue(employmentNextDate)
+    if (parsedEmploymentDate) {
+      const normalizedEmployment = new Date(parsedEmploymentDate)
+      normalizedEmployment.setHours(0, 0, 0, 0)
+      if (normalizedEmployment.getTime() >= today.getTime()) {
+        return toIsoDate(normalizedEmployment)
+      }
+    }
   }
 
   // Priority 3: IBV results
   const ibvNextDate = getNextPayDateFromIbv(ibvResults)
   if (ibvNextDate) {
-    return ibvNextDate
+    const parsedIbvDate = parseDateValue(ibvNextDate)
+    if (parsedIbvDate) {
+      const normalizedIbv = new Date(parsedIbvDate)
+      normalizedIbv.setHours(0, 0, 0, 0)
+      if (normalizedIbv.getTime() >= today.getTime()) {
+        return toIsoDate(normalizedIbv)
+      }
+    }
   }
 
-  // Priority 4: Default to today
-  return todayIso
+  // Priority 4: Default to tomorrow (today + 1 day)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return toIsoDate(tomorrow)
 }
 
 /**

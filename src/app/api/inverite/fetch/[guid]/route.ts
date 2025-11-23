@@ -146,6 +146,126 @@ export async function GET(
       )
     }
 
+    // Find the loan application first to check if data already exists
+    // Prefer application_id if provided
+    const supabase = createServerSupabaseAdminClient()
+    let matchingApplication: any = null
+
+    if (applicationId) {
+      // Direct lookup by application ID
+      const { data: application, error: fetchError } = await supabase
+        .from('loan_applications')
+        .select(
+          'id, client_id, assigned_to, ibv_provider_data, ibv_status, ibv_verified_at, ibv_results, users:client_id(first_name, last_name)'
+        )
+        .eq('id', applicationId)
+        .eq('ibv_provider', 'inverite')
+        .single()
+
+      if (fetchError || !application) {
+        console.error(
+          '[Inverite Fetch] Error fetching application:',
+          fetchError
+        )
+        return NextResponse.json(
+          {
+            error: 'APPLICATION_NOT_FOUND',
+            message: 'No application found with the provided ID'
+          },
+          { status: 404 }
+        )
+      }
+
+      // Verify the request_guid matches
+      const providerData = (application as any)?.ibv_provider_data as any
+      if (providerData?.request_guid !== requestGuid) {
+        return NextResponse.json(
+          {
+            error: 'GUID_MISMATCH',
+            message: 'Request GUID does not match the application'
+          },
+          { status: 400 }
+        )
+      }
+
+      matchingApplication = application as any
+    } else {
+      // Fallback: search by request_guid
+      const { data: applications, error: fetchError } = await supabase
+        .from('loan_applications')
+        .select(
+          'id, client_id, assigned_to, ibv_provider_data, ibv_status, ibv_verified_at, ibv_results, users:client_id(first_name, last_name)'
+        )
+        .eq('ibv_provider', 'inverite')
+        .not('ibv_provider_data', 'is', null)
+
+      if (fetchError) {
+        console.error(
+          '[Inverite Fetch] Error fetching applications:',
+          fetchError
+        )
+        return NextResponse.json(
+          { error: 'DATABASE_ERROR', message: 'Failed to find application' },
+          { status: 500 }
+        )
+      }
+
+      // Find application with matching request_guid
+      for (const app of (applications || []) as any[]) {
+        const providerData = app?.ibv_provider_data as any
+        if (providerData?.request_guid === requestGuid) {
+          matchingApplication = app
+          break
+        }
+      }
+
+      if (!matchingApplication) {
+        return NextResponse.json(
+          {
+            error: 'APPLICATION_NOT_FOUND',
+            message: 'No application found for this request GUID'
+          },
+          { status: 404 }
+        )
+      }
+    }
+
+    // Check if Inverite data has already been fetched
+    const providerData = (matchingApplication as any)?.ibv_provider_data as any
+    const hasExistingData = 
+      (matchingApplication as any)?.ibv_results ||
+      providerData?.account_data_fetched_at ||
+      providerData?.accounts?.length > 0 ||
+      providerData?.account_info
+
+    if (hasExistingData) {
+      console.log(
+        '[Inverite Fetch] Data already fetched, skipping API call',
+        {
+          requestGuid,
+          applicationId: matchingApplication.id,
+          hasIbvResults: !!(matchingApplication as any)?.ibv_results,
+          accountDataFetchedAt: providerData?.account_data_fetched_at
+        }
+      )
+      
+      // Return existing data without calling Inverite API
+      const existingIbvResults = (matchingApplication as any)?.ibv_results
+      return NextResponse.json({
+        success: true,
+        message: 'Data already fetched',
+        application_id: matchingApplication.id,
+        request_guid: requestGuid,
+        cached: true,
+        data: {
+          status: providerData?.status || (matchingApplication as any)?.ibv_status,
+          accounts_count: existingIbvResults?.accounts?.length || providerData?.accounts?.length || 0,
+          complete_datetime: providerData?.complete_datetime || providerData?.verified_at
+        },
+        ibv_results: existingIbvResults
+      })
+    }
+
     // Build fetch URL
     const fetchUrl = `${baseUrl}/api/v2/fetch/${requestGuid}`
 
@@ -195,89 +315,6 @@ export async function GET(
       '[Inverite Fetch] Successfully fetched data for GUID:',
       requestGuid
     )
-
-    // Find the loan application - prefer application_id if provided
-    const supabase = createServerSupabaseAdminClient()
-    let matchingApplication: any = null
-
-    if (applicationId) {
-      // Direct lookup by application ID
-      const { data: application, error: fetchError } = await supabase
-        .from('loan_applications')
-        .select(
-          'id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)'
-        )
-        .eq('id', applicationId)
-        .eq('ibv_provider', 'inverite')
-        .single()
-
-      if (fetchError || !application) {
-        console.error(
-          '[Inverite Fetch] Error fetching application:',
-          fetchError
-        )
-        return NextResponse.json(
-          {
-            error: 'APPLICATION_NOT_FOUND',
-            message: 'No application found with the provided ID'
-          },
-          { status: 404 }
-        )
-      }
-
-      // Verify the request_guid matches
-      const providerData = (application as any)?.ibv_provider_data as any
-      if (providerData?.request_guid !== requestGuid) {
-        return NextResponse.json(
-          {
-            error: 'GUID_MISMATCH',
-            message: 'Request GUID does not match the application'
-          },
-          { status: 400 }
-        )
-      }
-
-      matchingApplication = application as any
-    } else {
-      // Fallback: search by request_guid
-      const { data: applications, error: fetchError } = await supabase
-        .from('loan_applications')
-        .select(
-          'id, client_id, assigned_to, ibv_provider_data, users:client_id(first_name, last_name)'
-        )
-        .eq('ibv_provider', 'inverite')
-        .not('ibv_provider_data', 'is', null)
-
-      if (fetchError) {
-        console.error(
-          '[Inverite Fetch] Error fetching applications:',
-          fetchError
-        )
-        return NextResponse.json(
-          { error: 'DATABASE_ERROR', message: 'Failed to find application' },
-          { status: 500 }
-        )
-      }
-
-      // Find application with matching request_guid
-      for (const app of (applications || []) as any[]) {
-        const providerData = app?.ibv_provider_data as any
-        if (providerData?.request_guid === requestGuid) {
-          matchingApplication = app
-          break
-        }
-      }
-
-      if (!matchingApplication) {
-        return NextResponse.json(
-          {
-            error: 'APPLICATION_NOT_FOUND',
-            message: 'No application found for this request GUID'
-          },
-          { status: 404 }
-        )
-      }
-    }
 
     const normalizedStatus = resolveStatus(inveriteData)
     const accountsArray = Array.isArray(inveriteData?.accounts)
@@ -415,7 +452,7 @@ export async function GET(
       }
 
       const userData = await getUserProfile(matchingApplication.client_id, true)
-    
+
       // Only update if user doesn't have a bank account yet
       if (userData && !userData.bank_account) {
         const { success, error: bankAccountError } = await updateUserProfile(
@@ -476,14 +513,14 @@ export async function GET(
       )
     }
 
-    console.log(
-      '[Inverite Fetch] Successfully updated application:',
-      targetApplicationId,
-      matchingApplication.id
-    )
+    // Check if IBV was already verified before sending notifications
+    // Only send notification if this is a new verification (status changed from non-verified to verified)
+    const wasAlreadyVerified = (matchingApplication as any)?.ibv_status === 'verified' && 
+                               (matchingApplication as any)?.ibv_verified_at
 
-    // Notify staff that IBV data was fetched
-    try {
+    // Notify staff that IBV data was fetched (only if not already verified)
+    if (!wasAlreadyVerified) {
+      try {
       const staffRecipients = new Set<string>()
       if (matchingApplication.assigned_to) {
         staffRecipients.add(matchingApplication.assigned_to)
@@ -538,10 +575,21 @@ export async function GET(
           )
         )
       }
-    } catch (notificationError) {
-      console.error(
-        '[Inverite Fetch] Failed to create notification:',
-        notificationError
+      } catch (notificationError) {
+        console.error(
+          '[Inverite Fetch] Failed to create notification:',
+          notificationError
+        )
+      }
+    } else {
+      console.log(
+        '[Inverite Fetch] Skipping notification - IBV already verified',
+        {
+          requestGuid,
+          applicationId: matchingApplication.id,
+          ibv_status: (matchingApplication as any)?.ibv_status,
+          ibv_verified_at: (matchingApplication as any)?.ibv_verified_at
+        }
       )
     }
 

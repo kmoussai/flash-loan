@@ -1,10 +1,15 @@
-import type { ApplicationWithDetails } from '../types'
+'use client'
 
+import { useState } from 'react'
+import type { ApplicationWithDetails } from '../types'
+import AddBankAccountModal from '../../../components/AddBankAccountModal'
 interface DetailsTabProps {
   application: ApplicationWithDetails
 }
-
 const DetailsTab = ({ application }: DetailsTabProps) => {
+  const [showBankAccountModal, setShowBankAccountModal] = useState(false)
+  const clientId = application.users?.id
+
   return (
     <div className='space-y-6'>
       <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
@@ -77,6 +82,62 @@ const DetailsTab = ({ application }: DetailsTabProps) => {
         </div>
       </div>
 
+      {/* Bank Account Section */}
+      {clientId && (
+        <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
+          <div className='border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4'>
+            <div className='flex items-center justify-between'>
+              <h3 className='text-lg font-bold text-gray-900'>Bank Account Information</h3>
+              <button
+                onClick={() => setShowBankAccountModal(true)}
+                className='inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors'
+              >
+                <svg className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 4v16m8-8H4' />
+                </svg>
+                {application.users?.bank_account ? 'Edit' : 'Add'} Bank Account
+              </button>
+            </div>
+          </div>
+          <div className='p-6'>
+            {!application.users?.bank_account ? (
+              <div className='rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center'>
+                <svg className='mx-auto h-12 w-12 text-gray-400' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' />
+                </svg>
+                <p className='mt-4 text-sm font-medium text-gray-900'>No bank account found</p>
+                <p className='mt-1 text-xs text-gray-500'>Bank account information has not been added yet.</p>
+              </div>
+            ) : (
+              <div className='grid gap-4 md:grid-cols-2'>
+                <InfoItem
+                  label='Bank Name'
+                  value={application.users.bank_account.bank_name || 'N/A'}
+                />
+                <InfoItem
+                  label='Account Name'
+                  value={application.users.bank_account.account_name || 'N/A'}
+                />
+                <InfoItem
+                  label='Institution Number'
+                  value={application.users.bank_account.institution_number || 'N/A'}
+                />
+                <InfoItem
+                  label='Transit Number'
+                  value={application.users.bank_account.transit_number || 'N/A'}
+                />
+                <div className='md:col-span-2'>
+                  <InfoItem
+                    label='Account Number'
+                    value={application.users.bank_account.account_number || 'N/A'}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {application.income_fields && Object.keys(application.income_fields).length > 0 && (
         <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
           <div className='border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4'>
@@ -118,6 +179,22 @@ const DetailsTab = ({ application }: DetailsTabProps) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bank Account Modal */}
+      {clientId && (
+        <AddBankAccountModal
+          isOpen={showBankAccountModal}
+          onClose={() => setShowBankAccountModal(false)}
+          clientId={clientId}
+          existingBankAccount={application.users?.bank_account || null}
+          onSuccess={() => {
+            setShowBankAccountModal(false)
+            // Reload page to refresh data
+            window.location.reload()
+          }}
+          title={application.users?.bank_account ? 'Edit Bank Account' : 'Add Bank Account'}
+        />
       )}
     </div>
   )

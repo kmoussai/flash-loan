@@ -182,7 +182,8 @@ export async function POST(
             status: (ibvRequest as any)?.status || 'pending',
             requestGuid: requestGuid,
             requestId: ibvRequestId,
-            notificationSentAt: nowIso
+            notificationSentAt: nowIso,
+            iframeUrl: verificationLink || null
           }
         },
         { client: supabase }

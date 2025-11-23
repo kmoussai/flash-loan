@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import DocumentsSection from '../../components/DocumentsSection'
 import ClientDocumentsSection from '../../components/ClientDocumentsSection'
+import AddBankAccountModal from '../../components/AddBankAccountModal'
 
 interface ClientDetails {
 	user: {
@@ -63,6 +64,7 @@ export default function ClientDetailsPage() {
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [activeTab, setActiveTab] = useState<'addresses' | 'documents' | 'bank_account'>('addresses')
+	const [showBankAccountModal, setShowBankAccountModal] = useState(false)
 
 	useEffect(() => {
 		if (clientId) {
@@ -425,6 +427,18 @@ export default function ClientDetailsPage() {
 
 						{activeTab === 'bank_account' && (
 							<div>
+								<div className='mb-4 flex items-center justify-between'>
+									<h3 className='text-lg font-semibold text-gray-900'>Bank Account</h3>
+									<button
+										onClick={() => setShowBankAccountModal(true)}
+										className='inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors'
+									>
+										<svg className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+											<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 4v16m8-8H4' />
+										</svg>
+										{user.bank_account ? 'Edit' : 'Add'} Bank Account
+									</button>
+								</div>
 								{!user.bank_account ? (
 									<div className='rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-12 text-center'>
 										<svg className='mx-auto h-12 w-12 text-gray-400' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
@@ -583,6 +597,19 @@ export default function ClientDetailsPage() {
 
 				{/* Documents moved into tabs */}
 			</div>
+
+			{/* Bank Account Modal */}
+			<AddBankAccountModal
+				isOpen={showBankAccountModal}
+				onClose={() => setShowBankAccountModal(false)}
+				clientId={clientId}
+				existingBankAccount={user.bank_account}
+				onSuccess={() => {
+					fetchDetails()
+					setShowBankAccountModal(false)
+				}}
+				title={user.bank_account ? 'Edit Bank Account' : 'Add Bank Account'}
+			/>
 		</AdminDashboardLayout>
 	)
 }

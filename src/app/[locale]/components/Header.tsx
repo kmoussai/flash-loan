@@ -8,6 +8,7 @@ import LangSwitcher from './LangSwitcher'
 import Button from './Button'
 import { createClient } from '@/src/lib/supabase/client'
 import { useRouter } from '@/src/navigation'
+import { clearApplicationStorage } from '@/src/lib/utils/storage'
 
 interface Props {
   locale: string
@@ -68,6 +69,8 @@ export const Header: FC<Props> = ({ locale }) => {
   }, [supabase])
 
   const handleLogout = async () => {
+    // Clear all application storage (localStorage and sessionStorage)
+    clearApplicationStorage()
     await supabase.auth.signOut()
     router.push('/')
     router.refresh()
