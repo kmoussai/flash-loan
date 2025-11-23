@@ -3,13 +3,86 @@
  * 
  * Converts HTML contract (from createContractHTML) to PDF using Puppeteer
  * This matches the same HTML structure used in ContractViewer component
+ * 
+ * Uses @sparticuz/chromium for serverless environments (Vercel, AWS Lambda)
+ * 
+ * Note: All puppeteer imports are dynamic to prevent webpack bundling issues
  */
 
-import puppeteer from 'puppeteer'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
 import type { LoanContract } from '@/src/lib/supabase/types'
+
+/**
+ * Get Puppeteer instance and executable path for the current environment
+ * - Serverless (Vercel): Uses puppeteer-core + @sparticuz/chromium
+ * - Local dev: Tries full puppeteer first, falls back to puppeteer-core
+ * 
+ * Uses dynamic imports to prevent webpack from bundling these server-only packages
+ */
+async function getPuppeteerConfig(): Promise<{
+  puppeteer: any
+  executablePath?: string
+  chromiumArgs?: string[]
+  chromiumViewport?: any
+  chromiumHeadless?: boolean
+}> {
+  const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
+  
+  // Serverless environment: use puppeteer-core + @sparticuz/chromium
+  if (isServerless) {
+    try {
+      const chromium = await import('@sparticuz/chromium')
+      const puppeteerCore = await import('puppeteer-core')
+      
+      // @sparticuz/chromium provides optimized args and executable path for serverless
+      // executablePath() is async and returns a Promise<string>
+      const chromiumModule = chromium.default || chromium
+      const executablePath = await chromiumModule.executablePath()
+      
+      return {
+        puppeteer: puppeteerCore.default || puppeteerCore,
+        executablePath: executablePath,
+        chromiumArgs: chromiumModule.args || [],
+        chromiumViewport: chromiumModule.defaultViewport || null,
+        chromiumHeadless: typeof chromiumModule.headless === 'boolean' ? chromiumModule.headless : true
+      }
+    } catch (error) {
+      console.warn('Failed to load @sparticuz/chromium:', error)
+      // Fall through to try puppeteer-core without executable path
+      try {
+        const puppeteerCore = await import('puppeteer-core')
+        return {
+          puppeteer: puppeteerCore.default || puppeteerCore,
+          executablePath: undefined
+        }
+      } catch (coreError) {
+        throw new Error('Failed to load puppeteer-core: ' + (coreError as Error).message)
+      }
+    }
+  }
+  
+  // Local development: try full puppeteer first (includes Chromium)
+  try {
+    const puppeteer = await import('puppeteer')
+    return {
+      puppeteer: puppeteer.default || puppeteer,
+      executablePath: undefined // Full puppeteer handles this automatically
+    }
+  } catch (error) {
+    // Fall back to puppeteer-core (requires system Chrome or PUPPETEER_EXECUTABLE_PATH)
+    try {
+      const puppeteerCore = await import('puppeteer-core')
+      return {
+        puppeteer: puppeteerCore.default || puppeteerCore,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
+      }
+    } catch (coreError) {
+      throw new Error('Failed to load puppeteer or puppeteer-core: ' + (coreError as Error).message)
+    }
+  }
+}
 
 export interface SignedPDFResult {
   pdfBytes: Uint8Array
@@ -40,19 +113,46 @@ export async function convertHTMLToPDF(html: string): Promise<Buffer> {
   let browser
   
   try {
-  
+    const { puppeteer, executablePath, chromiumArgs, chromiumViewport, chromiumHeadless } = await getPuppeteerConfig()
+    const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
+    
+    // Configure launch options based on environment
+    const launchOptions: any = {
+      headless: chromiumHeadless !== undefined ? chromiumHeadless : true,
+      args: chromiumArgs && chromiumArgs.length > 0 
+        ? chromiumArgs 
+        : [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process'
+          ]
+    }
+    
+    // Use bundled Chromium in serverless environments
+    if (executablePath) {
+      launchOptions.executablePath = executablePath
+    }
+    
+    // Use chromium viewport if provided
+    if (chromiumViewport) {
+      launchOptions.defaultViewport = chromiumViewport
+    }
+    
+    // Additional args for serverless environments (if not using chromium args)
+    if (isServerless && (!chromiumArgs || chromiumArgs.length === 0)) {
+      launchOptions.args.push(
+        '--single-process',
+        '--disable-software-rasterizer',
+        '--disable-extensions'
+      )
+    }
     
     // Launch browser
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu'
-      ]
-    })
+    browser = await puppeteer.launch(launchOptions)
 
     const page = await browser.newPage()
     
