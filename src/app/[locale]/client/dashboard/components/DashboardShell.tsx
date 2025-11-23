@@ -14,6 +14,7 @@ import DocumentsSection from './sections/DocumentsSection'
 import ContractsSection from './sections/ContractsSection'
 import SupportSection from './sections/SupportSection'
 import { AdminNotificationCenter } from '@/src/app/admin/components/AdminNotificationCenter'
+import LangSwitcher from '@/src/app/[locale]/components/LangSwitcher'
 
 const sections: Section[] = [
   { id: 'overview', labelKey: 'Overview' },
@@ -121,7 +122,7 @@ export default function DashboardShell({
 
   return (
     <div className='min-h-screen bg-background pb-12'>
-      <header className='border-b border-gray-200 bg-white/90 backdrop-blur-sm'>
+      <header className='relative z-50 border-b border-gray-200 bg-white/90 backdrop-blur-sm'>
         <div className='mx-auto flex max-w-6xl items-center justify-between px-6 py-6'>
           <div className='flex items-center gap-3'>
             <button
@@ -158,6 +159,8 @@ export default function DashboardShell({
             >
               {t('Start_New_Application')}
             </Link>
+            <AdminNotificationCenter />
+            <LangSwitcher />
             <button
               type='button'
               onClick={handleSignOut}
@@ -165,7 +168,6 @@ export default function DashboardShell({
             >
               {t('Sign_Out')}
             </button>
-            <AdminNotificationCenter />
           </div>
         </div>
       </header>

@@ -1,7 +1,8 @@
 'use client'
 
 import { createClient } from '@/src/lib/supabase/client'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter } from '@/src/navigation'
+import { useParams } from 'next/navigation'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/src/navigation'

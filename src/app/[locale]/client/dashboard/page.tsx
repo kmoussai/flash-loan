@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { redirect } from '@/src/navigation-server'
 import { createServerSupabaseClient } from '@/src/lib/supabase/server'
 import { getUserProfile, getUserType } from '@/src/lib/supabase/db-helpers'
 import { getClientLoanApplications } from '@/src/lib/supabase/loan-helpers'
@@ -39,19 +39,22 @@ export default async function ClientDashboardPage({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect(`/${locale}/auth/signin`)
+    redirect('/auth/signin')
+    return // TypeScript helper - redirect throws but this helps with type narrowing
   }
 
   const userType = await getUserType(user.id, true)
 
   if (userType !== 'client') {
-    redirect(`/${locale}`)
+    redirect('/')
+    return // TypeScript helper
   }
 
   const { user: profile, applications } = await fetchDashboardData(user.id)
 
   if (!profile) {
-    redirect(`/${locale}/auth/signin`)
+    redirect('/auth/signin')
+    return // TypeScript helper
   }
 
   return (

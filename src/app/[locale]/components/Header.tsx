@@ -7,7 +7,7 @@ import { FC, useEffect, useState } from 'react'
 import LangSwitcher from './LangSwitcher'
 import Button from './Button'
 import { createClient } from '@/src/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter } from '@/src/navigation'
 
 interface Props {
   locale: string
