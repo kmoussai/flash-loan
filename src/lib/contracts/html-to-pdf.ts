@@ -1,9 +1,9 @@
 /**
  * HTML to PDF Conversion Utility
- * 
+ *
  * Converts HTML contract (from createContractHTML) to PDF using Puppeteer
  * This matches the same HTML structure used in ContractViewer component
- * 
+ *
  * Uses chrome-aws-lambda for serverless environments (Vercel, AWS Lambda)
  * Uses full puppeteer package for local development
  */
@@ -24,7 +24,12 @@ export interface SignedPDFResult {
  */
 function getLogoDataURI(): string {
   try {
-    const logoPath = join(process.cwd(), 'public', 'images', 'FlashLoanLogo.png')
+    const logoPath = join(
+      process.cwd(),
+      'public',
+      'images',
+      'FlashLoanLogo.png'
+    )
     const logoBuffer = readFileSync(logoPath)
     const logoBase64 = logoBuffer.toString('base64')
     return `data:image/png;base64,${logoBase64}`
@@ -41,36 +46,47 @@ function getLogoDataURI(): string {
  * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + chrome-aws-lambda
  */
 async function getPuppeteerLaunchOptions() {
-  const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
-  
+  const isServerless =
+    !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
+
   if (isServerless) {
-    // Serverless environment: use puppeteer-core + chrome-aws-lambda
+    // Correct imports (no .default!)
     const chromium = await import('chrome-aws-lambda')
     const puppeteer = await import('puppeteer-core')
-    
+
+    // @ts-ignore
+    const executablePath = await chromium.executablePath
+
+    if (!executablePath) {
+      console.error('chrome-aws-lambda did not provide an executablePath')
+    }
+
     return {
       puppeteer: puppeteer.default || puppeteer,
       launchOptions: {
-        args: chromium.default.args,
-        defaultViewport: chromium.default.defaultViewport,
-        executablePath: await chromium.default.executablePath,
-        headless: chromium.default.headless,
+        // @ts-ignore
+        args: chromium.args,
+        // @ts-ignore
+        defaultViewport: chromium.defaultViewport,
+        executablePath,
+        // @ts-ignore
+        headless: chromium.headless,
+        ignoreHTTPSErrors: true
       }
     }
-  } else {
-    // Local development: use full puppeteer package (includes Chromium)
-    const puppeteer = await import('puppeteer')
-    
-    return {
-      puppeteer: puppeteer.default || puppeteer,
-      launchOptions: {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-        ]
-      }
+  }
+
+  // Local development: full puppeteer
+  const puppeteer = await import('puppeteer')
+  return {
+    puppeteer: puppeteer.default || puppeteer,
+    launchOptions: {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage'
+      ]
     }
   }
 }
@@ -80,14 +96,14 @@ async function getPuppeteerLaunchOptions() {
  */
 export async function convertHTMLToPDF(html: string): Promise<Buffer> {
   let browser
-  
+
   try {
     const { puppeteer, launchOptions } = await getPuppeteerLaunchOptions()
-    
+
     browser = await puppeteer.launch(launchOptions)
 
     const page = await browser.newPage()
-    
+
     // Set content with logo replaced
     await page.setContent(html, {
       waitUntil: 'networkidle0'
@@ -125,10 +141,10 @@ export async function generateContractPDFFromHTML(
 ): Promise<Buffer> {
   // Import the HTML generator (same one used in ContractViewer)
   const { createContractHTML } = await import('./contract-html')
-  
+
   // Generate HTML
   const html = await createContractHTML(contract)
-  
+
   // Convert HTML to PDF
   return await convertHTMLToPDF(html)
 }
@@ -136,7 +152,7 @@ export async function generateContractPDFFromHTML(
 /**
  * Generate signed PDF from contract using HTML (replaces pdf-lib version)
  * This function matches the signature of generateSignedContractPDF from pdf-generator.ts
- * 
+ *
  * Note: IP address and user agent are not included in the contract HTML display,
  * but are stored in the database separately. The HTML will show the signature name and date.
  */
@@ -161,17 +177,17 @@ export async function generateSignedContractPDF(
 
   // Generate PDF from HTML
   const pdfBuffer = await generateContractPDFFromHTML(signedContract)
-  
+
   // Convert Buffer to Uint8Array
   const pdfBytes = new Uint8Array(pdfBuffer)
-  
+
   // Calculate SHA-256 hash of PDF content
   const hash = createHash('sha256').update(pdfBytes).digest('hex')
-  
+
   // Generate file path (without bucket prefix - bucket is specified during upload)
   const timestamp = new Date(signedAt).toISOString().split('T')[0]
   const filePath = `${contract.id}/signed_${timestamp}_${contract.id}.pdf`
-  
+
   return {
     pdfBytes,
     hash,
@@ -197,16 +213,16 @@ export function generateComplianceMetadata(
     signature_name: signatureName,
     contract_version: contract.contract_version || 1,
     contract_number: contract.contract_number || null,
-    
+
     // Digital signature metadata
     pdf_hash: pdfHash,
     pdf_hash_algorithm: 'SHA-256',
-    
+
     // Audit trail
     ip_address: ipAddress,
     user_agent: userAgent,
     signature_method: 'click_to_sign',
-    
+
     // Canadian regulation compliance fields
     compliance: {
       // Consumer Protection Act - electronic signature requirements
@@ -216,13 +232,13 @@ export function generateComplianceMetadata(
         method: 'name_based',
         verified: true
       },
-      
+
       // Record keeping requirements (7 years for financial contracts in Canada)
       retention_period_years: 7,
       retention_until: new Date(
         new Date(signedAt).getTime() + 7 * 365 * 24 * 60 * 60 * 1000
       ).toISOString(),
-      
+
       // Integrity verification
       document_integrity: {
         hash: pdfHash,
@@ -232,4 +248,3 @@ export function generateComplianceMetadata(
     }
   }
 }
-
