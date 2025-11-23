@@ -1,7 +1,7 @@
 import createMiddleware from 'next-intl/middleware'
 import { NextRequest, NextResponse } from 'next/server'
 import { locales } from './i18n'
-import { localePrefix } from './navigation'
+import { localePrefix } from './navigation-config'
 import { updateSession } from '@/src/lib/supabase/middleware'
 import { createServerClient } from '@supabase/ssr'
 

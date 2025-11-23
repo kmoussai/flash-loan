@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { redirect } from '@/src/navigation-server'
 
 interface DashboardRedirectProps {
   params: {
@@ -9,6 +9,6 @@ interface DashboardRedirectProps {
 export default function DashboardRedirect({
   params: { locale }
 }: DashboardRedirectProps) {
-  redirect(`/${locale}/client/dashboard`)
+  redirect('/client/dashboard')
 }
 

@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { redirect } from '@/src/navigation-server'
 import { getTranslations } from 'next-intl/server'
 import { createServerSupabaseClient } from '@/src/lib/supabase/server'
 import { getUserType } from '@/src/lib/supabase/db-helpers'
@@ -25,7 +25,7 @@ export default async function SignInPage({ params: { locale } }: SignInPageProps
     
     if (userType === 'client') {
       // Already authenticated as client, redirect to dashboard
-      redirect(`/${locale}/client/dashboard`)
+      redirect('/client/dashboard')
     }
     // If staff, they should use admin login, so we'll show the signin form
   }

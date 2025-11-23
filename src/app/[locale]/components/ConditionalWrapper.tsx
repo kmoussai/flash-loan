@@ -1,5 +1,5 @@
 'use client'
-import { usePathname } from 'next/navigation'
+import { usePathname } from '@/src/navigation'
 
 /**
  * Conditional Wrapper Component
