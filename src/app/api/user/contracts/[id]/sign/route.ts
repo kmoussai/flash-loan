@@ -112,7 +112,7 @@ export async function POST(
     const userAgent = request.headers.get('user-agent') ?? 'Unknown'
     const signedAt = new Date().toISOString()
 
-    // Generate signed PDF
+    // Generate signed PDF - REQUIRED for contract signing
     let pdfResult: Awaited<ReturnType<typeof generateSignedContractPDF>> | null = null
     let signedDocumentPath: string | null = null
 
@@ -128,7 +128,7 @@ export async function POST(
       const pdfBuffer = Buffer.from(pdfResult.pdfBytes)
       
       const bucket = adminClient.storage.from('contracts')
-      const { error: uploadError, data: uploadData } = await bucket.upload(
+      const { error: uploadError } = await bucket.upload(
         pdfResult.filePath,
         pdfBuffer,
         {
@@ -143,38 +143,57 @@ export async function POST(
           '[POST /api/user/contracts/:id/sign] Failed to upload signed PDF:',
           uploadError
         )
-        // Continue even if upload fails - we'll still save the hash
-      } else {
-        // Store the file path (without bucket prefix, as bucket is implicit)
-        signedDocumentPath = pdfResult.filePath
+        return NextResponse.json(
+          {
+            error: 'Failed to upload signed contract PDF',
+            details: uploadError.message
+          },
+          { status: 500 }
+        )
       }
-    } catch (pdfError) {
+
+      // Store the file path (without bucket prefix, as bucket is implicit)
+      signedDocumentPath = pdfResult.filePath
+    } catch (pdfError: any) {
       console.error(
         '[POST /api/user/contracts/:id/sign] Failed to generate signed PDF:',
         pdfError
       )
-      // Continue with signing even if PDF generation fails
-      // The contract can be signed without PDF, but PDF is preferred
+      return NextResponse.json(
+        {
+          error: 'Failed to generate signed contract PDF',
+          details: pdfError?.message || 'PDF generation failed'
+        },
+        { status: 500 }
+      )
     }
 
-    // Generate compliance metadata
-    const complianceMetadata = pdfResult
-      ? generateComplianceMetadata(
-          contractRow as any,
-          signatureName,
-          signedAt,
-          ip,
-          userAgent,
-          pdfResult.hash
-        )
-      : null
+    // PDF generation is required - fail if not generated
+    if (!pdfResult) {
+      return NextResponse.json(
+        {
+          error: 'Failed to generate signed contract PDF'
+        },
+        { status: 500 }
+      )
+    }
+
+    // Generate compliance metadata (PDF result is guaranteed at this point)
+    const complianceMetadata = generateComplianceMetadata(
+      contractRow as any,
+      signatureName,
+      signedAt,
+      ip,
+      userAgent,
+      pdfResult.hash
+    )
 
     const { data: updated, error: updateError } = await (adminClient as any)
       .from('loan_contracts')
       .update({
         contract_status: 'signed',
         client_signed_at: signedAt,
-        contract_document_path: signedDocumentPath || undefined,
+        contract_document_path: signedDocumentPath,
         client_signature_data: {
           signature_method: signatureMethod,
           signature_name: signatureName,
@@ -182,8 +201,8 @@ export async function POST(
           user_agent: userAgent,
           signature_timestamp: signedAt,
           signed_from_device: device ?? null,
-          pdf_hash: pdfResult?.hash || null,
-          compliance_metadata: complianceMetadata || null
+          pdf_hash: pdfResult.hash,
+          compliance_metadata: complianceMetadata
         }
       })
       .eq('id', contractId)

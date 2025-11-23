@@ -38,58 +38,90 @@ export default function ContractViewer({
   const [loading, setLoading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [isLoadingPdf, setIsLoadingPdf] = useState(true)
+  const [pdfLoadError, setPdfLoadError] = useState<string | null>(null)
 
   // Load PDF from storage or generate HTML
   useEffect(() => {
     if (!contract) {
       setPdfUrl(null)
       setIsLoadingPdf(false)
+      setPdfLoadError(null)
       return
     }
 
+    setPdfLoadError(null)
     loadContractPDF(contract)
   }, [contract])
 
   const loadContractPDF = async (contractData: LoanContract) => {
     setIsLoadingPdf(true)
     try {
-      // Try to get signed PDF URL from API (server-side)
-      try {
-        const response = await fetch(
-          `/api/admin/applications/${applicationId}/contract/view`
-        )
-        if (response.ok) {
-          const data = await response.json()
-          if (data.signed_url) {
-            setPdfUrl(data.signed_url)
-            setIsLoadingPdf(false)
-            return
+      // Check if contract is signed - if so, prioritize loading the signed PDF
+      const isSigned = contractData.client_signed_at || contractData.contract_status === 'signed'
+      
+      if (isSigned && contractData.contract_document_path) {
+        // Contract is signed - try to load the signed PDF from storage
+        try {
+          const response = await fetch(
+            `/api/admin/applications/${applicationId}/contract/view`
+          )
+          if (response.ok) {
+            const data = await response.json()
+            if (data.signed_url) {
+              setPdfUrl(data.signed_url)
+              setIsLoadingPdf(false)
+              return
+            }
           }
+          // If API call failed but contract is signed, log error and set error message
+          const errorData = await response.json().catch(() => ({ error: 'Failed to parse response' }))
+          console.warn(
+            '[ContractViewer] Contract is signed but failed to get PDF URL from API:',
+            errorData
+          )
+          setPdfLoadError('Failed to load signed contract PDF. The contract may have been signed but the PDF is not available.')
+          setIsLoadingPdf(false)
+          return
+        } catch (apiError) {
+          console.error(
+            '[ContractViewer] Failed to get PDF URL from API for signed contract:',
+            apiError
+          )
+          // Don't fallback to HTML for signed contracts - show error instead
+          setPdfLoadError('Failed to load signed contract PDF. Please try again or contact support.')
+          setIsLoadingPdf(false)
+          return
         }
-      } catch (apiError) {
-        console.warn(
-          'Failed to get PDF URL from API, falling back to HTML:',
-          apiError
-        )
       }
 
-      // Fallback: Generate HTML representation if no PDF is stored or API fails
-      const contractHTML = await createContractHTML(contractData)
-      const blob = new Blob([contractHTML], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
-      setPdfUrl(url)
-      setIsLoadingPdf(false)
-    } catch (error) {
-      console.error('Error loading contract PDF:', error)
-      // Try to generate HTML as last resort
-      try {
+      // Fallback: Generate HTML representation only if contract is NOT signed
+      // or if signed contract PDF failed to load (will show error message)
+      if (!isSigned) {
         const contractHTML = await createContractHTML(contractData)
         const blob = new Blob([contractHTML], { type: 'text/html' })
         const url = URL.createObjectURL(blob)
         setPdfUrl(url)
         setIsLoadingPdf(false)
-      } catch (htmlError) {
-        console.error('Error generating HTML fallback:', htmlError)
+      } else {
+        // Contract is signed but PDF couldn't be loaded
+        setIsLoadingPdf(false)
+      }
+    } catch (error) {
+      console.error('Error loading contract PDF:', error)
+      // Only generate HTML fallback if contract is not signed
+      const isSigned = contractData.client_signed_at || contractData.contract_status === 'signed'
+      if (!isSigned) {
+        try {
+          const contractHTML = await createContractHTML(contractData)
+          const blob = new Blob([contractHTML], { type: 'text/html' })
+          const url = URL.createObjectURL(blob)
+          setPdfUrl(url)
+          setIsLoadingPdf(false)
+        } catch (htmlError) {
+          console.error('Error generating HTML fallback:', htmlError)
+          setIsLoadingPdf(false)
+        }
+      } else {
         setIsLoadingPdf(false)
       }
     }
@@ -686,6 +718,33 @@ export default function ContractViewer({
             <div className='text-center'>
               <div className='mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent'></div>
               <p className='text-gray-600'>Loading contract...</p>
+            </div>
+          </div>
+        ) : pdfLoadError ? (
+          <div className='flex h-full items-center justify-center'>
+            <div className='text-center max-w-md px-4'>
+              <div className='mb-4 text-red-400'>
+                <svg
+                  className='mx-auto h-12 w-12'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                  />
+                </svg>
+              </div>
+              <p className='text-red-600 font-medium mb-2'>Error Loading PDF</p>
+              <p className='text-gray-600 text-sm'>{pdfLoadError}</p>
+              {contract?.contract_document_path && (
+                <p className='text-gray-500 text-xs mt-2'>
+                  Document path: {contract.contract_document_path}
+                </p>
+              )}
             </div>
           </div>
         ) : pdfUrl ? (
