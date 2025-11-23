@@ -5,10 +5,9 @@
  * This matches the same HTML structure used in ContractViewer component
  * 
  * Uses chrome-aws-lambda for serverless environments (Vercel, AWS Lambda)
+ * Uses full puppeteer package for local development
  */
 
-import chromium from 'chrome-aws-lambda'
-import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
@@ -37,18 +36,55 @@ function getLogoDataURI(): string {
 }
 
 /**
+ * Get Puppeteer configuration based on environment
+ * - Local development: Uses full puppeteer package (includes Chromium)
+ * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + chrome-aws-lambda
+ */
+async function getPuppeteerLaunchOptions() {
+  const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
+  
+  if (isServerless) {
+    // Serverless environment: use puppeteer-core + chrome-aws-lambda
+    const chromium = await import('chrome-aws-lambda')
+    const puppeteer = await import('puppeteer-core')
+    
+    return {
+      puppeteer: puppeteer.default || puppeteer,
+      launchOptions: {
+        args: chromium.default.args,
+        defaultViewport: chromium.default.defaultViewport,
+        executablePath: await chromium.default.executablePath,
+        headless: chromium.default.headless,
+      }
+    }
+  } else {
+    // Local development: use full puppeteer package (includes Chromium)
+    const puppeteer = await import('puppeteer')
+    
+    return {
+      puppeteer: puppeteer.default || puppeteer,
+      launchOptions: {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+        ]
+      }
+    }
+  }
+}
+
+/**
  * Convert HTML contract to PDF bytes
  */
 export async function convertHTMLToPDF(html: string): Promise<Buffer> {
   let browser
   
   try {
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
-    })
+    const { puppeteer, launchOptions } = await getPuppeteerLaunchOptions()
+    
+    browser = await puppeteer.launch(launchOptions)
 
     const page = await browser.newPage()
     
@@ -59,7 +95,7 @@ export async function convertHTMLToPDF(html: string): Promise<Buffer> {
 
     // Generate PDF with A4 format matching the HTML styles
     const pdfBuffer = await page.pdf({
-      format: 'A4',
+      format: 'a4',
       printBackground: true,
       margin: {
         top: '15mm',
@@ -70,7 +106,7 @@ export async function convertHTMLToPDF(html: string): Promise<Buffer> {
     })
 
     // Return Buffer directly (Puppeteer returns Buffer)
-    return Buffer.from(pdfBuffer)
+    return pdfBuffer as Buffer
   } catch (error) {
     console.error('Error converting HTML to PDF:', error)
     throw error
