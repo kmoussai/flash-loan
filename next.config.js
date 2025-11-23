@@ -25,6 +25,29 @@ const nextConfig = {
       },
     ],
   },
+  webpack: (config, { isServer }) => {
+    // Exclude puppeteer and related packages from webpack bundling
+    // These are server-only packages and should be treated as externals
+    if (isServer) {
+      config.externals = config.externals || []
+      config.externals.push({
+        'puppeteer-core': 'commonjs puppeteer-core',
+        'puppeteer': 'commonjs puppeteer',
+        '@sparticuz/chromium': 'commonjs @sparticuz/chromium',
+      })
+    }
+    
+    // Ignore these packages in client-side bundles
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+      child_process: false,
+    }
+    
+    return config
+  },
 }
 
 module.exports = withNextIntl(nextConfig)
