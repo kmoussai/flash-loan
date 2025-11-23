@@ -9,10 +9,77 @@ import type { ContractTerms } from '@/src/lib/supabase/types'
 import path from 'path'
 import fs from 'fs/promises'
 
+/**
+ * Load signature image from multiple sources (in order of priority):
+ * 1. Environment variable SIGNATURE_IMAGE_BASE64 (best for serverless)
+ * 2. Supabase Storage bucket 'assets' with path 'signature.png'
+ * 3. Local file system 'private/signature.png' (for development)
+ */
+async function loadSignatureImage(): Promise<string> {
+  // 1. Try environment variable first (best for serverless)
+  const envSignature = process.env.SIGNATURE_IMAGE_BASE64
+  if (envSignature) {
+    // If it's already a data URI, return as-is
+    if (envSignature.startsWith('data:')) {
+      return envSignature
+    }
+    console.log('Used environment variable signature');
+    
+    // Otherwise, assume it's base64 and wrap it
+    return `data:image/png;base64,${envSignature}`
+  }
+
+  // 2. Try Supabase Storage (if configured)
+  const storagePath = process.env.SIGNATURE_STORAGE_PATH || 'signature.png'
+  const storageBucket = process.env.SIGNATURE_STORAGE_BUCKET || 'assets'
+  
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
+      
+      const { data, error } = await supabase.storage
+        .from(storageBucket)
+        .download(storagePath)
+      
+      if (!error && data) {
+        const arrayBuffer = await data.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        const base64 = buffer.toString('base64')
+        return `data:image/png;base64,${base64}`
+      }
+    } catch (error) {
+      console.warn('Failed to load signature from Supabase Storage:', error)
+    }
+  }
+
+  // 3. Try local file system (for development)
+  try {
+    const file = path.join(process.cwd(), 'private', 'signature.png')
+    const fileData = await fs.readFile(file)
+    return `data:image/png;base64,${fileData.toString('base64')}`
+  } catch (error) {
+    console.warn('Failed to load signature from local file system:', error)
+  }
+
+  // Return empty if all sources fail
+  console.error('Signature image could not be loaded from any source')
+  return 'data:image/png;base64,'
+}
+
 async function imageFileToBase64(filePath: string): Promise<string> {
-  const file = path.join(process.cwd(), filePath)
-  const fileData = await fs.readFile(file)
-  return `data:image/png;base64,${fileData.toString('base64')}`
+  try {
+    const file = path.join(process.cwd(), filePath)
+    const fileData = await fs.readFile(file)
+    return `data:image/png;base64,${fileData.toString('base64')}`
+  } catch (error) {
+    console.error(`Error loading image file ${filePath}:`, error)
+    // Return empty data URI as fallback
+    return 'data:image/png;base64,'
+  }
 }
 
 export async function createContractHTML(
@@ -62,7 +129,11 @@ export async function createContractHTML(
   const flashLoanLogo = await imageFileToBase64(
     'public/images/FlashLoanLogo.png'
   )
-  const signatureImage = await imageFileToBase64('private/signature.png')
+  let signatureImage = await loadSignatureImage()
+  // If signature image failed to load, use empty string to hide the image
+  if (!signatureImage || signatureImage === 'data:image/png;base64,') {
+    signatureImage = ''
+  }
   // Borrower basics from terms only
   const borrowerFirst = terms.first_name ?? ''
   const borrowerLast = terms.last_name ?? ''
@@ -357,8 +428,7 @@ export async function createContractHTML(
           ${signatureDateClient ? `<div>Signed on ${signatureDateClient}</div>` : ''}
         </div>
     <div class="signature-line">
-          <img src="${signatureImage}" alt="Signature" class="signature-image" />
-          <span class="line"></span>
+          ${signatureImage ? `<img src="${signatureImage}" alt="Signature" class="signature-image" />` : '<span class="line"></span>'}
           <div>Representative Signature</div>
           ${signatureDateStaff ? `<div>Signed on ${signatureDateStaff}</div>` : ''}
         </div>
@@ -493,8 +563,7 @@ export async function createContractHTML(
           ${signatureDateClient ? `<div>Signed on ${signatureDateClient}</div>` : ''}
         </div>
         <div class="signature-line">
-          <img src="${signatureImage}" alt="Signature" class="signature-image" />
-          <span class="line"></span>
+          ${signatureImage ? `<img src="${signatureImage}" alt="Signature" class="signature-image" />` : '<span class="line"></span>'}
           <div>Creditor signature</div>
           ${signatureDateStaff ? `<div>Signed on ${signatureDateStaff}</div>` : ''}
         </div>
