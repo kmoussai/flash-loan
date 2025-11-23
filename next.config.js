@@ -32,7 +32,7 @@ const nextConfig = {
       config.externals = config.externals || []
       config.externals.push({
         'puppeteer-core': 'commonjs puppeteer-core',
-        'chrome-aws-lambda': 'commonjs chrome-aws-lambda',
+        '@sparticuz/chromium': 'commonjs @sparticuz/chromium',
       })
     }
     

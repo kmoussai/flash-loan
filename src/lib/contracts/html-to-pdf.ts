@@ -4,13 +4,14 @@
  * Converts HTML contract (from createContractHTML) to PDF using Puppeteer
  * This matches the same HTML structure used in ContractViewer component
  *
- * Uses chrome-aws-lambda for serverless environments (Vercel, AWS Lambda)
+ * Uses @sparticuz/chromium for serverless environments (Vercel, AWS Lambda)
  * Uses full puppeteer package for local development
  */
 
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
+import { execSync } from 'child_process'
 import type { LoanContract } from '@/src/lib/supabase/types'
 
 export interface SignedPDFResult {
@@ -43,28 +44,70 @@ function getLogoDataURI(): string {
 /**
  * Get Puppeteer configuration based on environment
  * - Local development: Uses full puppeteer package (includes Chromium)
- * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + chrome-aws-lambda
+ * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + @sparticuz/chromium
  */
 async function getPuppeteerLaunchOptions() {
-  const chromium = await import('chrome-aws-lambda')
   const puppeteer = await import('puppeteer-core')
 
+  // Detect serverless environment
   const isServerless =
-    !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
-    const executablePath = isServerless
-    // @ts-ignore
-    ? await chromium.executablePath
-    : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" // <-- your local Chrome
+    !!process.env.VERCEL ||
+    process.env.NODE_ENV === 'production'
 
+  let executablePath: string | undefined
+  let args: string[] = []
+  let defaultViewport = { width: 1920, height: 1080 }
+
+  if (isServerless) {
+    // Use @sparticuz/chromium for serverless environments
+    try {
+      const chromiumModule = await import('@sparticuz/chromium')
+      // Handle both CommonJS and ES module imports
+      const chromium = chromiumModule.default || chromiumModule
+      executablePath = await chromium.executablePath()
+      args = chromium.args || []
+      defaultViewport = chromium.defaultViewport || { width: 1920, height: 1080 }
+    } catch (error) {
+      console.error('Error loading @sparticuz/chromium:', error)
+      throw new Error(
+        'Failed to load Chromium for serverless environment. Make sure @sparticuz/chromium is installed.'
+      )
+    }
+  } else {
+    // Local development - try to find Chrome/Chromium
+    // First, check if CHROME_PATH environment variable is set
+    if (process.env.CHROME_PATH && existsSync(process.env.CHROME_PATH)) {
+      executablePath = process.env.CHROME_PATH
+    } else {
+      executablePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    }
+
+    if (!executablePath || !existsSync(executablePath)) {
+      throw new Error(
+        'Chrome/Chromium not found. Please install Chrome or set CHROME_PATH environment variable.'
+      )
+    }
+
+    // For local development, use more stable arguments
+    // Don't use --single-process or --no-zygote as they can cause crashes
+    args = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-extensions'
+    ]
+  }
+
+  console.log('Environment:', isServerless ? 'serverless' : 'local')
   console.log('ExecutablePath:', executablePath)
 
   return {
     puppeteer: puppeteer.default || puppeteer,
     launchOptions: {
-      // @ts-ignore
-      args: chromium.args,
-      // @ts-ignore
-      defaultViewport: chromium.defaultViewport,
+      args,
+      defaultViewport,
       executablePath,
       headless: true,
       ignoreHTTPSErrors: true
@@ -77,18 +120,42 @@ async function getPuppeteerLaunchOptions() {
  */
 export async function convertHTMLToPDF(html: string): Promise<Buffer> {
   let browser
+  let page
 
   try {
     const { puppeteer, launchOptions } = await getPuppeteerLaunchOptions()
 
+    console.log('Launching browser with options:', {
+      executablePath: launchOptions.executablePath,
+      headless: launchOptions.headless,
+      argsCount: launchOptions.args?.length
+    })
+
     browser = await puppeteer.launch(launchOptions)
 
-    const page = await browser.newPage()
+    if (!browser) {
+      throw new Error('Failed to launch browser')
+    }
+
+    page = await browser.newPage()
+
+    if (!page) {
+      throw new Error('Failed to create new page')
+    }
+
+    // Set a reasonable timeout for page operations
+    page.setDefaultTimeout(30000) // 30 seconds
 
     // Set content with logo replaced
+    // Use 'load' instead of 'networkidle0' for more reliable behavior
     await page.setContent(html, {
-      waitUntil: 'networkidle0'
+      waitUntil: 'load',
+      timeout: 30000
     })
+
+    // Wait a bit for any dynamic content to render
+    // Use Promise-based delay instead of deprecated waitForTimeout
+    await new Promise(resolve => setTimeout(resolve, 1000))
 
     // Generate PDF with A4 format matching the HTML styles
     const pdfBuffer = await page.pdf({
@@ -99,17 +166,36 @@ export async function convertHTMLToPDF(html: string): Promise<Buffer> {
         right: '17mm',
         bottom: '18mm',
         left: '17mm'
-      }
+      },
+      timeout: 30000
     })
 
     // Return Buffer directly (Puppeteer returns Buffer)
     return pdfBuffer as Buffer
   } catch (error) {
     console.error('Error converting HTML to PDF:', error)
+       
     throw error
   } finally {
-    if (browser) {
-      await browser.close()
+    // Close page first, then browser
+    try {
+      if (page) {
+        await page.close().catch(() => {
+          // Ignore errors when closing page
+        })
+      }
+    } catch (error) {
+      console.error('Error closing page:', error)
+    }
+    
+    try {
+      if (browser) {
+        await browser.close().catch(() => {
+          // Ignore errors when closing browser
+        })
+      }
+    } catch (error) {
+      console.error('Error closing browser:', error)
     }
   }
 }
