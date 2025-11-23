@@ -46,47 +46,28 @@ function getLogoDataURI(): string {
  * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + chrome-aws-lambda
  */
 async function getPuppeteerLaunchOptions() {
+  const chromium = await import('chrome-aws-lambda')
+  const puppeteer = await import('puppeteer-core')
+
   const isServerless =
     !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
-
-  if (isServerless) {
-    // Correct imports (no .default!)
-    const chromium = await import('chrome-aws-lambda')
-    const puppeteer = await import('puppeteer-core')
-
+    const executablePath = isServerless
     // @ts-ignore
-    const executablePath = await chromium.executablePath
+    ? await chromium.executablePath
+    : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" // <-- your local Chrome
 
-    if (!executablePath) {
-      console.error('chrome-aws-lambda did not provide an executablePath')
-    }
+  console.log('ExecutablePath:', executablePath)
 
-    return {
-      puppeteer: puppeteer.default || puppeteer,
-      launchOptions: {
-        // @ts-ignore
-        args: chromium.args,
-        // @ts-ignore
-        defaultViewport: chromium.defaultViewport,
-        executablePath,
-        // @ts-ignore
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true
-      }
-    }
-  }
-
-  // Local development: full puppeteer
-  const puppeteer = await import('puppeteer')
   return {
     puppeteer: puppeteer.default || puppeteer,
     launchOptions: {
+      // @ts-ignore
+      args: chromium.args,
+      // @ts-ignore
+      defaultViewport: chromium.defaultViewport,
+      executablePath,
       headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
-      ]
+      ignoreHTTPSErrors: true
     }
   }
 }
