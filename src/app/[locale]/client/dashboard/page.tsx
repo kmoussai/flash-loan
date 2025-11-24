@@ -46,7 +46,7 @@ export default async function ClientDashboardPage({
   // Check if password change is required
   const requiresPasswordChange = user.user_metadata?.requires_password_change === true
   if (requiresPasswordChange) {
-    redirect(`/${locale}/client/dashboard/change-password`)
+    redirect('/client/dashboard/change-password')
     return // TypeScript helper
   }
 

@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
     // Use admin client to update password and metadata
     const adminClient = createServerSupabaseAdminClient()
 
-    // Update password
+    // Update password and clear password change requirement
+    // Email is already confirmed when account was created, so no need to confirm again
     const { error: updateError } = await adminClient.auth.admin.updateUserById(
       user.id,
       {

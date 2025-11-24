@@ -429,12 +429,13 @@ export async function POST(request: NextRequest) {
         await supabase.auth.admin.createUser({
           email: body.email,
           password: tempPassword,
-          email_confirm: true, // Auto-confirm email
+          email_confirm: true, // Confirm email so user can sign in with temp password
           user_metadata: {
             first_name: body.firstName,
             last_name: body.lastName,
             phone: body.phone,
-            signup_type: 'client'
+            signup_type: 'client',
+            requires_password_change: true // Require password change on first login
           }
         })
 
