@@ -194,6 +194,7 @@ export default function Step2Address({
             onChange={e => onUpdate('country', e.target.value)}
             className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
             placeholder='Canada'
+            readOnly
           />
         </div>
         <div>

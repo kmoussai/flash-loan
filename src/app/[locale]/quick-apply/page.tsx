@@ -2,7 +2,7 @@
 import { useTranslations } from 'next-intl'
 import { Link } from '@/src/navigation'
 import Button from '../components/Button'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import {
   restoreInveriteConnection,
@@ -10,17 +10,17 @@ import {
   persistInveriteConnection,
   type InveriteConnection
 } from '@/src/lib/ibv/inverite'
-import { createIbvProviderData, determineIbvStatus } from '@/src/lib/supabase/ibv-helpers'
+import {
+  createIbvProviderData,
+  determineIbvStatus
+} from '@/src/lib/supabase/ibv-helpers'
 import Step1PersonalInfo from './components/Step1PersonalInfo'
 import Step2Address from './components/Step2Address'
 import Step3LoanDetails from './components/Step3LoanDetails'
 import Step4Confirmation from './components/Step4Confirmation'
 import Step5BankVerification from './components/Step5BankVerification'
 import StepProgress from './components/StepProgress'
-import type {
-  QuickApplyFormData,
-  QuickApplyUpdateHandler
-} from './types'
+import type { QuickApplyFormData, QuickApplyUpdateHandler } from './types'
 import { PROVINCE_CODES, provinceNameToCode } from './constants/provinces'
 import { validateMinimumAge } from '@/src/lib/utils/age'
 
@@ -44,7 +44,7 @@ export default function MicroLoanApplicationPage() {
       province: '',
       postalCode: '',
       movingDate: '',
-      country: '',
+      country: 'Canada',
       rentCost: '',
       loanAmount: '',
       confirmInformation: false
@@ -77,13 +77,24 @@ export default function MicroLoanApplicationPage() {
   const [ibvStep, setIbvStep] = useState(1)
   const [isVerifying, setIsVerifying] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
-  const [inveriteConnection, setInveriteConnection] = useState<InveriteConnection | null>(null)
-  const [inveriteRequestGuid, setInveriteRequestGuid] = useState<string | null>(null)
-  const [ibvSubmissionOverride, setIbvSubmissionOverride] = useState<'pending' | 'failed' | null>(null)
+  const [inveriteConnection, setInveriteConnection] =
+    useState<InveriteConnection | null>(null)
+  const [inveriteRequestGuid, setInveriteRequestGuid] = useState<string | null>(
+    null
+  )
+  const [ibvSubmissionOverride, setIbvSubmissionOverride] = useState<
+    'pending' | 'failed' | null
+  >(null)
   const [hasSubmittedApplication, setHasSubmittedApplication] = useState(false)
-  const [lastSubmittedRequestGuid, setLastSubmittedRequestGuid] = useState<string | null>(null)
-  const [applicationReferenceNumber, setApplicationReferenceNumber] = useState<string | null>(null)
-  const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<string | null>(null)
+  const [lastSubmittedRequestGuid, setLastSubmittedRequestGuid] = useState<
+    string | null
+  >(null)
+  const [applicationReferenceNumber, setApplicationReferenceNumber] = useState<
+    string | null
+  >(null)
+  const [lastVerifiedSubmissionGuid, setLastVerifiedSubmissionGuid] = useState<
+    string | null
+  >(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
   const [isPrefilling, setIsPrefilling] = useState(false)
   const verifiedFetchInFlight = useRef(false)
@@ -134,7 +145,7 @@ export default function MicroLoanApplicationPage() {
         const { user, address } = await profileResponse.json()
 
         // Prefill form data
-        setFormData((prev) => ({
+        setFormData(prev => ({
           ...prev,
           // Personal Information
           firstName: user.first_name || prev.firstName,
@@ -142,7 +153,8 @@ export default function MicroLoanApplicationPage() {
           email: user.email || prev.email,
           phone: user.phone || prev.phone,
           dateOfBirth: user.date_of_birth || prev.dateOfBirth,
-          preferredLanguage: user.preferred_language || prev.preferredLanguage || locale || 'en',
+          preferredLanguage:
+            user.preferred_language || prev.preferredLanguage || locale || 'en',
           // Address Information
           streetNumber: address?.street_number || prev.streetNumber,
           streetName: address?.street_name || prev.streetName,
@@ -151,7 +163,7 @@ export default function MicroLoanApplicationPage() {
           province: address?.province || prev.province,
           postalCode: address?.postal_code || prev.postalCode,
           movingDate: address?.moving_date || prev.movingDate,
-          country: prev.country || 'Canada',
+          country: prev.country || 'Canada'
         }))
       } catch (error) {
         // Silently fail - user can still fill the form manually
@@ -173,7 +185,10 @@ export default function MicroLoanApplicationPage() {
       sessionStorage.removeItem('inverite_init_session_id')
       // Only clear form data if form is empty (user not authenticated)
       const saved = localStorage.getItem('microLoanFormData')
-      if (!saved || (!JSON.parse(saved).firstName && !JSON.parse(saved).email)) {
+      if (
+        !saved ||
+        (!JSON.parse(saved).firstName && !JSON.parse(saved).email)
+      ) {
         localStorage.removeItem('microLoanFormData')
       }
     } catch {}
@@ -207,7 +222,7 @@ export default function MicroLoanApplicationPage() {
     if (currentStep !== 5) return
 
     const cleanup = addInveriteListener(true, {
-      onSuccess: (connection) => {
+      onSuccess: connection => {
         setInveriteConnection(connection)
         // Store requestGuid if available
         if (connection.requestGuid) {
@@ -221,14 +236,18 @@ export default function MicroLoanApplicationPage() {
         // This prevents duplicate submissions if user clicks Submit at the same time
       },
       onError: () => {
-        setInveriteConnection(prev => (prev ? { ...prev, verificationStatus: 'failed' } : null))
+        setInveriteConnection(prev =>
+          prev ? { ...prev, verificationStatus: 'failed' } : null
+        )
         setIbvVerified(false)
         setIsVerifying(false)
         setIbvSubmissionOverride('failed')
         alert('Bank verification failed. Please try again.')
       },
       onCancel: () => {
-        setInveriteConnection(prev => (prev ? { ...prev, verificationStatus: 'cancelled' } : null))
+        setInveriteConnection(prev =>
+          prev ? { ...prev, verificationStatus: 'cancelled' } : null
+        )
         setIsVerifying(false)
       }
     })
@@ -243,10 +262,7 @@ export default function MicroLoanApplicationPage() {
     }
   }, [formData])
 
-  const updateFormData: QuickApplyUpdateHandler = (
-    field,
-    value
-  ) => {
+  const updateFormData: QuickApplyUpdateHandler = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -295,12 +311,7 @@ export default function MicroLoanApplicationPage() {
       'Gatineau',
       'Sherbrooke'
     ]
-    const postalCodes = [
-      'H2X 1Y4',
-      'H3B 2Y7',
-      'H4N 3K6',
-      'H1A 0A1'
-    ]
+    const postalCodes = ['H2X 1Y4', 'H3B 2Y7', 'H4N 3K6', 'H1A 0A1']
     const loanAmounts = [
       '250',
       '300',
@@ -355,7 +366,8 @@ export default function MicroLoanApplicationPage() {
       preferredLanguage: locale || 'en',
       streetNumber: String(Math.floor(Math.random() * 900) + 100),
       streetName: `${randomStreetName} ${Math.random() > 0.5 ? 'Street' : 'Avenue'}`,
-      apartmentNumber: Math.random() > 0.5 ? `${Math.floor(Math.random() * 20) + 1}` : '',
+      apartmentNumber:
+        Math.random() > 0.5 ? `${Math.floor(Math.random() * 20) + 1}` : '',
       city: randomCity,
       province: randomProvince,
       postalCode: randomPostalCode,
@@ -384,7 +396,7 @@ export default function MicroLoanApplicationPage() {
       province: '',
       postalCode: '',
       movingDate: '',
-      country: '',
+      country: 'Canada',
       rentCost: '',
       loanAmount: '',
       confirmInformation: false
@@ -399,7 +411,7 @@ export default function MicroLoanApplicationPage() {
     setIbvStep(1)
     setIsVerifying(false)
     setIsSubmitted(false)
-    
+
     // Clear Inverite session data from storage
     if (typeof window !== 'undefined') {
       localStorage.removeItem('inveriteConnection')
@@ -454,41 +466,39 @@ export default function MicroLoanApplicationPage() {
       console.log('[Submit] Already submitting, ignoring duplicate call')
       return
     }
-    
+
     // Mark as submitting immediately to prevent race conditions
     setIsSubmitting(true)
-    
+
     try {
       // Use provided Inverite data or fall back to state
       const finalInveriteData = inveriteData || inveriteConnection
       const requestGuid =
-        finalInveriteData?.requestGuid ||
-        inveriteRequestGuid ||
-        null
+        finalInveriteData?.requestGuid || inveriteRequestGuid || null
 
       // Ensure requestGuid is included if we have it stored separately
       const enhancedInveriteData = finalInveriteData
         ? {
             ...finalInveriteData,
-            requestGuid: finalInveriteData.requestGuid || inveriteRequestGuid || undefined
+            requestGuid:
+              finalInveriteData.requestGuid || inveriteRequestGuid || undefined
           }
         : null
 
       // Create IBV provider data using helper function
       // For now, only stores request_guid. Account information will be added later
       // when we call the Inverite API to retrieve account details using the request_guid
-      const ibvProviderData =
-        enhancedInveriteData
-          ? createIbvProviderData('inverite', enhancedInveriteData)
-          : requestGuid
-            ? { request_guid: requestGuid }
-            : null
+      const ibvProviderData = enhancedInveriteData
+        ? createIbvProviderData('inverite', enhancedInveriteData)
+        : requestGuid
+          ? { request_guid: requestGuid }
+          : null
 
-  const resolvedOverride = statusOverride ?? ibvSubmissionOverride
+      const resolvedOverride = statusOverride ?? ibvSubmissionOverride
 
-  const ibvStatus = finalInveriteData
-    ? determineIbvStatus('inverite', finalInveriteData.verificationStatus)
-    : resolvedOverride
+      const ibvStatus = finalInveriteData
+        ? determineIbvStatus('inverite', finalInveriteData.verificationStatus)
+        : resolvedOverride
 
       const response = await fetch('/api/loan-application', {
         method: 'POST',
@@ -527,7 +537,8 @@ export default function MicroLoanApplicationPage() {
               : null,
           ibvStatus: ibvStatus,
           ibvProviderData: ibvProviderData,
-          ibvVerifiedAt: ibvStatus === 'verified' ? new Date().toISOString() : null,
+          ibvVerifiedAt:
+            ibvStatus === 'verified' ? new Date().toISOString() : null,
 
           // Other required fields
           bankruptcyPlan: false,
@@ -638,19 +649,18 @@ export default function MicroLoanApplicationPage() {
     isSubmitted
   ])
 
-  const isStepValid = () => {
+  const isStepValid = useCallback(() => {
     switch (currentStep) {
       case 1:
         // Validate all required fields and age (must be at least 18)
-        const hasAllFields = (
+        const hasAllFields =
           formData.firstName &&
           formData.lastName &&
           formData.email &&
           formData.phone &&
           formData.dateOfBirth
-        )
         if (!hasAllFields) return false
-        
+
         // Validate age if date of birth is provided
         if (formData.dateOfBirth) {
           const ageValidation = validateMinimumAge(formData.dateOfBirth, 18)
@@ -681,7 +691,7 @@ export default function MicroLoanApplicationPage() {
       default:
         return false
     }
-  }
+  }, [formData])
 
   // If form is submitted, show success message
   if (isSubmitted) {
@@ -853,8 +863,8 @@ export default function MicroLoanApplicationPage() {
 
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
-            <Step1PersonalInfo 
-              formData={formData} 
+            <Step1PersonalInfo
+              formData={formData}
               onUpdate={updateFormData}
               disabled={isPrefilling}
             />
@@ -881,8 +891,12 @@ export default function MicroLoanApplicationPage() {
               formData={formData}
               ibvVerified={ibvVerified}
               ibvStatus={inveriteConnection?.verificationStatus || null}
-              onRequestGuidReceived={(requestGuid) => setInveriteRequestGuid(requestGuid)}
-              onSubmitWithoutVerification={(status) => setIbvSubmissionOverride(status)}
+              onRequestGuidReceived={requestGuid =>
+                setInveriteRequestGuid(requestGuid)
+              }
+              onSubmitWithoutVerification={status =>
+                setIbvSubmissionOverride(status)
+              }
               onClearOverride={() => setIbvSubmissionOverride(null)}
               hasRequestGuid={Boolean(inveriteRequestGuid)}
               submissionOverride={ibvSubmissionOverride}
@@ -908,9 +922,7 @@ export default function MicroLoanApplicationPage() {
                 size='large'
                 className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
               >
-                {currentStep === 4
-                  ? t('Continue_To_Verification')
-                  : t('Next')}
+                {currentStep === 4 ? t('Continue_To_Verification') : t('Next')}
               </Button>
             )}
           </div>
@@ -929,4 +941,3 @@ export default function MicroLoanApplicationPage() {
     </div>
   )
 }
-
