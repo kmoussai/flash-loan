@@ -13,11 +13,30 @@ import { join } from 'path'
 import { createHash } from 'crypto'
 import type { LoanContract } from '@/src/lib/supabase/types'
 
-// URL to the Chromium binary package hosted in /public, if not in production, use a fallback URL
-// alternatively, you can host the chromium-pack.tar file elsewhere and update the URL below
-const CHROMIUM_PACK_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/chromium-pack.tar`
-  : 'https://github.com/gabenunez/puppeteer-on-vercel/raw/refs/heads/main/example/chromium-dont-use-in-prod.tar'
+/**
+ * Get Chromium binary URL with fallback chain:
+ * 1. Try VERCEL_URL (production/preview deployments)
+ * 2. Try NEXT_PUBLIC_VERCEL_URL (if set)
+ * 3. Fallback to GitHub-hosted example file
+ */
+function getChromiumPackURL(): string {
+  // Try VERCEL_URL first (available in all Vercel deployments)
+  if (process.env.VERCEL_URL) {
+    const vercelUrl = process.env.VERCEL_URL
+    // VERCEL_URL doesn't include protocol, so add https://
+    return `https://${vercelUrl}/chromium-pack.tar`
+  }
+
+  // Try NEXT_PUBLIC_VERCEL_URL if available
+  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+    return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/chromium-pack.tar`
+  }
+
+  // Fallback to GitHub-hosted example file (reliable but not for production)
+  return 'https://github.com/gabenunez/puppeteer-on-vercel/raw/refs/heads/main/example/chromium-dont-use-in-prod.tar'
+}
+
+const CHROMIUM_PACK_URL = getChromiumPackURL()
 
 // Cache the Chromium executable path to avoid re-downloading on subsequent requests
 let cachedExecutablePath: string | null = null
@@ -26,6 +45,7 @@ let downloadPromise: Promise<string> | null = null
 /**
  * Downloads and caches the Chromium executable path.
  * Uses a download promise to prevent concurrent downloads.
+ * Falls back to GitHub URL if primary URL fails.
  */
 async function getChromiumPath(): Promise<string> {
   // Return cached path if available
@@ -34,17 +54,41 @@ async function getChromiumPath(): Promise<string> {
   // Prevent concurrent downloads by reusing the same promise
   if (!downloadPromise) {
     const chromium = (await import('@sparticuz/chromium-min')).default
+    
+    // Fallback URL (GitHub-hosted example)
+    const fallbackUrl = 'https://github.com/gabenunez/puppeteer-on-vercel/raw/refs/heads/main/example/chromium-dont-use-in-prod.tar'
+    
     downloadPromise = chromium
       .executablePath(CHROMIUM_PACK_URL)
       .then(path => {
         cachedExecutablePath = path
-        console.log('Chromium path resolved:', path)
+        console.log('Chromium path resolved from primary URL:', CHROMIUM_PACK_URL)
         return path
       })
-      .catch(error => {
-        console.error('Failed to get Chromium path:', error)
-        downloadPromise = null // Reset on error to allow retry
-        throw error
+      .catch(async (error) => {
+        // If primary URL fails and it's not already the fallback, try fallback
+        if (CHROMIUM_PACK_URL !== fallbackUrl) {
+          console.warn('Primary Chromium URL failed, trying fallback:', error.message)
+          console.log('Attempting to download from fallback URL:', fallbackUrl)
+          
+          try {
+            const fallbackPath = await chromium.executablePath(fallbackUrl)
+            cachedExecutablePath = fallbackPath
+            console.log('Chromium path resolved from fallback URL')
+            return fallbackPath
+          } catch (fallbackError) {
+            console.error('Both primary and fallback Chromium URLs failed')
+            downloadPromise = null // Reset on error to allow retry
+            const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            const primaryMessage = error instanceof Error ? error.message : String(error)
+            throw new Error(`Failed to download Chromium: Primary error: ${primaryMessage}, Fallback error: ${fallbackMessage}`)
+          }
+        } else {
+          // Already using fallback, just throw
+          console.error('Failed to get Chromium path from fallback URL:', error)
+          downloadPromise = null // Reset on error to allow retry
+          throw error
+        }
       })
   }
 
