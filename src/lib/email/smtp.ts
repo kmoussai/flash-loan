@@ -19,8 +19,9 @@ function getSmtpConfig(): SmtpConfig | null {
   const port = process.env.SMTP_PORT
   const user = process.env.SMTP_USER
   const pass = process.env.SMTP_PASSWORD
-  const fromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@flash-loan.ca'
+  const fromEmail = process.env.SMTP_FROM_EMAIL || 'no-reply@flash-loan.ca'
   const fromName = process.env.SMTP_FROM_NAME || 'Flash-Loan'
+  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === '465'
 
   if (!host || !port || !user || !pass) {
     console.warn('[SMTP] Configuration incomplete. Email sending will be disabled.')
@@ -30,7 +31,7 @@ function getSmtpConfig(): SmtpConfig | null {
   return {
     host,
     port: parseInt(port, 10),
-    secure: port === '465', // true for 465, false for other ports
+    secure,
     auth: {
       user,
       pass
