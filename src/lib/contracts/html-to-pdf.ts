@@ -4,7 +4,7 @@
  * Converts HTML contract (from createContractHTML) to PDF using Puppeteer
  * This matches the same HTML structure used in ContractViewer component
  *
- * Uses chrome-aws-lambda for serverless environments (Vercel, AWS Lambda)
+ * Uses @sparticuz/chromium for serverless environments (Vercel, AWS Lambda)
  * Uses full puppeteer package for local development
  */
 
@@ -12,6 +12,88 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
 import type { LoanContract } from '@/src/lib/supabase/types'
+
+/**
+ * Get Chromium binary URL with fallback chain:
+ * 1. Try VERCEL_URL (production/preview deployments)
+ * 2. Try NEXT_PUBLIC_VERCEL_URL (if set)
+ * 3. Fallback to GitHub-hosted example file
+ */
+function getChromiumPackURL(): string {
+  // Try VERCEL_URL first (available in all Vercel deployments)
+  if (process.env.VERCEL_URL) {
+    const vercelUrl = process.env.VERCEL_URL
+    // VERCEL_URL doesn't include protocol, so add https://
+    return `https://${vercelUrl}/chromium-pack.tar`
+  }
+
+  // Try NEXT_PUBLIC_VERCEL_URL if available
+  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+    return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/chromium-pack.tar`
+  }
+
+  // Fallback to GitHub-hosted example file (reliable but not for production)
+  return 'https://github.com/gabenunez/puppeteer-on-vercel/raw/refs/heads/main/example/chromium-dont-use-in-prod.tar'
+}
+
+const CHROMIUM_PACK_URL = getChromiumPackURL()
+
+// Cache the Chromium executable path to avoid re-downloading on subsequent requests
+let cachedExecutablePath: string | null = null
+let downloadPromise: Promise<string> | null = null
+
+/**
+ * Downloads and caches the Chromium executable path.
+ * Uses a download promise to prevent concurrent downloads.
+ * Falls back to GitHub URL if primary URL fails.
+ */
+async function getChromiumPath(): Promise<string> {
+  // Return cached path if available
+  if (cachedExecutablePath) return cachedExecutablePath
+
+  // Prevent concurrent downloads by reusing the same promise
+  if (!downloadPromise) {
+    const chromium = (await import('@sparticuz/chromium-min')).default
+    
+    // Fallback URL (GitHub-hosted example)
+    const fallbackUrl = 'https://github.com/gabenunez/puppeteer-on-vercel/raw/refs/heads/main/example/chromium-dont-use-in-prod.tar'
+    
+    downloadPromise = chromium
+      .executablePath(CHROMIUM_PACK_URL)
+      .then(path => {
+        cachedExecutablePath = path
+        console.log('Chromium path resolved from primary URL:', CHROMIUM_PACK_URL)
+        return path
+      })
+      .catch(async (error) => {
+        // If primary URL fails and it's not already the fallback, try fallback
+        if (CHROMIUM_PACK_URL !== fallbackUrl) {
+          console.warn('Primary Chromium URL failed, trying fallback:', error.message)
+          console.log('Attempting to download from fallback URL:', fallbackUrl)
+          
+          try {
+            const fallbackPath = await chromium.executablePath(fallbackUrl)
+            cachedExecutablePath = fallbackPath
+            console.log('Chromium path resolved from fallback URL')
+            return fallbackPath
+          } catch (fallbackError) {
+            console.error('Both primary and fallback Chromium URLs failed')
+            downloadPromise = null // Reset on error to allow retry
+            const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            const primaryMessage = error instanceof Error ? error.message : String(error)
+            throw new Error(`Failed to download Chromium: Primary error: ${primaryMessage}, Fallback error: ${fallbackMessage}`)
+          }
+        } else {
+          // Already using fallback, just throw
+          console.error('Failed to get Chromium path from fallback URL:', error)
+          downloadPromise = null // Reset on error to allow retry
+          throw error
+        }
+      })
+  }
+
+  return downloadPromise
+}
 
 export interface SignedPDFResult {
   pdfBytes: Uint8Array
@@ -43,52 +125,32 @@ function getLogoDataURI(): string {
 /**
  * Get Puppeteer configuration based on environment
  * - Local development: Uses full puppeteer package (includes Chromium)
- * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + chrome-aws-lambda
+ * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + @sparticuz/chromium
  */
 async function getPuppeteerLaunchOptions() {
-  const isServerless =
-    !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
-
-  if (isServerless) {
-    // Correct imports (no .default!)
-    const chromium = await import('chrome-aws-lambda')
-    const puppeteer = await import('puppeteer-core')
-
-    // @ts-ignore
-    const executablePath = await chromium.executablePath
-
-    if (!executablePath) {
-      console.error('chrome-aws-lambda did not provide an executablePath')
+  // Configure browser based on environment
+  const isVercel = !!process.env.VERCEL_ENV
+  let puppeteer: any,
+    launchOptions: any = {
+      headless: true
     }
-
-    return {
-      puppeteer: puppeteer.default || puppeteer,
-      launchOptions: {
-        // @ts-ignore
-        args: chromium.args,
-        // @ts-ignore
-        defaultViewport: chromium.defaultViewport,
-        executablePath,
-        // @ts-ignore
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true
-      }
+  if (isVercel) {
+    // Vercel: Use puppeteer-core with downloaded Chromium binary
+    const chromium = (await import('@sparticuz/chromium-min')).default
+    puppeteer = await import('puppeteer-core')
+    const executablePath = await getChromiumPath()
+    launchOptions = {
+      ...launchOptions,
+      args: chromium.args,
+      executablePath
     }
+    console.log('Launching browser with executable path:', executablePath)
+  } else {
+    // Local: Use regular puppeteer with bundled Chromium
+    puppeteer = await import('puppeteer')
   }
 
-  // Local development: full puppeteer
-  const puppeteer = await import('puppeteer')
-  return {
-    puppeteer: puppeteer.default || puppeteer,
-    launchOptions: {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
-      ]
-    }
-  }
+  return { puppeteer, launchOptions }
 }
 
 /**
@@ -96,18 +158,42 @@ async function getPuppeteerLaunchOptions() {
  */
 export async function convertHTMLToPDF(html: string): Promise<Buffer> {
   let browser
+  let page
 
   try {
     const { puppeteer, launchOptions } = await getPuppeteerLaunchOptions()
 
+    console.log('Launching browser with options:', {
+      executablePath: launchOptions.executablePath,
+      headless: launchOptions.headless,
+      argsCount: launchOptions.args?.length
+    })
+
     browser = await puppeteer.launch(launchOptions)
 
-    const page = await browser.newPage()
+    if (!browser) {
+      throw new Error('Failed to launch browser')
+    }
+
+    page = await browser.newPage()
+
+    if (!page) {
+      throw new Error('Failed to create new page')
+    }
+
+    // Set a reasonable timeout for page operations
+    page.setDefaultTimeout(30000) // 30 seconds
 
     // Set content with logo replaced
+    // Use 'load' instead of 'networkidle0' for more reliable behavior
     await page.setContent(html, {
-      waitUntil: 'networkidle0'
+      waitUntil: 'load',
+      timeout: 30000
     })
+
+    // Wait a bit for any dynamic content to render
+    // Use Promise-based delay instead of deprecated waitForTimeout
+    await new Promise(resolve => setTimeout(resolve, 1000))
 
     // Generate PDF with A4 format matching the HTML styles
     const pdfBuffer = await page.pdf({
@@ -118,17 +204,36 @@ export async function convertHTMLToPDF(html: string): Promise<Buffer> {
         right: '17mm',
         bottom: '18mm',
         left: '17mm'
-      }
+      },
+      timeout: 30000
     })
 
     // Return Buffer directly (Puppeteer returns Buffer)
     return pdfBuffer as Buffer
   } catch (error) {
     console.error('Error converting HTML to PDF:', error)
+
     throw error
   } finally {
-    if (browser) {
-      await browser.close()
+    // Close page first, then browser
+    try {
+      if (page) {
+        await page.close().catch(() => {
+          // Ignore errors when closing page
+        })
+      }
+    } catch (error) {
+      console.error('Error closing page:', error)
+    }
+
+    try {
+      if (browser) {
+        await browser.close().catch(() => {
+          // Ignore errors when closing browser
+        })
+      }
+    } catch (error) {
+      console.error('Error closing browser:', error)
     }
   }
 }

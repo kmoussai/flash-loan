@@ -1,8 +1,8 @@
 /**
  * Test API Endpoint: Generate Contract PDF
- * 
+ *
  * GET /api/test/generate-contract-pdf
- * 
+ *
  * Generates a contract PDF using mocked data for testing purposes.
  * Uses the same HTML generation as ContractViewer component and converts it to PDF.
  * This endpoint is temporary and should be removed or secured in production.
@@ -21,21 +21,21 @@ function createMockContract(): LoanContract {
   const now = new Date()
   const firstPaymentDate = new Date(now)
   firstPaymentDate.setDate(firstPaymentDate.getDate() + 30) // 30 days from now
-  
+
   const lastPaymentDate = new Date(firstPaymentDate)
   lastPaymentDate.setMonth(lastPaymentDate.getMonth() + 5) // 5 months later
 
   // Create payment schedule
   const paymentSchedule = []
-  const paymentAmount = 300.00
+  const paymentAmount = 300.0
   for (let i = 0; i < 6; i++) {
     const dueDate = new Date(firstPaymentDate)
     dueDate.setMonth(dueDate.getMonth() + i)
     paymentSchedule.push({
       due_date: dueDate.toISOString(),
       amount: paymentAmount,
-      principal: 250.00,
-      interest: 50.00
+      principal: 250.0,
+      interest: 50.0
     })
   }
 
@@ -48,8 +48,8 @@ function createMockContract(): LoanContract {
     contract_terms: {
       interest_rate: 24.0,
       term_months: 6,
-      principal_amount: 1500.00,
-      total_amount: 1800.00,
+      principal_amount: 1500.0,
+      total_amount: 1800.0,
       payment_frequency: 'monthly',
       payment_amount: paymentAmount,
       number_of_payments: 6,
@@ -83,11 +83,12 @@ function createMockContract(): LoanContract {
     contract_status: 'generated',
     client_signed_at: new Date().toISOString(),
     client_signature_data: {
-        signature_name: 'John Doe',
-        signature_method: 'click_to_sign',
-        ip_address: '127.0.0.1',
-        user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        signature_timestamp: new Date().toISOString()
+      signature_name: 'John Doe',
+      signature_method: 'click_to_sign',
+      ip_address: '127.0.0.1',
+      user_agent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      signature_timestamp: new Date().toISOString()
     },
     staff_signed_at: null,
     staff_signature_id: null,
@@ -103,12 +104,12 @@ function createMockContract(): LoanContract {
       application_id: 'test-application-123',
       user_id: 'test-user-123',
       loan_number: 12345,
-      principal_amount: 1500.00,
+      principal_amount: 1500.0,
       interest_rate: 24.0,
       term_months: 6,
       disbursement_date: null,
       due_date: lastPaymentDate.toISOString(),
-      remaining_balance: 1800.00,
+      remaining_balance: 1800.0,
       status: 'pending_disbursement',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
@@ -129,11 +130,11 @@ export async function GET(request: NextRequest) {
   try {
     // Create mocked contract data
     const mockContract = createMockContract()
-    
+
     // Generate PDF from HTML (same as ContractViewer component)
     // This uses createContractHTML and converts it to PDF using Puppeteer
     const pdfBuffer = await generateContractPDFFromHTML(mockContract)
-    
+
     // Return PDF as response
     // Convert Buffer to Uint8Array for Response compatibility
     const pdfUint8Array = new Uint8Array(pdfBuffer)
@@ -142,20 +143,30 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="contract-${mockContract.contract_number}.pdf"`,
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
+        'Cache-Control':
+          'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0'
       }
     })
   } catch (error: any) {
     console.error('Error generating contract PDF:', error)
+    const isServerless =
+      !!process.env.VERCEL || process.env.NODE_ENV === 'production'
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to generate contract PDF',
-        details: error.message 
+        details: error.message,
+        stack: error.stack,
+        moreDetails: {
+          isServerless: isServerless,
+          VERCEL: process.env.VERCEL,
+          VERCEL_ENV: process.env.VERCEL_ENV,
+          NODE_ENV: process.env.NODE_ENV,
+          VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL
+        }
       },
       { status: 500 }
     )
   }
 }
-
