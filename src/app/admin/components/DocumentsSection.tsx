@@ -811,6 +811,12 @@ export default function DocumentsSection({
                   const anyWithGroupLink = (groupRequests as any[]).find(
                     (gr: any) => gr.group_link
                   )
+                  
+                  // Debug: log if group_link is missing
+                  if (groupId !== 'ungrouped' && !anyWithGroupLink?.group_link) {
+                    console.warn('Group link missing for group:', groupId, 'Requests:', groupRequests)
+                  }
+                  
                   return (
                     <div
                       key={groupId}
@@ -839,16 +845,68 @@ export default function DocumentsSection({
                         </div>
                         {anyWithGroupLink?.group_link && (
                           <button
-                            onClick={async () => {
+                            onClick={async (e) => {
+                              const linkToCopy = anyWithGroupLink.group_link
+                              if (!linkToCopy) {
+                                alert('No link available to copy.')
+                                return
+                              }
+
+                              const button = e.currentTarget
+                              const originalText = button.innerHTML
+
                               try {
-                                await navigator.clipboard.writeText(
-                                  anyWithGroupLink.group_link!
+                                // Try modern clipboard API first
+                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                  await navigator.clipboard.writeText(linkToCopy)
+                                } else {
+                                  // Fallback: use the old execCommand method
+                                  const textArea = document.createElement('textarea')
+                                  textArea.value = linkToCopy
+                                  textArea.style.position = 'fixed'
+                                  textArea.style.left = '-999999px'
+                                  textArea.style.top = '-999999px'
+                                  document.body.appendChild(textArea)
+                                  textArea.focus()
+                                  textArea.select()
+                                  
+                                  try {
+                                    const successful = document.execCommand('copy')
+                                    if (!successful) {
+                                      throw new Error('execCommand failed')
+                                    }
+                                  } finally {
+                                    document.body.removeChild(textArea)
+                                  }
+                                }
+
+                                // Show temporary success feedback
+                                button.innerHTML = `
+                                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Copied!
+                                `
+                                button.classList.add('bg-emerald-50', 'border-emerald-300', 'text-emerald-700')
+                                button.classList.remove('bg-indigo-50', 'border-indigo-300', 'text-indigo-700')
+                                setTimeout(() => {
+                                  button.innerHTML = originalText
+                                  button.classList.remove('bg-emerald-50', 'border-emerald-300', 'text-emerald-700')
+                                  button.classList.add('bg-indigo-50', 'border-indigo-300', 'text-indigo-700')
+                                }, 2000)
+                              } catch (err: any) {
+                                console.error('Failed to copy link:', err)
+                                // Last resort: show the link in a prompt so user can manually copy
+                                const userConfirmed = confirm(
+                                  `Failed to copy automatically. The link is:\n\n${linkToCopy}\n\nClick OK to open it in a new tab, or Cancel to manually copy it.`
                                 )
-                                alert('Group link copied to clipboard!')
-                              } catch {}
+                                if (userConfirmed) {
+                                  window.open(linkToCopy, '_blank')
+                                }
+                              }
                             }}
                             className='flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100'
-                            title={anyWithGroupLink.group_link}
+                            title={`Copy reusable dashboard link: ${anyWithGroupLink.group_link}`}
                           >
                             <svg
                               className='h-3.5 w-3.5'

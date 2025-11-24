@@ -14,6 +14,7 @@ export const pathnames = {
   '/dashboard': '/dashboard',
   '/upload-documents': '/upload-documents',
   '/client/dashboard': '/client/dashboard',
+  '/client/dashboard/change-password': '/client/dashboard/change-password',
   '/auth/signin': '/auth/signin',
   '/auth/forgot-password': '/auth/forgot-password',
   '/auth/reset-password': '/auth/reset-password',

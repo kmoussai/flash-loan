@@ -13,6 +13,7 @@ export interface QuickApplyFormData {
   postalCode: string
   movingDate: string
   country: string
+  rentCost: string
   loanAmount: string
   confirmInformation: boolean
 }

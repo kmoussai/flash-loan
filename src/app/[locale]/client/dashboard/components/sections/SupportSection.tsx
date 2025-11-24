@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import { Link } from '@/src/navigation'
 
 interface SupportSectionProps {
   onNavigateToOverview: () => void
@@ -42,23 +43,42 @@ export default function SupportSection({
             </p>
           </div>
         </div>
-        <div className='mt-8 rounded-lg border border-dashed border-gray-200 bg-white p-6'>
-          <h3 className='text-base font-semibold text-gray-900'>
-            {t('Need_To_Update_Profile')}
-          </h3>
-          <p className='mt-2 text-sm text-gray-600'>
-            {t('Update_Profile_Description')}
-          </p>
-          <button
-            type='button'
-            onClick={onNavigateToOverview}
-            className='mt-4 inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80'
-          >
-            {t('Go_To_Profile')}
-            <span aria-hidden className='ml-2'>
-              &rarr;
-            </span>
-          </button>
+        <div className='mt-8 grid gap-6 sm:grid-cols-2'>
+          <div className='rounded-lg border border-dashed border-gray-200 bg-white p-6'>
+            <h3 className='text-base font-semibold text-gray-900'>
+              {t('Need_To_Update_Profile')}
+            </h3>
+            <p className='mt-2 text-sm text-gray-600'>
+              {t('Update_Profile_Description')}
+            </p>
+            <button
+              type='button'
+              onClick={onNavigateToOverview}
+              className='mt-4 inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80'
+            >
+              {t('Go_To_Profile')}
+              <span aria-hidden className='ml-2'>
+                &rarr;
+              </span>
+            </button>
+          </div>
+          <div className='rounded-lg border border-dashed border-gray-200 bg-white p-6'>
+            <h3 className='text-base font-semibold text-gray-900'>
+              {t('Change_Password') || 'Change Password'}
+            </h3>
+            <p className='mt-2 text-sm text-gray-600'>
+              {t('Change_Password_Description') || 'Update your account password for better security.'}
+            </p>
+            <Link
+              href='/client/dashboard/change-password'
+              className='mt-4 inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80'
+            >
+              {t('Change_Password') || 'Change Password'}
+              <span aria-hidden className='ml-2'>
+                &rarr;
+              </span>
+            </Link>
+          </div>
         </div>
       </div>
     </section>

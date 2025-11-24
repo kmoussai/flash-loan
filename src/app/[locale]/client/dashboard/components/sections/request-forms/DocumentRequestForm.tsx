@@ -43,17 +43,15 @@ export default function DocumentRequestForm({
     )
   }
 
-  if (request.status === 'rejected') {
-    return (
-      <div className='rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700'>
-        {t('Document_Rejected') ||
-          'Document was rejected. Please upload a new file.'}
-      </div>
-    )
-  }
-
   return (
     <div className='space-y-4'>
+      {request.status === 'rejected' && (
+        <div className='rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700'>
+          {t('Document_Rejected') ||
+            'Document was rejected. Please upload a new file.'}
+        </div>
+      )}
+
       <div>
         <label
           htmlFor={`file-${request.id}`}

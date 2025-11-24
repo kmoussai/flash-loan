@@ -45,6 +45,7 @@ export default function MicroLoanApplicationPage() {
       postalCode: '',
       movingDate: '',
       country: '',
+      rentCost: '',
       loanAmount: '',
       confirmInformation: false
     }
@@ -360,6 +361,7 @@ export default function MicroLoanApplicationPage() {
       postalCode: randomPostalCode,
       movingDate: randomMovingDate(),
       country: 'Canada',
+      rentCost: String(Math.floor(Math.random() * 1000 + 500)),
       loanAmount: randomLoanAmount,
       confirmInformation: true
     }
@@ -383,6 +385,7 @@ export default function MicroLoanApplicationPage() {
       postalCode: '',
       movingDate: '',
       country: '',
+      rentCost: '',
       loanAmount: '',
       confirmInformation: false
     })
@@ -512,6 +515,7 @@ export default function MicroLoanApplicationPage() {
           postalCode: formData.postalCode,
           country: formData.country,
           movingDate: formData.movingDate,
+          rentCost: formData.rentCost || null,
 
           // Loan Details
           loanAmount: formData.loanAmount,

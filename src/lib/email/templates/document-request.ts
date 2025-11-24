@@ -1,8 +1,13 @@
 import { getAppUrl } from '@/src/lib/config'
 
+interface RequestedItem {
+  kind: 'document' | 'reference' | 'employment' | 'bank' | 'address' | 'other'
+  label: string
+}
+
 interface DocumentRequestEmailData {
   applicantName: string
-  documentNames: string[]
+  requestedItems: RequestedItem[]
   uploadLink: string
   preferredLanguage: 'en' | 'fr'
   expiresAt?: string | null
@@ -12,14 +17,122 @@ export function generateDocumentRequestEmail(data: DocumentRequestEmailData): { 
   const isFrench = data.preferredLanguage === 'fr'
   
   const subject = isFrench
-    ? 'Documents requis pour votre demande de prêt'
-    : 'Documents Required for Your Loan Application'
+    ? 'Informations requises pour votre demande de prêt'
+    : 'Information Required for Your Loan Application'
 
   const expiresText = data.expiresAt
     ? isFrench
-      ? `Les documents doivent être téléversés avant le ${new Date(data.expiresAt).toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' })}.`
-      : `Documents must be uploaded by ${new Date(data.expiresAt).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })}.`
+      ? `Les informations doivent être soumises avant le ${new Date(data.expiresAt).toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' })}.`
+      : `Information must be submitted by ${new Date(data.expiresAt).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })}.`
     : ''
+
+  // Group items by kind for better organization
+  const itemsByKind: Record<string, RequestedItem[]> = {
+    document: [],
+    reference: [],
+    employment: [],
+    bank: [],
+    address: [],
+    other: []
+  }
+
+  data.requestedItems.forEach(item => {
+    if (itemsByKind[item.kind]) {
+      itemsByKind[item.kind].push(item)
+    } else {
+      itemsByKind.other.push(item)
+    }
+  })
+
+  // Build sections for each kind
+  const sections: string[] = []
+
+  if (itemsByKind.document.length > 0) {
+    const sectionTitle = isFrench ? 'Documents à téléverser' : 'Documents to Upload'
+    const itemsList = itemsByKind.document.map(item => `<li>${item.label}</li>`).join('')
+    sections.push(`
+      <div style="margin:16px 0;">
+        <p style="font-weight:600; font-size:15px; margin:0 0 8px; color:#111827;">${sectionTitle}:</p>
+        <ul class="list" style="margin:8px 0;">
+          ${itemsList}
+        </ul>
+      </div>
+    `)
+  }
+
+  if (itemsByKind.reference.length > 0) {
+    const sectionTitle = isFrench ? 'Informations de référence' : 'Reference Information'
+    const itemsList = itemsByKind.reference.map(item => `<li>${item.label}</li>`).join('')
+    sections.push(`
+      <div style="margin:16px 0;">
+        <p style="font-weight:600; font-size:15px; margin:0 0 8px; color:#111827;">${sectionTitle}:</p>
+        <ul class="list" style="margin:8px 0;">
+          ${itemsList}
+        </ul>
+      </div>
+    `)
+  }
+
+  if (itemsByKind.employment.length > 0) {
+    const sectionTitle = isFrench ? 'Informations d\'emploi' : 'Employment Information'
+    const itemsList = itemsByKind.employment.map(item => `<li>${item.label}</li>`).join('')
+    sections.push(`
+      <div style="margin:16px 0;">
+        <p style="font-weight:600; font-size:15px; margin:0 0 8px; color:#111827;">${sectionTitle}:</p>
+        <ul class="list" style="margin:8px 0;">
+          ${itemsList}
+        </ul>
+      </div>
+    `)
+  }
+
+  if (itemsByKind.bank.length > 0) {
+    const sectionTitle = isFrench ? 'Informations bancaires' : 'Bank Information'
+    const itemsList = itemsByKind.bank.map(item => `<li>${item.label}</li>`).join('')
+    sections.push(`
+      <div style="margin:16px 0;">
+        <p style="font-weight:600; font-size:15px; margin:0 0 8px; color:#111827;">${sectionTitle}:</p>
+        <ul class="list" style="margin:8px 0;">
+          ${itemsList}
+        </ul>
+      </div>
+    `)
+  }
+
+  if (itemsByKind.address.length > 0) {
+    const sectionTitle = isFrench ? 'Informations d\'adresse' : 'Address Information'
+    const itemsList = itemsByKind.address.map(item => `<li>${item.label}</li>`).join('')
+    sections.push(`
+      <div style="margin:16px 0;">
+        <p style="font-weight:600; font-size:15px; margin:0 0 8px; color:#111827;">${sectionTitle}:</p>
+        <ul class="list" style="margin:8px 0;">
+          ${itemsList}
+        </ul>
+      </div>
+    `)
+  }
+
+  if (itemsByKind.other.length > 0) {
+    const sectionTitle = isFrench ? 'Autres informations' : 'Other Information'
+    const itemsList = itemsByKind.other.map(item => `<li>${item.label}</li>`).join('')
+    sections.push(`
+      <div style="margin:16px 0;">
+        <p style="font-weight:600; font-size:15px; margin:0 0 8px; color:#111827;">${sectionTitle}:</p>
+        <ul class="list" style="margin:8px 0;">
+          ${itemsList}
+        </ul>
+      </div>
+    `)
+  }
+
+  const introText = isFrench
+    ? 'Nous avons besoin des informations suivantes pour continuer le traitement de votre demande. Veuillez fournir les éléments suivants :'
+    : 'We need the following information to continue processing your application. Please provide the following items:'
+
+  const buttonText = isFrench ? 'Accéder au tableau de bord' : 'Access Dashboard'
+  const linkDescription = isFrench
+    ? 'Ce lien sécurisé vous connectera automatiquement et vous dirigera vers la section Documents de votre tableau de bord.'
+    : 'This secure link will automatically sign you in and take you to the Documents section of your dashboard.'
 
   const html = `
 <!doctype html>
@@ -55,19 +168,13 @@ export function generateDocumentRequestEmail(data: DocumentRequestEmailData): { 
         </div>
         <div class="content">
           <p class="h1">${isFrench ? `Bonjour ${data.applicantName},` : `Hi ${data.applicantName},`}</p>
-          <p class="p">${isFrench 
-            ? 'Nous avons besoin de quelques documents pour continuer le traitement de votre demande. Veuillez téléverser les éléments suivants :'
-            : 'We need a few documents to continue processing your application. Please upload the following items:'}</p>
-          <ul class="list">
-            ${data.documentNames.map(name => `<li>${name}</li>`).join('')}
-          </ul>
+          <p class="p">${introText}</p>
+          ${sections.join('')}
           ${expiresText ? `<div class="expiry"><p class="p" style="margin:0; font-size:13px;">${expiresText}</p></div>` : ''}
           <div class="button-wrap">
-            <a class="button" href="${data.uploadLink}">${isFrench ? 'Téléverser les documents' : 'Upload Documents'}</a>
+            <a class="button" href="${data.uploadLink}">${buttonText}</a>
           </div>
-          <p class="muted">${isFrench 
-            ? 'Ce lien sécurisé vous permettra de téléverser vos documents directement.'
-            : 'This secure link will allow you to upload your documents directly.'}</p>
+          <p class="muted">${linkDescription}</p>
           <p class="p" style="margin-top:16px;">${isFrench 
             ? 'Si le bouton ne fonctionne pas, copiez et collez cette URL dans votre navigateur :'
             : 'If the button doesn\'t work, copy and paste this URL into your browser:'}</p>
@@ -76,8 +183,8 @@ export function generateDocumentRequestEmail(data: DocumentRequestEmailData): { 
         <div class="footer">
           <div>© ${new Date().getFullYear()} Flash-Loan. Tous droits réservés. | All rights reserved.</div>
           <div class="muted">${isFrench 
-            ? 'Vous avez reçu cet e-mail car une demande de documents vous a été envoyée pour votre demande de prêt.'
-            : 'You received this email because a document request was sent to you for your loan application.'}</div>
+            ? 'Vous avez reçu cet e-mail car une demande d\'informations vous a été envoyée pour votre demande de prêt.'
+            : 'You received this email because an information request was sent to you for your loan application.'}</div>
         </div>
       </div>
     </div>
@@ -88,3 +195,4 @@ export function generateDocumentRequestEmail(data: DocumentRequestEmailData): { 
   return { subject, html }
 }
 
+export type { RequestedItem }

@@ -315,6 +315,7 @@ export interface Address {
   province: string
   postal_code: string
   moving_date: string | null
+  rent_cost: number | null
   is_current: boolean
   verified_at: string | null
   created_at: string
@@ -594,6 +595,7 @@ export interface AddressInsert {
   province: string
   postal_code: string
   moving_date?: string
+  rent_cost?: number | null
   is_current?: boolean
 }
 
@@ -674,6 +676,7 @@ export interface AddressUpdate {
   province?: string
   postal_code?: string
   moving_date?: string
+  rent_cost?: number | null
   is_current?: boolean
   verified_at?: string
 }

@@ -145,7 +145,8 @@ export async function createClientUser(params: CreateUserParams, isServer = true
       last_name: params.lastName,
       phone: params.phone,
       national_id: params.nationalId,
-      preferred_language: params.preferredLanguage || 'en'
+      preferred_language: params.preferredLanguage || 'en',
+      requires_password_change: true // Require password change on first login
     }
   })
 

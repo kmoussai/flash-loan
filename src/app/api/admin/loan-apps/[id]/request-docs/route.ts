@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isStaff } from '@/src/lib/supabase/admin-helpers'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { signRequestToken } from '@/src/lib/security/token'
 import { sendEmail } from '@/src/lib/email/smtp'
-import { generateDocumentRequestEmail } from '@/src/lib/email/templates/document-request'
+import { generateDocumentRequestEmail, RequestedItem } from '@/src/lib/email/templates/document-request'
 import { createNotification } from '@/src/lib/supabase'
 import type { NotificationCategory } from '@/src/types'
 
@@ -426,22 +425,42 @@ export async function POST(
       .eq('id', loanApplicationId)
       .single()
 
-    // Build a single group link instead of sending per-request links
+    // Set preferred language early (needed for building requested items)
+    const preferredLanguage: 'en' | 'fr' =
+      (appWithUser as any)?.users?.preferred_language === 'fr' ? 'fr' : 'en'
+
+    // Build authenticated dashboard link instead of token-based upload-documents link
     const createdIds = (inserted || []).map((r: any) => r.id)
     const { getAppUrl } = await import('@/src/lib/config')
-    // Determine expiry for token
-    const expMs = expiresAt ? new Date(expiresAt).getTime() : null
-    let group_link: string | null = null
-    let preferredLanguage: 'en' | 'fr' = 'en'
+    const clientId = (appWithUser as any)?.users?.id as string | undefined
+    const clientEmail = (appWithUser as any)?.users?.email as string | undefined
     
-    if (expMs && !isNaN(expMs) && Date.now() < expMs) {
-      preferredLanguage =
-        (appWithUser as any)?.users?.preferred_language === 'fr' ? 'fr' : 'en'
-      const token = signRequestToken(groupId, expMs)
-      group_link = `${getAppUrl()}/${preferredLanguage}/upload-documents?group=${encodeURIComponent(groupId)}&token=${encodeURIComponent(token)}`
+    let dashboard_link: string | null = null
+    
+    // Generate reusable authentication link using signed token
+    if (clientId && clientEmail) {
+      try {
+        const { signAuthToken } = await import('@/src/lib/security/token')
+        
+        // Determine expiry for token (default to 7 days if not provided, or use expiresAt)
+        const expMs = expiresAt ? new Date(expiresAt).getTime() : Date.now() + 7 * 24 * 60 * 60 * 1000
+        
+        // Create reusable signed token
+        const authToken = signAuthToken(clientId, expMs)
+        
+        // Build dashboard URL
+        const dashboardUrl = `/${preferredLanguage}/client/dashboard?section=documents`
+        
+        // Create reusable authentication link
+        dashboard_link = `${getAppUrl()}/api/auth/authenticate?token=${encodeURIComponent(authToken)}&redirect_to=${encodeURIComponent(dashboardUrl)}`
+      } catch (error: any) {
+        console.error('[POST /api/admin/loan-apps/:id/request-docs] Error generating auth token:', error)
+        // Fallback to dashboard link (user will need to log in manually)
+        dashboard_link = `${getAppUrl()}/${preferredLanguage}/client/dashboard?section=documents`
+      }
     }
 
-    // Get document type names for email
+    // Get document type names for email and build requested items list
     const documentTypeIdsForEmail = filteredRequests
       .filter(req => req.request_kind === 'document')
       .map(req => req.document_type_id)
@@ -463,10 +482,63 @@ export async function POST(
 
     const documentNames = (docTypes || []).map((dt: any) => dt.name).filter(Boolean)
 
-    const clientRecord = (appWithUser as any)?.users
-    const clientId = clientRecord?.id as string | undefined
+    // Build requested items list for email (all kinds, not just documents)
+    const requestedItems: RequestedItem[] = []
+    
+    // Add documents
+    documentNames.forEach(name => {
+      requestedItems.push({
+        kind: 'document',
+        label: name
+      })
+    })
 
-    if (clientId) {
+    // Add other request kinds
+    filteredRequests.forEach(req => {
+      if (req.request_kind === 'document') {
+        // Already added above
+        return
+      }
+      
+      // Get label based on request kind
+      let label = ''
+      switch (req.request_kind) {
+        case 'reference':
+          label = preferredLanguage === 'fr' 
+            ? 'Fournir les informations de référence' 
+            : 'Provide reference information'
+          break
+        case 'employment':
+          label = preferredLanguage === 'fr'
+            ? 'Fournir les informations d\'emploi'
+            : 'Provide employment information'
+          break
+        case 'bank':
+          label = preferredLanguage === 'fr'
+            ? 'Fournir les informations bancaires'
+            : 'Provide bank information'
+          break
+        case 'address':
+          label = preferredLanguage === 'fr'
+            ? 'Confirmer les informations d\'adresse'
+            : 'Confirm address information'
+          break
+        default:
+          label = preferredLanguage === 'fr'
+            ? 'Fournir les informations demandées'
+            : 'Provide requested information'
+      }
+      
+      requestedItems.push({
+        kind: req.request_kind,
+        label
+      })
+    })
+
+    const clientRecord = (appWithUser as any)?.users
+    const clientIdForNotification = clientRecord?.id as string | undefined
+
+    if (clientIdForNotification) {
       const notificationRequestIds = (inserted || []).map((r: any) => r.id as string).filter(Boolean)
       const requestKinds = filteredRequests.map(req => req.request_kind)
 
@@ -514,7 +586,7 @@ export async function POST(
 
       await createNotification(
         {
-          recipientId: clientId,
+          recipientId: clientIdForNotification,
           recipientType: 'client',
           title: notificationTitle,
           message: notificationMessage,
@@ -525,42 +597,40 @@ export async function POST(
       )
     }
 
-    // Send email if we have client email and group link
+    // Send email if we have client email and dashboard link and at least one requested item
     let emailSent = false
     let emailError: string | null = null
     
-    if (group_link && appWithUser && (appWithUser as any)?.users?.email) {
+    if (dashboard_link && appWithUser && (appWithUser as any)?.users?.email && requestedItems.length > 0) {
       const clientEmail = (appWithUser as any).users.email
       const clientFirstName = (appWithUser as any).users.first_name || ''
       const clientLastName = (appWithUser as any).users.last_name || ''
       const applicantName = `${clientFirstName} ${clientLastName}`.trim() || 'Valued Customer'
 
-      if (documentNames.length > 0) {
-        const emailContent = generateDocumentRequestEmail({
-          applicantName,
-          documentNames,
-          uploadLink: group_link,
-          preferredLanguage,
-          expiresAt: expiresAt || null
-        })
+      const emailContent = generateDocumentRequestEmail({
+        applicantName,
+        requestedItems,
+        uploadLink: dashboard_link,
+        preferredLanguage,
+        expiresAt: expiresAt || null
+      })
 
-        const emailResult = await sendEmail({
-          to: clientEmail,
-          subject: emailContent.subject,
-          html: emailContent.html
-        })
+      const emailResult = await sendEmail({
+        to: clientEmail,
+        subject: emailContent.subject,
+        html: emailContent.html
+      })
 
-        emailSent = emailResult.success
-        emailError = emailResult.error || null
+      emailSent = emailResult.success
+      emailError = emailResult.error || null
 
-        if (emailSent) {
-          // Update all requests in the group with magic_link_sent_at
-          await admin
-            .from('document_requests' as any)
-            // @ts-ignore
-            .update({ magic_link_sent_at: nowIso })
-            .eq('group_id', groupId)
-        }
+      if (emailSent) {
+        // Update all requests in the group with magic_link_sent_at
+        await admin
+          .from('document_requests' as any)
+          // @ts-ignore
+          .update({ magic_link_sent_at: nowIso })
+          .eq('group_id', groupId)
       }
     }
 
@@ -572,7 +642,7 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       group_id: groupId,
-      group_link,
+      dashboard_link,
       request_ids: createdIds,
       skipped,
       email_sent: emailSent,

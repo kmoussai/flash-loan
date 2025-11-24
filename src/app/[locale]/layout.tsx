@@ -9,6 +9,7 @@ import { Inter, Rubik, Space_Grotesk } from 'next/font/google'
 import NextTopLoader from 'nextjs-toploader'
 import ConditionalHeader from './components/ConditionalHeader'
 import ConditionalWrapper from './components/ConditionalWrapper'
+import AuthCallbackHandler from './components/AuthCallbackHandler'
 import './globals.css'
 
 const inter = Inter({
@@ -86,6 +87,7 @@ export default function RootLayout({
               color='var(--primary)'
               showSpinner={false}
             />
+            <AuthCallbackHandler />
             <ConditionalHeader locale={locale} />
             <main>
               <ConditionalWrapper>{children}</ConditionalWrapper>

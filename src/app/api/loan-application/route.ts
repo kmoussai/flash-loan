@@ -44,6 +44,7 @@ interface LoanApplicationRequestBody {
   postalCode?: string
   country?: string
   movingDate?: string
+  rentCost?: string
 
   // Financial Obligations (Quebec only)
   residenceStatus?: string
@@ -429,12 +430,13 @@ export async function POST(request: NextRequest) {
         await supabase.auth.admin.createUser({
           email: body.email,
           password: tempPassword,
-          email_confirm: true, // Auto-confirm email
+          email_confirm: true, // Confirm email so user can sign in with temp password
           user_metadata: {
             first_name: body.firstName,
             last_name: body.lastName,
             phone: body.phone,
-            signup_type: 'client'
+            signup_type: 'client',
+            requires_password_change: true // Require password change on first login
           }
         })
 
@@ -572,6 +574,7 @@ export async function POST(request: NextRequest) {
         p_furniture_loan: body.furnitureLoan
           ? parseFloat(body.furnitureLoan)
           : null,
+        p_rent_cost: body.rentCost ? parseFloat(body.rentCost) : null,
         // IBV data (modular, provider-agnostic)
         p_ibv_provider: body.ibvProvider || null,
         p_ibv_status: body.ibvStatus || null,

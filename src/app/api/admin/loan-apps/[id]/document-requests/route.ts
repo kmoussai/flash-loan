@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isStaff } from '@/src/lib/supabase/admin-helpers'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { signRequestToken } from '@/src/lib/security/token'
+import { signAuthToken } from '@/src/lib/security/token'
 
 // GET /api/admin/loan-apps/:id/document-requests
 export async function GET(
@@ -27,6 +27,7 @@ export async function GET(
         created_at,
         updated_at,
         group_id,
+        loan_applications!inner(client_id),
         document_type:document_type_id(id, name, slug, default_request_kind, default_form_schema, description),
         request_form_submissions(id, form_data, submitted_at, submitted_by),
         group:group_id(id, expires_at)
@@ -37,10 +38,12 @@ export async function GET(
     const { getAppUrl } = await import('@/src/lib/config')
     const { data: appRow } = await admin
       .from('loan_applications' as any)
-      .select('id, users:client_id(preferred_language)')
+      .select('id, users:client_id(id, preferred_language)')
       .eq('id', appId)
       .single()
     const preferredLanguage: 'en' | 'fr' = ((appRow as any)?.users?.preferred_language === 'fr') ? 'fr' : 'en'
+    const clientId = (appRow as any)?.users?.id as string | undefined
+    
     const enhanced = (data || []).map((r: any) => {
       if (Array.isArray(r.request_form_submissions)) {
         r.request_form_submissions.sort((a: any, b: any) => {
@@ -49,22 +52,20 @@ export async function GET(
           return bTime - aTime
         })
       }
-      let link: string | null = null
-      if (r.expires_at) {
-        const exp = new Date(r.expires_at).getTime()
-        if (!isNaN(exp) && Date.now() < exp) {
-          const token = signRequestToken(r.id, exp)
-          link = `${getAppUrl()}/${preferredLanguage}/upload-documents?req=${encodeURIComponent(r.id)}&token=${encodeURIComponent(token)}`
-        }
-      }
+      
+      // Generate reusable dashboard link for the group (if group exists and client ID is available)
       let group_link: string | null = null
       const effectiveGroupExpiresAt = r?.group?.expires_at || r.expires_at || null
       const groupExp = effectiveGroupExpiresAt ? new Date(effectiveGroupExpiresAt).getTime() : null
-      if (r.group_id && groupExp && !isNaN(groupExp) && Date.now() < groupExp) {
-        const token = signRequestToken(r.group_id, groupExp)
-        group_link = `${getAppUrl()}/${preferredLanguage}/upload-documents?group=${encodeURIComponent(r.group_id)}&token=${encodeURIComponent(token)}`
+      
+      if (r.group_id && clientId && groupExp && !isNaN(groupExp) && Date.now() < groupExp) {
+        // Generate reusable authentication token
+        const authToken = signAuthToken(clientId, groupExp)
+        const dashboardUrl = `/${preferredLanguage}/client/dashboard?section=documents`
+        group_link = `${getAppUrl()}/api/auth/authenticate?token=${encodeURIComponent(authToken)}&redirect_to=${encodeURIComponent(dashboardUrl)}`
       }
-      return { ...r, request_link: link, group_link }
+      
+      return { ...r, group_link }
     })
     return NextResponse.json({ requests: enhanced })
   } catch (e: any) {

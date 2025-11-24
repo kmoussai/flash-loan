@@ -35,6 +35,7 @@ interface FormData {
   province: string
   postalCode: string
   movingDate: string
+  rentCost: string
 
   // Financial Obligations (Step 3) - Quebec only
   residenceStatus: string
@@ -162,6 +163,7 @@ export default function LoanApplicationForm() {
       province: '',
       postalCode: '',
       movingDate: '',
+      rentCost: '',
       residenceStatus: '',
       grossSalary: '',
       rentOrMortgageCost: '',
@@ -417,6 +419,7 @@ export default function LoanApplicationForm() {
         province: formData.province,
         postalCode: formData.postalCode,
         movingDate: formData.movingDate,
+        rentCost: formData.rentCost,
         
         // Financial Obligations (Quebec only)
         ...(formData.province === 'Quebec' && {
@@ -536,6 +539,7 @@ export default function LoanApplicationForm() {
       province: '',
       postalCode: '',
       movingDate: '',
+      rentCost: '',
       residenceStatus: '',
       grossSalary: '',
       rentOrMortgageCost: '',
@@ -624,6 +628,7 @@ export default function LoanApplicationForm() {
       province: randomProvince,
       postalCode: `H${Math.floor(Math.random() * 9)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))} ${Math.floor(Math.random() * 9)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${Math.floor(Math.random() * 9)}`,
       movingDate: `20${Math.floor(Math.random() * 5 + 19)}-${String(Math.floor(Math.random() * 12 + 1)).padStart(2, '0')}-15`,
+      rentCost: String(Math.floor(Math.random() * 1000 + 800)),
 
       // Financial Obligations (Quebec only)
       residenceStatus: Math.random() > 0.5 ? 'tenant' : 'owner',
@@ -1272,6 +1277,27 @@ export default function LoanApplicationForm() {
                 onChange={e => updateFormData('movingDate', e.target.value)}
                 className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
               />
+            </div>
+
+            <div>
+              <label className='mb-1.5 block text-xs font-medium text-primary sm:mb-2 sm:text-sm'>
+                {t('Monthly_Rent_Cost')} {t('Optional') || '(Optional)'}
+              </label>
+              <div className='relative'>
+                <input
+                  type='number'
+                  value={formData.rentCost}
+                  onChange={e => updateFormData('rentCost', e.target.value)}
+                  className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-2 pr-8 text-sm text-primary focus:border-primary focus:outline-none focus:ring-2 sm:p-3 sm:text-base'
+                  placeholder='1500'
+                  min='0'
+                  step='0.01'
+                />
+                <span className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400'>$</span>
+              </div>
+              <p className='mt-1 text-xs text-gray-500'>
+                {t('Monthly_Rent_Cost_Description') || 'Enter your monthly rent or mortgage payment'}
+              </p>
             </div>
           </div>
         )}
