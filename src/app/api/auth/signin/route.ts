@@ -69,9 +69,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if password change is required
+    const requiresPasswordChange = data.user.user_metadata?.requires_password_change === true
+
     // Success - session is automatically set via cookies
     return NextResponse.json({
       success: true,
+      requiresPasswordChange,
       user: {
         id: data.user.id,
         email: data.user.email

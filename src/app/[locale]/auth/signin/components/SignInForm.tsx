@@ -43,7 +43,12 @@ export default function SignInForm({ locale }: SignInFormProps) {
       }
 
       if (data.success) {
-        router.push(`/client/dashboard`)
+        // Redirect to change password page if required, otherwise to dashboard
+        if (data.requiresPasswordChange) {
+          router.push(`/client/dashboard/change-password`)
+        } else {
+          router.push(`/client/dashboard`)
+        }
       }
     } catch (err: any) {
       setError(
