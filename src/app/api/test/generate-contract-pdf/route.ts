@@ -157,10 +157,13 @@ export async function GET(request: NextRequest) {
       {
         error: 'Failed to generate contract PDF',
         details: error.message,
+        stack: error.stack,
         moreDetails: {
           isServerless: isServerless,
           VERCEL: process.env.VERCEL,
-          NODE_ENV: process.env.NODE_ENV
+          VERCEL_ENV: process.env.VERCEL_ENV,
+          NODE_ENV: process.env.NODE_ENV,
+          VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL
         }
       },
       { status: 500 }
