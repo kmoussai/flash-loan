@@ -8,11 +8,48 @@
  * Uses full puppeteer package for local development
  */
 
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
-import { execSync } from 'child_process'
 import type { LoanContract } from '@/src/lib/supabase/types'
+
+// URL to the Chromium binary package hosted in /public, if not in production, use a fallback URL
+// alternatively, you can host the chromium-pack.tar file elsewhere and update the URL below
+const CHROMIUM_PACK_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/chromium-pack.tar`
+  : 'https://github.com/gabenunez/puppeteer-on-vercel/raw/refs/heads/main/example/chromium-dont-use-in-prod.tar'
+
+// Cache the Chromium executable path to avoid re-downloading on subsequent requests
+let cachedExecutablePath: string | null = null
+let downloadPromise: Promise<string> | null = null
+
+/**
+ * Downloads and caches the Chromium executable path.
+ * Uses a download promise to prevent concurrent downloads.
+ */
+async function getChromiumPath(): Promise<string> {
+  // Return cached path if available
+  if (cachedExecutablePath) return cachedExecutablePath
+
+  // Prevent concurrent downloads by reusing the same promise
+  if (!downloadPromise) {
+    const chromium = (await import('@sparticuz/chromium-min')).default
+    downloadPromise = chromium
+      .executablePath(CHROMIUM_PACK_URL)
+      .then(path => {
+        cachedExecutablePath = path
+        console.log('Chromium path resolved:', path)
+        return path
+      })
+      .catch(error => {
+        console.error('Failed to get Chromium path:', error)
+        downloadPromise = null // Reset on error to allow retry
+        throw error
+      })
+  }
+
+  return downloadPromise
+}
 
 export interface SignedPDFResult {
   pdfBytes: Uint8Array
@@ -47,72 +84,29 @@ function getLogoDataURI(): string {
  * - Serverless (Vercel/AWS Lambda): Uses puppeteer-core + @sparticuz/chromium
  */
 async function getPuppeteerLaunchOptions() {
-  const puppeteer = await import('puppeteer-core')
-
-  // Detect serverless environment
-  const isServerless =
-    !!process.env.VERCEL ||
-    process.env.NODE_ENV === 'production'
-
-  let executablePath: string | undefined
-  let args: string[] = []
-  let defaultViewport = { width: 1920, height: 1080 }
-
-  if (isServerless) {
-    // Use @sparticuz/chromium for serverless environments
-    try {
-      const chromiumModule = await import('@sparticuz/chromium')
-      // Handle both CommonJS and ES module imports
-      const chromium = chromiumModule.default || chromiumModule
-      executablePath = await chromium.executablePath()
-      args = chromium.args || []
-      defaultViewport = chromium.defaultViewport || { width: 1920, height: 1080 }
-    } catch (error) {
-      console.error('Error loading @sparticuz/chromium:', error)
-      throw new Error(
-        'Failed to load Chromium for serverless environment. Make sure @sparticuz/chromium is installed.'
-      )
+  // Configure browser based on environment
+  const isVercel = !!process.env.VERCEL_ENV
+  let puppeteer: any,
+    launchOptions: any = {
+      headless: true
     }
+  if (isVercel) {
+    // Vercel: Use puppeteer-core with downloaded Chromium binary
+    const chromium = (await import('@sparticuz/chromium-min')).default
+    puppeteer = await import('puppeteer-core')
+    const executablePath = await getChromiumPath()
+    launchOptions = {
+      ...launchOptions,
+      args: chromium.args,
+      executablePath
+    }
+    console.log('Launching browser with executable path:', executablePath)
   } else {
-    // Local development - try to find Chrome/Chromium
-    // First, check if CHROME_PATH environment variable is set
-    if (process.env.CHROME_PATH && existsSync(process.env.CHROME_PATH)) {
-      executablePath = process.env.CHROME_PATH
-    } else {
-      executablePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    }
-
-    if (!executablePath || !existsSync(executablePath)) {
-      throw new Error(
-        'Chrome/Chromium not found. Please install Chrome or set CHROME_PATH environment variable.'
-      )
-    }
-
-    // For local development, use more stable arguments
-    // Don't use --single-process or --no-zygote as they can cause crashes
-    args = [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-software-rasterizer',
-      '--disable-extensions'
-    ]
+    // Local: Use regular puppeteer with bundled Chromium
+    puppeteer = await import('puppeteer')
   }
 
-  console.log('Environment:', isServerless ? 'serverless' : 'local')
-  console.log('ExecutablePath:', executablePath)
-
-  return {
-    puppeteer: puppeteer.default || puppeteer,
-    launchOptions: {
-      args,
-      defaultViewport,
-      executablePath,
-      headless: true,
-      ignoreHTTPSErrors: true
-    }
-  }
+  return { puppeteer, launchOptions }
 }
 
 /**
@@ -174,7 +168,7 @@ export async function convertHTMLToPDF(html: string): Promise<Buffer> {
     return pdfBuffer as Buffer
   } catch (error) {
     console.error('Error converting HTML to PDF:', error)
-       
+
     throw error
   } finally {
     // Close page first, then browser
@@ -187,7 +181,7 @@ export async function convertHTMLToPDF(html: string): Promise<Buffer> {
     } catch (error) {
       console.error('Error closing page:', error)
     }
-    
+
     try {
       if (browser) {
         await browser.close().catch(() => {

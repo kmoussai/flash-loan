@@ -9,9 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "migrate:all-crm": "./scripts/migrate-all-crm.sh",
-    "merge:profiles": "npx tsx scripts/merge-crm-profiles.ts",
-    "filter:banks": "npx tsx scripts/filter-bank-accounts.ts"
+    "postinstall": "node postinstall.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.0.4",
@@ -23,7 +21,7 @@
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tabs": "^1.0.4",
-    "@sparticuz/chromium": "^131.0.1",
+    "@sparticuz/chromium-min": "^141.0.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.76.1",
     "class-variance-authority": "^0.7.0",
@@ -36,7 +34,6 @@
     "nextjs-toploader": "^1.6.12",
     "nodemailer": "^6.10.1",
     "pdf-lib": "^1.17.1",
-    "puppeteer-core": "^10.4.0",
     "react": "^18.2.0",
     "react-day-picker": "^8.10.0",
     "react-dom": "^18.2.0",
@@ -48,6 +45,7 @@
     "usehooks-ts": "^3.1.0"
   },
   "devDependencies": {
+    "@sparticuz/chromium": "^141.0.0",
     "@types/node": "^20.11.19",
     "@types/nodemailer": "^6.4.21",
     "@types/react": "^18.2.56",
@@ -58,6 +56,7 @@
     "postcss": "^8.4.35",
     "prettier": "^3.2.5",
     "prettier-plugin-tailwindcss": "^0.5.11",
+    "puppeteer": "^24.31.0",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3"
   }
