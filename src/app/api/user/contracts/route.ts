@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
         `
       )
       .eq('loan_applications.client_id', user.id)
+      .not('sent_at', 'is', null) // Only return contracts that have been sent
       .order('created_at', { ascending: false })
 
     if (error) {
