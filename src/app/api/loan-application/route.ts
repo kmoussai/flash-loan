@@ -44,6 +44,7 @@ interface LoanApplicationRequestBody {
   postalCode?: string
   country?: string
   movingDate?: string
+  rentCost?: string
 
   // Financial Obligations (Quebec only)
   residenceStatus?: string
@@ -573,6 +574,7 @@ export async function POST(request: NextRequest) {
         p_furniture_loan: body.furnitureLoan
           ? parseFloat(body.furnitureLoan)
           : null,
+        p_rent_cost: body.rentCost ? parseFloat(body.rentCost) : null,
         // IBV data (modular, provider-agnostic)
         p_ibv_provider: body.ibvProvider || null,
         p_ibv_status: body.ibvStatus || null,

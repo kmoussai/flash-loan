@@ -214,6 +214,8 @@
   "Postal_Code": "Postal code",
   "Country": "Country",
   "Moving_Date": "Moving date",
+  "Monthly_Rent_Cost": "Monthly Rent Cost",
+  "Monthly_Rent_Cost_Description": "Enter your monthly rent or mortgage payment",
   "Employment_Status": "Employment Status",
   "Employer_Name": "Employer Name",
   "Job_Title": "Job Title",

@@ -26,6 +26,7 @@ interface Step2AddressProps {
     | 'postalCode'
     | 'movingDate'
     | 'country'
+    | 'rentCost'
   >
   onUpdate: QuickApplyUpdateHandler
 }
@@ -206,6 +207,27 @@ export default function Step2Address({
             className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
           />
         </div>
+      </div>
+
+      <div>
+        <label className='mb-2 block text-sm font-medium text-primary'>
+          {t('Monthly_Rent_Cost')} {t('Optional') || '(Optional)'}
+        </label>
+        <div className='relative'>
+          <input
+            type='number'
+            value={formData.rentCost || ''}
+            onChange={e => onUpdate('rentCost', e.target.value)}
+            className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 pr-8 text-primary focus:border-primary focus:outline-none focus:ring-2'
+            placeholder='1500'
+            min='0'
+            step='0.01'
+          />
+          <span className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400'>$</span>
+        </div>
+        <p className='mt-1 text-xs text-gray-500'>
+          {t('Monthly_Rent_Cost_Description') || 'Enter your monthly rent or mortgage payment'}
+        </p>
       </div>
     </div>
   )

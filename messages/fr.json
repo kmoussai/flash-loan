@@ -214,6 +214,8 @@
   "Postal_Code": "Code postal",
   "Country": "Pays",
   "Moving_Date": "Date de déménagement",
+  "Monthly_Rent_Cost": "Coût mensuel du loyer",
+  "Monthly_Rent_Cost_Description": "Entrez votre paiement mensuel de loyer ou d'hypothèque",
   "Employment_Status": "Statut d'emploi",
   "Employer_Name": "Nom de l'employeur",
   "Job_Title": "Titre du poste",
