@@ -84,8 +84,16 @@ export default function ResetPasswordPage() {
     setLoading(true)
 
     try {
+      // Get current user to preserve existing metadata
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      // Update password and clear requires_password_change flag
       const { error: updateError } = await supabase.auth.updateUser({
-        password: password
+        password: password,
+        data: {
+          ...user?.user_metadata,
+          requires_password_change: false
+        }
       })
 
       if (updateError) {

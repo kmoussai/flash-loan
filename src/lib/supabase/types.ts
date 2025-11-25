@@ -834,6 +834,7 @@ export interface LoanInsert {
   disbursement_completed_at?: string | null
   disbursement_error_code?: string | null
   disbursement_reference?: string | null
+  crm_original_data?: Record<string, any> | null
 }
 
 export interface LoanPaymentInsert {
@@ -874,6 +875,7 @@ export interface LoanUpdate {
   disbursement_completed_at?: string | null
   disbursement_error_code?: string | null
   disbursement_reference?: string | null
+  crm_original_data?: Record<string, any> | null
 }
 
 export interface LoanPaymentUpdate {
