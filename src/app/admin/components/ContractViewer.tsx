@@ -60,31 +60,16 @@ export default function ContractViewer({
       const isSigned = contractData.client_signed_at || contractData.contract_status === 'signed'
       
       if (isSigned && contractData.contract_document_path) {
-        // Contract is signed - try to load the signed PDF from storage
+        // Contract is signed - load the PDF directly from API (no signed URL needed)
         try {
-          const response = await fetch(
-            `/api/admin/applications/${applicationId}/contract/view`
-          )
-          if (response.ok) {
-            const data = await response.json()
-            if (data.signed_url) {
-              setPdfUrl(data.signed_url)
-              setIsLoadingPdf(false)
-              return
-            }
-          }
-          // If API call failed but contract is signed, log error and set error message
-          const errorData = await response.json().catch(() => ({ error: 'Failed to parse response' }))
-          console.warn(
-            '[ContractViewer] Contract is signed but failed to get PDF URL from API:',
-            errorData
-          )
-          setPdfLoadError('Failed to load signed contract PDF. The contract may have been signed but the PDF is not available.')
+          // Fetch PDF directly - API will stream it, avoiding JWT expiration issues
+          const pdfUrl = `/api/admin/applications/${applicationId}/contract/view?contractId=${contractData.id}`
+          setPdfUrl(pdfUrl)
           setIsLoadingPdf(false)
           return
         } catch (apiError) {
           console.error(
-            '[ContractViewer] Failed to get PDF URL from API for signed contract:',
+            '[ContractViewer] Failed to set PDF URL for signed contract:',
             apiError
           )
           // Don't fallback to HTML for signed contracts - show error instead
