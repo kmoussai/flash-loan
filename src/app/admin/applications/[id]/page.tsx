@@ -10,6 +10,7 @@ import IbvTab from './components/IbvTab'
 import DocumentsTab from './components/DocumentsTab'
 import DetailsTab from './components/DetailsTab'
 import TimelineTab from './components/TimelineTab'
+import Select from '@/src/app/[locale]/components/Select'
 import type {
   ApplicationStatus,
   InveriteIbvData,
@@ -31,6 +32,12 @@ export default function ApplicationDetailsPage() {
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [rejectionComment, setRejectionComment] = useState('')
+  const [rejectionReasons, setRejectionReasons] = useState<
+    { id: string; code: string; label: string; description?: string | null; category?: string | null }[]
+  >([])
+  const [loadingRejectionReasons, setLoadingRejectionReasons] = useState(false)
   const [preApproveAmount, setPreApproveAmount] = useState<number | ''>('')
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [selectedAccountIndex, setSelectedAccountIndex] = useState<
@@ -172,6 +179,29 @@ export default function ApplicationDetailsPage() {
     }
   }, [applicationId])
 
+  useEffect(() => {
+    const fetchRejectionReasons = async () => {
+      try {
+        setLoadingRejectionReasons(true)
+        const res = await fetch('/api/admin/rejection-reasons')
+        if (!res.ok) {
+          console.error('Failed to fetch rejection reasons')
+          return
+        }
+        const data = await res.json()
+        if (Array.isArray(data.reasons)) {
+          setRejectionReasons(data.reasons)
+        }
+      } catch (err) {
+        console.error('Error fetching rejection reasons:', err)
+      } finally {
+        setLoadingRejectionReasons(false)
+      }
+    }
+
+    fetchRejectionReasons()
+  }, [])
+
   const fetchApplicationDetails = async () => {
     try {
       setLoading(true)
@@ -304,13 +334,50 @@ export default function ApplicationDetailsPage() {
   }
 
   const handleReject = async () => {
+    if (!applicationId) return
+    const trimmedReason = rejectionReason.trim()
+    const trimmedComment = rejectionComment.trim()
+
+    if (!trimmedReason) {
+      alert('Please provide a rejection reason.')
+      return
+    }
+
+    if (trimmedReason === 'Other' && !trimmedComment) {
+      alert('Please provide a comment when selecting "Other" as the reason.')
+      return
+    }
+
     setProcessing(true)
-    // TODO: Implement reject API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setProcessing(false)
-    setShowRejectModal(false)
-    alert('Application rejected.')
-    router.push('/admin/applications')
+    try {
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/reject`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rejectionReason: trimmedReason,
+            rejectionComment: trimmedComment || undefined
+          })
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to reject application')
+      }
+
+      await fetchApplicationDetails()
+      setShowRejectModal(false)
+      setRejectionReason('')
+      setRejectionComment('')
+      alert('Application rejected.')
+    } catch (err: any) {
+      console.error('Error rejecting application:', err)
+      alert(`Error: ${err.message || 'Failed to reject application'}`)
+    } finally {
+      setProcessing(false)
+    }
   }
 
   const handleFetchInveriteData = async () => {
@@ -823,6 +890,44 @@ export default function ApplicationDetailsPage() {
                 <p className='mt-2 text-sm text-gray-600'>
                   Please provide a reason for rejection:
                 </p>
+                <div className='mt-4 space-y-3'>
+                  <div>
+                    <label className='mb-1 block text-xs font-medium text-gray-700'>
+                      Select reason
+                    </label>
+                    <Select
+                      value={rejectionReason}
+                      onValueChange={setRejectionReason}
+                      disabled={processing || loadingRejectionReasons}
+                      placeholder={
+                        loadingRejectionReasons ? 'Loading reasons...' : 'Choose a reason'
+                      }
+                      options={[
+                        ...rejectionReasons.map(reason => ({
+                          value: reason.label,
+                          label: reason.label
+                        })),
+                        { value: 'Other', label: 'Other (specify in notes)' }
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className='mb-1 block text-xs font-medium text-gray-700'>
+                      Additional details (optional)
+                    </label>
+                    <textarea
+                      rows={3}
+                      className='w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500'
+                      placeholder={
+                        rejectionReason === 'Other'
+                          ? 'Required: explain why this application is rejected.'
+                          : 'Optional: add more context for this rejection (visible to staff only).'
+                      }
+                      value={rejectionComment}
+                      onChange={e => setRejectionComment(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
               <div className='flex gap-3'>
                 <button

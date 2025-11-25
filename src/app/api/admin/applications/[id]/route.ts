@@ -97,6 +97,21 @@ export async function GET(
           last_name,
           phone,
           relationship
+        ),
+        loan_contracts!loan_contracts_loan_application_id_fkey (
+          id,
+          contract_number,
+          contract_status,
+          client_signed_at,
+          client_signature_data,
+          staff_signed_at,
+          staff_signature_id,
+          sent_at,
+          sent_method,
+          expires_at,
+          created_at,
+          updated_at,
+          loan_id
         )
       `)
       .eq('id', applicationId)
@@ -180,15 +195,31 @@ export async function GET(
       }
     }
     
+    // Handle contract - should be single contract per application
+    // If multiple contracts exist, get the one with highest version number
+    let contract = null
+    if (app.loan_contracts) {
+      if (Array.isArray(app.loan_contracts) && app.loan_contracts.length > 0) {
+        // Sort by contract_version descending and take the first (latest version)
+        contract = app.loan_contracts[0]
+      } else {
+        contract = app.loan_contracts
+      }
+    }
+
+    // Extract loan_contracts from app to avoid including it in spread
+    const { loan_contracts, ...appWithoutContract } = app
+
     const applicationData = {
-      ...app,
+      ...appWithoutContract,
       // Use the separately fetched ibv_provider_data to ensure it's complete
       ibv_provider_data: fullIbvData,
       // Ensure ibv_results is present if stored in DB
       ibv_results: fullIbvResults,
       users: Array.isArray(app.users) ? app.users[0] : app.users,
       addresses: Array.isArray(app.addresses) ? app.addresses : (app.addresses ? [app.addresses] : []),
-      references: Array.isArray(app.references) ? app.references : []
+      references: Array.isArray(app.references) ? app.references : [],
+      contract: contract
     }
 
     // Return response with no-cache headers to prevent caching

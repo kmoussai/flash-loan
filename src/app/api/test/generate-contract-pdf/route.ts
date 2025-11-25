@@ -121,7 +121,7 @@ function createMockContract(): LoanContract {
       disbursement_initiated_at: null,
       disbursement_completed_at: null,
       disbursement_error_code: null,
-      disbursement_reference: null
+      disbursement_reference: null,
     }
   }
 }

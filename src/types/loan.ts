@@ -29,4 +29,6 @@ export type Loan = {
   disbursement_completed_at: string | null
   disbursement_error_code: string | null
   disbursement_reference: string | null
+  // CRM original data
+  crm_original_data?: Record<string, any> | null
 }
