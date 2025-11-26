@@ -57,7 +57,7 @@ export function calculateLoanSchedule({
   const totalPayments = Math.round((termMonths / 12) * nPerYear)
 
   // Convert annual rate to periodic rate
-  const r = (annualInterestRate / 100) / nPerYear
+  const r = annualInterestRate / 100 / nPerYear
 
   // If rate is 0, avoid division by zero
   if (r === 0) {
@@ -84,4 +84,15 @@ export function calculateLoanSchedule({
     totalInterest: Number(totalInterest.toFixed(2)),
     totalToRepay: Number(totalToRepay.toFixed(2))
   }
+}
+
+export function canonicalizeString(word: string): string {
+  if (!word) return ''
+
+  return word
+    .toLowerCase() // normalize case
+    .split(/\s+/) // split into tokens (handles multiple spaces)
+    .filter(Boolean) // remove empty tokens
+    .sort() // alphabetically sort for order-insensitivity
+    .join(' ') // join back to canonical string
 }

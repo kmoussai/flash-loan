@@ -4,6 +4,7 @@ import { locales } from './i18n'
 import { localePrefix } from './navigation-config'
 import { updateSession } from '@/src/lib/supabase/middleware'
 import { createServerClient } from '@supabase/ssr'
+import { checkAdminAccess, checkStaffAccess } from '@/src/lib/supabase/api-auth'
 
 const intlMiddleware = createMiddleware({
   locales,
@@ -67,7 +68,18 @@ async function checkUserType(req: NextRequest, userId: string): Promise<'client'
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Handle admin routes - NO localization
+  // Handle admin API routes - require admin authentication
+  if (pathname.startsWith('/api/admin')) {
+    // Check admin access
+    const authError = await checkAdminAccess(req)
+    if (authError) {
+      return authError
+    }
+    // Allow the request to proceed
+    return NextResponse.next()
+  }
+
+  // Handle admin page routes - NO localization
   if (pathname.startsWith('/admin')) {
     const { response, user } = await updateSession(req)
 
@@ -114,5 +126,10 @@ export default async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/(fr|en)/:path*', '/admin/:path*']
+  matcher: [
+    '/',
+    '/(fr|en)/:path*',
+    '/admin/:path*',
+    '/api/admin/:path*'
+  ]
 }

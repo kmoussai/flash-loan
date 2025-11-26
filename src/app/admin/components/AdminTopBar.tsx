@@ -35,7 +35,8 @@ export default function AdminTopBar() {
     <header className='fixed left-64 right-0 top-0 z-10 h-20 border-b border-gray-200/50 bg-white/80 backdrop-blur-xl'>
       <div className='flex h-full items-center justify-between px-8'>
         {/* Search Bar */}
-        <div className='flex flex-1 items-center'>
+        <div className='flex flex-1 items-center'>  </div>
+        {/* <div className='flex flex-1 items-center'>
           <div className='relative w-96'>
             <div className='pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4'>
               <svg className='h-5 w-5 text-gray-400' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
@@ -48,7 +49,7 @@ export default function AdminTopBar() {
               className='w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-11 pr-4 text-sm text-gray-900 placeholder-gray-500 transition-all focus:border-[#097fa5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#097fa5]/20'
             />
           </div>
-        </div>
+        </div> */}
 
         {/* Right Section */}
         <div className='flex items-center space-x-4'>
