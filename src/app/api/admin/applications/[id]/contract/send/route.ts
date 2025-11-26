@@ -13,6 +13,9 @@ import {
   createServerSupabaseClient,
   createServerSupabaseAdminClient
 } from '@/src/lib/supabase/server'
+import { generateContractSentEmail } from '@/src/lib/email/templates/contract-sent'
+import { sendEmail } from '@/src/lib/email/smtp'
+import { getAppUrl } from '@/src/lib/config'
 
 export async function POST(
   request: NextRequest,
@@ -114,6 +117,76 @@ export async function POST(
       )
     } else {
       console.log('[POST /api/admin/applications/:id/contract/send] Contract already signed by staff, proceeding to send')
+    }
+
+    // If sending via email, fetch client information and send email notification
+    if (method === 'email') {
+      // Get application with client information
+      const { data: applicationData, error: appError } = await (adminClient as any)
+        .from('loan_applications')
+        .select(`
+          id,
+          loan_amount,
+          users!loan_applications_client_id_fkey (
+            id,
+            first_name,
+            last_name,
+            email,
+            preferred_language
+          )
+        `)
+        .eq('id', applicationId)
+        .single()
+
+      if (appError || !applicationData) {
+        console.error(
+          '[POST /api/admin/applications/:id/contract/send] Failed to fetch application data:',
+          appError
+        )
+        // Continue with marking as sent even if email fails
+      } else {
+        const client = (applicationData as any).users
+        if (client && client.email) {
+          const preferredLanguage = (client.preferred_language || 'en') as 'en' | 'fr'
+          const dashboardUrl = `${getAppUrl()}/${preferredLanguage}/client/dashboard?section=contracts`
+
+          // Generate email
+          const emailData = generateContractSentEmail({
+            firstName: client.first_name || 'Client',
+            lastName: client.last_name || '',
+            email: client.email,
+            contractNumber: contract.contract_number ? String(contract.contract_number) : null,
+            loanAmount: applicationData.loan_amount,
+            dashboardUrl,
+            preferredLanguage,
+            expiresAt: contract.expires_at || null
+          })
+
+          // Send email
+          const emailResult = await sendEmail({
+            to: client.email,
+            subject: emailData.subject,
+            html: emailData.html,
+            text: emailData.text
+          })
+
+          if (!emailResult.success) {
+            console.error(
+              '[POST /api/admin/applications/:id/contract/send] Failed to send email:',
+              emailResult.error
+            )
+            // Continue with marking as sent even if email fails
+          } else {
+            console.log(
+              `[POST /api/admin/applications/:id/contract/send] Contract notification email sent to ${client.email}`
+            )
+          }
+        } else {
+          console.warn(
+            '[POST /api/admin/applications/:id/contract/send] No client email found, skipping email notification'
+          )
+        }
+      }
     }
 
     // Now send the contract (mark as sent)

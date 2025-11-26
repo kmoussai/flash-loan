@@ -350,10 +350,7 @@ export async function POST(request: NextRequest) {
     // Validate age (must be at least 18 years old)
     const ageValidationError = validateAge(body.dateOfBirth)
     if (ageValidationError) {
-      return NextResponse.json(
-        { error: ageValidationError },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: ageValidationError }, { status: 400 })
     }
 
     // Validate IBV status if provided
@@ -472,7 +469,9 @@ export async function POST(request: NextRequest) {
 
         // Send invitation email with temporary password
         try {
-          const preferredLanguage = (body.preferredLanguage === 'fr' ? 'fr' : 'en') as 'en' | 'fr'
+          const preferredLanguage = (
+            body.preferredLanguage === 'fr' ? 'fr' : 'en'
+          ) as 'en' | 'fr'
           const { subject, html, text } = generateInvitationEmail({
             firstName: body.firstName,
             lastName: body.lastName,
@@ -489,13 +488,22 @@ export async function POST(request: NextRequest) {
           })
 
           if (emailResult.success) {
-            console.log('[Loan Application] Invitation email sent successfully to:', body.email)
+            console.log(
+              '[Loan Application] Invitation email sent successfully to:',
+              body.email
+            )
           } else {
-            console.warn('[Loan Application] Failed to send invitation email:', emailResult.error)
+            console.warn(
+              '[Loan Application] Failed to send invitation email:',
+              emailResult.error
+            )
             // Don't fail the application if email fails - account is still created
           }
         } catch (emailError: any) {
-          console.error('[Loan Application] Error sending invitation email:', emailError)
+          console.error(
+            '[Loan Application] Error sending invitation email:',
+            emailError
+          )
           // Don't fail the application if email fails - account is still created
         }
       }

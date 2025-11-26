@@ -136,6 +136,18 @@ export {
   getAllStaffMembers
 } from './admin-helpers'
 
+// Export API authentication helpers (server-side only)
+export {
+  requireAuth,
+  requireStaff,
+  requireAdmin,
+  createAuthErrorResponse,
+  checkAdminAccess,
+  checkStaffAccess
+} from './api-auth'
+
+export type { AuthResult } from './api-auth'
+
 export type {
   CreateUserParams,
   CreateStaffParams
