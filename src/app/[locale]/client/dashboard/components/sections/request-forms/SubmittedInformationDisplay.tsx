@@ -18,6 +18,7 @@ export default function SubmittedInformationDisplay({
 }: SubmittedInformationDisplayProps) {
   const t = useTranslations('Client_Dashboard')
   const tCommon = useTranslations('')
+  const [isExpanded, setIsExpanded] = useState(false)
 
   // Helper function to check if a value is empty
   const isEmpty = (value: any): boolean => {
@@ -109,7 +110,6 @@ export default function SubmittedInformationDisplay({
   if (request.request_kind === 'employment') {
     const formData = submission.form_data || {}
     const incomeSource = formData.incomeSource as string
-    const [isExpanded, setIsExpanded] = useState(false)
 
     return (
       <div className='space-y-2'>
