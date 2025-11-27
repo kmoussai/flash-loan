@@ -637,6 +637,100 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Ensure IBV request is saved to loan_application_ibv_requests table
+    // The database function should have already done this, but we'll ensure it's saved explicitly
+    if (body.ibvProvider === 'inverite' && txResult?.application_id) {
+      try {
+        const requestGuid =
+          requestGuidFromBody ||
+          (body.ibvProviderData as any)?.request_guid ||
+          (body.ibvProviderData as any)?.requestGuid ||
+          null
+
+        if (requestGuid) {
+          const supabaseForIbv = createServerSupabaseAdminClient()
+          const requestedAt = new Date().toISOString()
+
+          // Get client_id from result or fetch from application if not available
+          let clientId = txResult?.client_id
+          if (!clientId) {
+            const { data: application } = await (supabaseForIbv as any)
+              .from('loan_applications')
+              .select('client_id')
+              .eq('id', txResult.application_id)
+              .single()
+            clientId = application?.client_id
+          }
+
+          if (!clientId) {
+            console.warn(
+              '[Loan Application] Cannot save IBV request: client_id not found'
+            )
+          } else {
+
+          // Check if IBV request already exists (database function may have created it)
+          const { data: existingRequest } = await (supabaseForIbv as any)
+            .from('loan_application_ibv_requests')
+            .select('id')
+            .eq('loan_application_id', txResult.application_id)
+            .eq('request_guid', requestGuid)
+            .maybeSingle()
+
+          if (!existingRequest) {
+            // Create IBV request record if it doesn't exist
+            const providerData = {
+              request_guid: requestGuid,
+              iframe_url: (body.ibvProviderData as any)?.iframe_url || null,
+              initiated_by: 'client',
+              requested_at: requestedAt,
+              ...(body.ibvProviderData || {})
+            }
+
+            const { error: ibvInsertError } = await (supabaseForIbv as any)
+              .from('loan_application_ibv_requests')
+              .insert({
+                loan_application_id: txResult.application_id,
+                client_id: clientId,
+                provider: 'inverite',
+                status: body.ibvStatus || 'pending',
+                request_guid: requestGuid,
+                request_url: (body.ibvProviderData as any)?.start_url || 
+                           (body.ibvProviderData as any)?.iframe_url || 
+                           null,
+                provider_data: providerData,
+                requested_at: requestedAt,
+                completed_at: body.ibvStatus === 'verified' ? requestedAt : null
+              })
+
+            if (ibvInsertError) {
+              console.error(
+                '[Loan Application] Failed to save IBV request to loan_application_ibv_requests:',
+                ibvInsertError
+              )
+              // Non-fatal: continue even if this fails
+            } else {
+              console.log(
+                '[Loan Application] Successfully saved IBV request to loan_application_ibv_requests:',
+                requestGuid
+              )
+            }
+          } else {
+            console.log(
+              '[Loan Application] IBV request already exists in loan_application_ibv_requests:',
+              requestGuid
+            )
+          }
+          }
+        }
+      } catch (ibvError) {
+        console.error(
+          '[Loan Application] Error ensuring IBV request is saved:',
+          ibvError
+        )
+        // Non-fatal: continue even if this fails
+      }
+    }
+
     // Automatically fetch Inverite data when an Inverite request GUID is available
     try {
       const shouldFetchInverite = body.ibvProvider === 'inverite'
@@ -763,6 +857,169 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // If IBV is required but not yet completed, initiate Inverite request server-side
+    let ibvInitiationData: any = null
+    if (
+      body.ibvProvider === 'inverite' &&
+      (!body.ibvStatus || body.ibvStatus === 'pending') &&
+      !body.ibvProviderData?.request_guid &&
+      txResult?.application_id &&
+      txResult?.client_id
+    ) {
+      try {
+        const supabaseForIbv = createServerSupabaseAdminClient()
+
+        // Get client details for Inverite request
+        const { data: clientData } = await (supabaseForIbv as any)
+          .from('users')
+          .select('first_name, last_name, phone, preferred_language')
+          .eq('id', txResult.client_id)
+          .single()
+
+        if (clientData) {
+          const apiKey = process.env.INVERITE_API_KEY
+          const baseUrl =
+            process.env.INVERITE_API_BASE_URL || 'https://sandbox.inverite.com'
+          const createPath =
+            process.env.INVERITE_CREATE_REQUEST_PATH || '/api/v2/create'
+          const siteId = process.env.INVERITE_SITE_ID
+
+          if (apiKey && siteId) {
+            const requestedLocale = clientData.preferred_language || 'en'
+            const origin =
+              request.headers.get('origin') ||
+              process.env.NEXT_PUBLIC_SITE_URL ||
+              'http://localhost:3000'
+
+            // Build redirect URL with application_id (this is the key benefit!)
+            const callbackUrl = new URL(
+              `${origin}/${requestedLocale}/quick-apply/inverite/callback`
+            )
+            callbackUrl.searchParams.set('application_id', txResult.application_id)
+            callbackUrl.searchParams.set('ts', Date.now().toString())
+            const redirectUrl = callbackUrl.toString()
+
+            const payload = {
+              siteID: siteId,
+              firstname: clientData.first_name,
+              lastname: clientData.last_name,
+              phone: clientData.phone,
+              redirecturl: redirectUrl
+            }
+
+            const url = `${baseUrl}${createPath}`
+            const headers = {
+              'Content-Type': 'application/json',
+              Auth: apiKey
+            }
+
+            console.log(
+              '[Loan Application] Initiating Inverite request after application creation:',
+              { applicationId: txResult.application_id }
+            )
+
+            const inveriteResp = await fetch(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(payload)
+            })
+
+            const rawText = await inveriteResp.text().catch(() => '')
+            if (inveriteResp.ok) {
+              let inveriteData: any = {}
+              try {
+                inveriteData = rawText ? JSON.parse(rawText) : {}
+              } catch (err) {
+                console.warn(
+                  '[Loan Application] Unable to parse Inverite response:',
+                  err
+                )
+              }
+
+              const requestGuid =
+                inveriteData.request_guid ||
+                inveriteData.requestGuid ||
+                inveriteData.request_GUID
+
+              if (requestGuid) {
+                const iframeUrl = inveriteData.iframeurl || inveriteData.iframe_url || null
+                const requestedAt = new Date().toISOString()
+
+                const customerStartBase =
+                  process.env.INVERITE_CUSTOMER_START_BASE_URL ||
+                  `${baseUrl.replace(/\/$/, '')}/customer/v2/web/start`
+                const sanitizedStartBase = customerStartBase.replace(/\/$/, '')
+                const startUrl = `${sanitizedStartBase}/${requestGuid}/0/modern`
+
+                const providerData = {
+                  request_guid: requestGuid,
+                  iframe_url: iframeUrl,
+                  initiated_by: 'server',
+                  requested_at: requestedAt,
+                  redirect_url: redirectUrl,
+                  start_url: startUrl
+                }
+
+                // Save IBV request to loan_application_ibv_requests
+                const { error: ibvInsertError } = await (supabaseForIbv as any)
+                  .from('loan_application_ibv_requests')
+                  .insert({
+                    loan_application_id: txResult.application_id,
+                    client_id: txResult.client_id,
+                    provider: 'inverite',
+                    status: 'pending',
+                    request_guid: requestGuid,
+                    request_url: startUrl,
+                    provider_data: providerData,
+                    requested_at: requestedAt
+                  })
+
+                if (ibvInsertError) {
+                  console.error(
+                    '[Loan Application] Failed to save IBV request:',
+                    ibvInsertError
+                  )
+                } else {
+                  // Update loan application with IBV data
+                  await (supabaseForIbv as any)
+                    .from('loan_applications')
+                    .update({
+                      ibv_provider: 'inverite',
+                      ibv_status: 'pending',
+                      ibv_provider_data: providerData
+                    })
+                    .eq('id', txResult.application_id)
+
+                  ibvInitiationData = {
+                    requestGuid,
+                    iframeUrl,
+                    startUrl,
+                    redirectUrl
+                  }
+
+                  console.log(
+                    '[Loan Application] Successfully initiated Inverite request:',
+                    requestGuid
+                  )
+                }
+              }
+            } else {
+              console.warn(
+                '[Loan Application] Failed to initiate Inverite request:',
+                rawText
+              )
+            }
+          }
+        }
+      } catch (ibvInitError) {
+        console.error(
+          '[Loan Application] Error initiating Inverite request:',
+          ibvInitError
+        )
+        // Non-fatal: continue even if IBV initiation fails
+      }
+    }
+
     // Return success response
     return NextResponse.json(
       {
@@ -771,7 +1028,14 @@ export async function POST(request: NextRequest) {
         data: {
           applicationId: txResult.application_id,
           isPreviousBorrower: txResult.is_previous_borrower,
-          referenceNumber: `FL-${Date.now().toString().slice(-8)}`
+          referenceNumber: `FL-${txResult.application_id.toString().slice(-8)}`,
+          // Include IBV initiation data if available
+          ...(ibvInitiationData && {
+            ibv: {
+              required: true,
+              ...ibvInitiationData
+            }
+          })
         }
       },
       { status: 201 }

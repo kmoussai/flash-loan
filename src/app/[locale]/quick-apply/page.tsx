@@ -97,6 +97,8 @@ export default function MicroLoanApplicationPage() {
   >(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
   const [isPrefilling, setIsPrefilling] = useState(false)
+  const [serverIbvStartUrl, setServerIbvStartUrl] = useState<string | null>(null)
+  const [serverIbvIframeUrl, setServerIbvIframeUrl] = useState<string | null>(null)
   const verifiedFetchInFlight = useRef(false)
 
   // Development mode detection
@@ -457,10 +459,7 @@ export default function MicroLoanApplicationPage() {
     simulateBankVerification()
   }
 
-  const handleSubmit = async (
-    inveriteData?: InveriteConnection,
-    statusOverride?: 'pending' | 'failed' | null
-  ) => {
+  const handleSubmit = async () => {
     // Prevent duplicate submissions - early return if already submitting
     if (isSubmitting) {
       console.log('[Submit] Already submitting, ignoring duplicate call')
@@ -471,35 +470,7 @@ export default function MicroLoanApplicationPage() {
     setIsSubmitting(true)
 
     try {
-      // Use provided Inverite data or fall back to state
-      const finalInveriteData = inveriteData || inveriteConnection
-      const requestGuid =
-        finalInveriteData?.requestGuid || inveriteRequestGuid || null
-
-      // Ensure requestGuid is included if we have it stored separately
-      const enhancedInveriteData = finalInveriteData
-        ? {
-            ...finalInveriteData,
-            requestGuid:
-              finalInveriteData.requestGuid || inveriteRequestGuid || undefined
-          }
-        : null
-
-      // Create IBV provider data using helper function
-      // For now, only stores request_guid. Account information will be added later
-      // when we call the Inverite API to retrieve account details using the request_guid
-      const ibvProviderData = enhancedInveriteData
-        ? createIbvProviderData('inverite', enhancedInveriteData)
-        : requestGuid
-          ? { request_guid: requestGuid }
-          : null
-
-      const resolvedOverride = statusOverride ?? ibvSubmissionOverride
-
-      const ibvStatus = finalInveriteData
-        ? determineIbvStatus('inverite', finalInveriteData.verificationStatus)
-        : resolvedOverride
-
+      // Submit application WITHOUT IBV data - server will initiate IBV if needed
       const response = await fetch('/api/loan-application', {
         method: 'POST',
         headers: {
@@ -530,15 +501,9 @@ export default function MicroLoanApplicationPage() {
           // Loan Details
           loanAmount: formData.loanAmount,
 
-          // Modular IBV data (provider-agnostic)
-          ibvProvider:
-            finalInveriteData || resolvedOverride || requestGuid
-              ? 'inverite'
-              : null,
-          ibvStatus: ibvStatus,
-          ibvProviderData: ibvProviderData,
-          ibvVerifiedAt:
-            ibvStatus === 'verified' ? new Date().toISOString() : null,
+          // Request IBV but don't provide data - server will initiate
+          ibvProvider: 'inverite',
+          ibvStatus: 'pending', // Server will initiate IBV request
 
           // Other required fields
           bankruptcyPlan: false,
@@ -555,7 +520,7 @@ export default function MicroLoanApplicationPage() {
         return
       }
 
-      // Clear form data and Inverite connection
+      // Clear form data
       localStorage.removeItem('microLoanFormData')
       localStorage.removeItem('inveriteConnection')
       setHasSubmittedApplication(true)
@@ -564,12 +529,21 @@ export default function MicroLoanApplicationPage() {
         (responseBody as any)?.data?.referenceNumber ?? null
       const applicationIdFromResponse =
         (responseBody as any)?.data?.applicationId ?? null
+      const ibvData = (responseBody as any)?.data?.ibv
 
       setApplicationReferenceNumber(referenceNumber)
       setApplicationId(applicationIdFromResponse)
 
-      if (requestGuid) {
-        setLastSubmittedRequestGuid(requestGuid)
+      // If server initiated IBV, set up for Step 5
+      if (ibvData && ibvData.required) {
+        setInveriteRequestGuid(ibvData.requestGuid || null)
+        setServerIbvStartUrl(ibvData.startUrl || null)
+        setServerIbvIframeUrl(ibvData.iframeUrl || null)
+        // Move to Step 5 for IBV verification
+        setCurrentStep(5)
+      } else {
+        // No IBV required, mark as submitted
+        setIsSubmitted(true)
       }
     } catch (error) {
       console.error('Error submitting application:', error)
@@ -579,23 +553,7 @@ export default function MicroLoanApplicationPage() {
     }
   }
 
-  useEffect(() => {
-    if (!inveriteRequestGuid) return
-    if (ibvVerified) return
-    if (hasSubmittedApplication) return
-    if (isSubmitting) return
-    if (lastSubmittedRequestGuid === inveriteRequestGuid) return
-
-    setIbvSubmissionOverride(prev => prev ?? 'pending')
-    setLastSubmittedRequestGuid(inveriteRequestGuid)
-    void handleSubmit(undefined, 'pending')
-  }, [
-    inveriteRequestGuid,
-    ibvVerified,
-    hasSubmittedApplication,
-    isSubmitting,
-    lastSubmittedRequestGuid
-  ])
+  // Removed: Auto-submit on requestGuid - now we submit first, then show IBV
 
   useEffect(() => {
     if (!ibvVerified) return
@@ -900,6 +858,9 @@ export default function MicroLoanApplicationPage() {
               onClearOverride={() => setIbvSubmissionOverride(null)}
               hasRequestGuid={Boolean(inveriteRequestGuid)}
               submissionOverride={ibvSubmissionOverride}
+              serverRequestGuid={inveriteRequestGuid}
+              serverStartUrl={serverIbvStartUrl}
+              serverIframeUrl={serverIbvIframeUrl}
             />
           )}
 
@@ -915,14 +876,24 @@ export default function MicroLoanApplicationPage() {
                 {t('Back')}
               </Button>
             )}
-            {currentStep < 5 && (
+            {currentStep < 4 && (
               <Button
                 onClick={() => nextStep()}
                 disabled={!isStepValid() || isSubmitting}
                 size='large'
                 className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
               >
-                {currentStep === 4 ? t('Continue_To_Verification') : t('Next')}
+                {t('Next')}
+              </Button>
+            )}
+            {currentStep === 4 && (
+              <Button
+                onClick={handleSubmit}
+                disabled={!isStepValid() || isSubmitting}
+                size='large'
+                className='ml-auto bg-gradient-to-r from-[#333366] via-[#097fa5] to-[#0a95c2] px-8 py-4 text-white shadow-xl shadow-[#097fa5]/30 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
+              >
+                {isSubmitting ? t('Submitting') : t('Submit_Application')}
               </Button>
             )}
           </div>
