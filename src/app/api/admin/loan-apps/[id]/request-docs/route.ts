@@ -395,6 +395,47 @@ export async function POST(
 
     const groupId = (groupRow as any).id as string
 
+    // Check if any bank requests are being created - if so, also request spécimen document
+    const hasBankRequest = filteredRequests.some(req => req.request_kind === 'bank')
+    let specimenDocumentTypeId: string | null = null
+    let specimenAdded = false
+
+    if (hasBankRequest) {
+      // Find the specimen check document type by slug (migration ensures it exists)
+      const { data: specimenDocType, error: specimenErr } = await admin
+        .from('document_types' as any)
+        .select('id')
+        .eq('slug', 'specimen_check')
+        .maybeSingle()
+
+      if (!specimenErr && specimenDocType) {
+        specimenDocumentTypeId = (specimenDocType as any).id
+
+        // Check if specimen document request already exists for this application
+        if (specimenDocumentTypeId) {
+          const { data: existingSpecimen } = await admin
+            .from('document_requests' as any)
+            .select('id')
+            .eq('loan_application_id', loanApplicationId)
+            .eq('document_type_id', specimenDocumentTypeId)
+            .in('status', ['requested', 'uploaded'])
+            .maybeSingle()
+
+          // Only add if it doesn't already exist
+          if (!existingSpecimen) {
+            filteredRequests.push({
+              document_type_id: specimenDocumentTypeId,
+              request_kind: 'document',
+              form_schema: {}
+            })
+            specimenAdded = true
+          }
+        }
+      } else {
+        console.warn('[request-docs] Specimen document type (slug: specimen_check) not found. Bank request created without specimen document requirement.')
+      }
+    }
+
     const rowsToInsert = filteredRequests.map(req => ({
       loan_application_id: loanApplicationId,
       document_type_id: req.document_type_id,
@@ -639,14 +680,14 @@ export async function POST(
       ? Array.from(new Set(skippedDocumentTypeIds))
       : undefined
 
-    return NextResponse.json({
+      return NextResponse.json({
       ok: true,
       group_id: groupId,
       dashboard_link,
       request_ids: createdIds,
       skipped,
       email_sent: emailSent,
-      email_error: emailError || undefined
+      email_error: emailError || undefined,
     })
   } catch (e: any) {
     return NextResponse.json(

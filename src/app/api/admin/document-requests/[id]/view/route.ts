@@ -14,15 +14,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const admin = createServerSupabaseAdminClient()
     
-    // Get the uploaded file key, document type, and client information
+    // Get the uploaded file key, document type, client information, and group_id
     const { data: reqRow, error: reqErr } = await admin
       .from('document_requests' as any)
       .select(`
         uploaded_file_key,
         uploaded_meta,
         document_type_id,
+        group_id,
+        loan_application_id,
         document_type:document_type_id(id, slug, name),
         loan_applications!inner(
+          id,
           client_id,
           users:client_id(
             id,
@@ -60,6 +63,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       documentName.includes('driver') ||
       documentName.includes('license')
     
+    // Check if this is a specimen document
+    const isSpecimenDocument = 
+      documentSlug === 'specimen_check' ||
+      documentSlug.includes('specimen') ||
+      documentName.toLowerCase().includes('specimen')
+    
     // Get signed URL (valid for 1 hour)
     const bucket = admin.storage.from('documents')
     // Remove 'documents/' prefix if present
@@ -75,7 +84,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       signed_url: urlData.signedUrl,
       mime_type: meta.type || 'application/octet-stream',
       file_name: meta.name || 'document',
-      is_id_document: isIdDocument
+      is_id_document: isIdDocument,
+      is_specimen_document: isSpecimenDocument
     }
     
     // Include client information for ID documents
@@ -87,6 +97,43 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         phone: loanApplication.users.phone,
         date_of_birth: loanApplication.users.date_of_birth,
         national_id: loanApplication.users.national_id
+      }
+    }
+    
+    // Include bank information for specimen documents
+    if (isSpecimenDocument) {
+      const loanApplicationId = (loanApplication as any)?.id || (reqRow as any).loan_application_id
+      const groupId = (reqRow as any).group_id
+      
+      if (loanApplicationId) {
+        // Find the bank information request from the same request group
+        let bankRequestQuery = admin
+          .from('document_requests' as any)
+          .select(`
+            id,
+            request_form_submissions(
+              form_data,
+              submitted_at
+            )
+          `)
+          .eq('loan_application_id', loanApplicationId)
+          .eq('request_kind', 'bank')
+        
+        // If group_id exists, filter by same group (they were created together)
+        if (groupId) {
+          bankRequestQuery = bankRequestQuery.eq('group_id', groupId)
+        }
+        
+        // Order by created_at and get the most recent one
+        const { data: bankRequest } = await bankRequestQuery
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        
+        if (bankRequest && (bankRequest as any).request_form_submissions && (bankRequest as any).request_form_submissions.length > 0) {
+          const latestSubmission = (bankRequest as any).request_form_submissions[0]
+          response.bank_info = latestSubmission.form_data || {}
+        }
       }
     }
     

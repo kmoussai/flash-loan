@@ -80,7 +80,7 @@ export default async function middleware(req: NextRequest) {
   }
 
   // Handle all other API routes - require authentication
-  // Exceptions: /api/loan-application, /api/public routes, and webhook routes
+  // Exceptions: /api/loan-application, /api/public routes, /api/auth routes, and webhook routes
   if (pathname.startsWith('/api/')) {
     // Allow loan application route without auth (public submission)
     if (pathname === '/api/loan-application') {
@@ -89,6 +89,16 @@ export default async function middleware(req: NextRequest) {
     
     // Allow public routes without auth
     if (pathname.startsWith('/api/public/')) {
+      return NextResponse.next()
+    }
+
+    // Allow auth routes without auth (signin, signup, authenticate, etc.)
+    if (pathname.startsWith('/api/auth/')) {
+      return NextResponse.next()
+    }
+
+    // Allow inverite routes without auth (bank verification callbacks and webhooks)
+    if (pathname.startsWith('/api/inverite/')) {
       return NextResponse.next()
     }
 
