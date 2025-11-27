@@ -6,6 +6,8 @@ import AdminDashboardLayout from '../../components/AdminDashboardLayout'
 import DocumentsSection from '../../components/DocumentsSection'
 import ClientDocumentsSection from '../../components/ClientDocumentsSection'
 import AddBankAccountModal from '../../components/AddBankAccountModal'
+import EditClientInfoModal from '../../components/EditClientInfoModal'
+import AddressView from '../../components/AddressView'
 
 interface ClientDetails {
 	user: {
@@ -65,6 +67,7 @@ export default function ClientDetailsPage() {
 	const [error, setError] = useState<string | null>(null)
 	const [activeTab, setActiveTab] = useState<'addresses' | 'documents' | 'bank_account'>('addresses')
 	const [showBankAccountModal, setShowBankAccountModal] = useState(false)
+	const [showEditInfoModal, setShowEditInfoModal] = useState(false)
 
 	useEffect(() => {
 		if (clientId) {
@@ -220,13 +223,24 @@ export default function ClientDetailsPage() {
 				<div className='group relative overflow-hidden rounded-2xl bg-white p-6 shadow-md transition-all duration-300 hover:shadow-xl'>
 					<div className='absolute right-0 top-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 blur-2xl transition-transform duration-300 group-hover:scale-150'></div>
 					<div className='relative'>
-						<div className='mb-6 flex items-center gap-3'>
-							<div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg'>
-								<svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-									<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' />
+						<div className='mb-6 flex items-center justify-between'>
+							<div className='flex items-center gap-3'>
+								<div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg'>
+									<svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+										<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' />
+									</svg>
+								</div>
+								<h3 className='text-xl font-bold text-gray-900'>Profile Information</h3>
+							</div>
+							<button
+								onClick={() => setShowEditInfoModal(true)}
+								className='flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md'
+							>
+								<svg className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+									<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' />
 								</svg>
-					</div>
-							<h3 className='text-xl font-bold text-gray-900'>Profile Information</h3>
+								Edit
+							</button>
 						</div>
 						<div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
 							<div className='rounded-xl border border-gray-200 bg-gray-50/50 p-4'>
@@ -376,49 +390,13 @@ export default function ClientDetailsPage() {
 								) : (
 									<div className='grid gap-4 md:grid-cols-2'>
 										{addresses.map(addr => (
-												<div key={addr.id} className='group/item relative overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-purple-300 hover:shadow-md'>
-													<div className='flex items-start justify-between'>
-														<div className='flex items-center gap-3'>
-															<div className='flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100'>
-																<svg className='h-5 w-5 text-purple-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-																	<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z' />
-																	<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 11a3 3 0 11-6 0 3 3 0 016 0z' />
-																</svg>
-															</div>
-															<div>
-																<h4 className='font-semibold text-gray-900'>
-																	{addr.is_current ? (
-																		<span className='inline-flex items-center gap-1.5'>
-																			Current Address
-																			<span className='inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800'>
-																				Active
-																			</span>
-																		</span>
-																	) : (
-																		addr.address_type || 'Address'
-																	)}
-													</h4>
-																<p className='mt-1 text-sm text-gray-600'>
-																	{`${addr.street_number || ''} ${addr.street_name || ''}${addr.apartment_number ? `, Apt ${addr.apartment_number}` : ''}`}
-																</p>
-																<p className='text-sm text-gray-600'>
-																	{`${addr.city}, ${addr.province} ${addr.postal_code}`}
-																</p>
-															</div>
-														</div>
-												</div>
-												{addr.moving_date && (
-														<div className='mt-4 flex items-center gap-2 text-xs text-gray-500'>
-															<svg className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-																<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' />
-															</svg>
-															<span>Moved in: {formatDate(addr.moving_date)}</span>
-														</div>
-													)}
-													<div className='mt-3 text-xs text-gray-400'>
-														Added: {formatDate(addr.created_at)}
-													</div>
-											</div>
+											<AddressView
+												key={addr.id}
+												address={addr}
+												variant='purple'
+												showMovingDate={true}
+												className='p-5'
+											/>
 										))}
 									</div>
 								)}
@@ -609,6 +587,24 @@ export default function ClientDetailsPage() {
 					setShowBankAccountModal(false)
 				}}
 				title={user.bank_account ? 'Edit Bank Account' : 'Add Bank Account'}
+			/>
+
+			{/* Edit Client Info Modal */}
+			<EditClientInfoModal
+				isOpen={showEditInfoModal}
+				onClose={() => setShowEditInfoModal(false)}
+				clientId={clientId}
+				clientInfo={{
+					first_name: user.first_name,
+					last_name: user.last_name,
+					email: user.email,
+					phone: user.phone
+				}}
+				addresses={addresses}
+				onSuccess={() => {
+					fetchDetails()
+					setShowEditInfoModal(false)
+				}}
 			/>
 		</AdminDashboardLayout>
 	)

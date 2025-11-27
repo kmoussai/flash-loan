@@ -20,6 +20,10 @@ interface Step5BankVerificationProps {
   onClearOverride: () => void
   hasRequestGuid: boolean
   submissionOverride: 'pending' | 'failed' | null
+  // Server-provided IBV data (from application submission response)
+  serverRequestGuid?: string | null
+  serverStartUrl?: string | null
+  serverIframeUrl?: string | null
 }
 
 const INVERITE_INIT_KEY = 'inverite_init_session_id'
@@ -32,7 +36,10 @@ export default function Step5BankVerification({
   onSubmitWithoutVerification,
   onClearOverride,
   hasRequestGuid,
-  submissionOverride
+  submissionOverride,
+  serverRequestGuid,
+  serverStartUrl,
+  serverIframeUrl
 }: Step5BankVerificationProps) {
   const t = useTranslations('')
   const [iframeSrc, setIframeSrc] = useState<string>('')
@@ -44,13 +51,43 @@ export default function Step5BankVerification({
   const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const iframeConfig = useMemo(
-    () => getInveriteIframeConfig(undefined, iframeSrc),
-    [iframeSrc]
+    () => getInveriteIframeConfig(serverRequestGuid || undefined, iframeSrc),
+    [iframeSrc, serverRequestGuid]
   )
 
+  // Use server-provided IBV URLs if available (new flow)
+  useEffect(() => {
+    if (serverStartUrl || serverIframeUrl) {
+      const src = serverStartUrl || serverIframeUrl || ''
+      setIframeSrc(src)
+      hasInitialized.current = true
+      setLoading(false)
+
+      if (serverRequestGuid && onRequestGuidReceived) {
+        onRequestGuidReceived(serverRequestGuid)
+      }
+
+      // Set fallback timer
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current)
+      }
+      fallbackTimerRef.current = setTimeout(() => {
+        if (!ibvVerified) {
+          setShowPendingFallback(true)
+        }
+      }, 60000)
+    }
+  }, [serverStartUrl, serverIframeUrl, serverRequestGuid, onRequestGuidReceived, ibvVerified])
+
+  // Legacy: Client-side initialization (fallback if server didn't provide URLs)
   async function startInverite() {
     if (isInitializing.current || hasInitialized.current || iframeSrc) {
       console.log('[Inverite] Already initialized or in progress, skipping')
+      return
+    }
+
+    // Don't initialize if server already provided URLs
+    if (serverStartUrl || serverIframeUrl) {
       return
     }
 
@@ -80,7 +117,6 @@ export default function Step5BankVerification({
       const { requestGuid, iframeUrl } = await initializeInveriteSession({
         firstName: formData.firstName,
         lastName: formData.lastName,
-        // email: formData.email,
         phone: formData.phone
       })
       const src = iframeUrl || getInveriteIframeConfig(requestGuid).src
@@ -113,8 +149,9 @@ export default function Step5BankVerification({
     }
   }
 
+  // Only auto-initialize if server didn't provide URLs (legacy fallback)
   useEffect(() => {
-    if (!hasInitialized.current && !iframeSrc && !isInitializing.current) {
+    if (!hasInitialized.current && !iframeSrc && !isInitializing.current && !serverStartUrl && !serverIframeUrl) {
       startInverite()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

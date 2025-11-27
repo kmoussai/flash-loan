@@ -11,6 +11,7 @@ export async function GET(_request: NextRequest) {
     const { data, error } = await admin
       .from('document_types' as any)
       .select('id, name, slug, mime_whitelist, max_size_bytes, default_request_kind, default_form_schema, description')
+      .not('slug', 'eq', 'specimen_check')
       .order('name', { ascending: true })
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ document_types: data || [] })

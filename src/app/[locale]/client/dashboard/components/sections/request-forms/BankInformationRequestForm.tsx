@@ -35,6 +35,7 @@ export default function BankInformationRequestForm({
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof BankFormValues, string>>>({})
 
   // Initialize values from latest submission if available
   useEffect(() => {
@@ -51,13 +52,67 @@ export default function BankInformationRequestForm({
     }
   }, [request.request_form_submissions])
 
+  const validateField = useCallback((field: keyof BankFormValues, value: string): string | null => {
+    const trimmedValue = value.trim()
+    
+    // Check if field is required and empty
+    if (!trimmedValue) {
+      return null // Let the general validation handle required fields
+    }
+
+    // Validate numeric fields
+    if (field === 'institution_number') {
+      if (!/^\d+$/.test(trimmedValue)) {
+        return 'Institution number must contain only digits'
+      }
+      if (trimmedValue.length !== 3) {
+        return 'Institution number must be exactly 3 digits'
+      }
+    }
+
+    if (field === 'transit_number') {
+      if (!/^\d+$/.test(trimmedValue)) {
+        return 'Transit number must contain only digits'
+      }
+      if (trimmedValue.length !== 5) {
+        return 'Transit number must be exactly 5 digits'
+      }
+    }
+
+    if (field === 'account_number') {
+      if (!/^\d+$/.test(trimmedValue)) {
+        return 'Account number must contain only digits'
+      }
+      if (trimmedValue.length < 7 || trimmedValue.length > 12) {
+        return 'Account number must be between 7 and 12 digits'
+      }
+    }
+
+    return null
+  }, [])
+
   const updateValue = useCallback((field: keyof BankFormValues, value: string) => {
+    // Only allow digits for numeric fields
+    let processedValue = value
+    if (field === 'institution_number' || field === 'transit_number' || field === 'account_number') {
+      processedValue = value.replace(/\D/g, '') // Remove non-digits
+    }
+
     setValues(prev => ({
       ...prev,
-      [field]: value
+      [field]: processedValue
     }))
+    
+    // Clear general error
     setError(null)
-  }, [])
+    
+    // Validate field and set field-specific error
+    const fieldError = validateField(field, processedValue)
+    setFieldErrors(prev => ({
+      ...prev,
+      [field]: fieldError || undefined
+    }))
+  }, [validateField])
 
   const validate = useCallback((): string | null => {
     const requiredFields: Array<keyof BankFormValues> = [
@@ -68,14 +123,23 @@ export default function BankInformationRequestForm({
       'account_name'
     ]
 
+    // Check for required fields
     for (const field of requiredFields) {
       if (!values[field] || (typeof values[field] === 'string' && values[field].trim().length === 0)) {
         return t('Please_Fill_Required_Fields') || 'Please fill all required fields.'
       }
     }
 
+    // Check for field-specific validation errors
+    for (const field of ['institution_number', 'transit_number', 'account_number'] as Array<keyof BankFormValues>) {
+      const fieldError = validateField(field, values[field] || '')
+      if (fieldError) {
+        return fieldError
+      }
+    }
+
     return null
-  }, [values, t])
+  }, [values, t, validateField])
 
   const handleSubmit = useCallback(async () => {
     const validationError = validate()
@@ -158,12 +222,26 @@ export default function BankInformationRequestForm({
             </label>
             <input
               type='text'
+              inputMode='numeric'
+              maxLength={3}
               value={values.institution_number || ''}
               onChange={e => updateValue('institution_number', e.target.value)}
-              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-primary shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
-              placeholder={tCommon('Institution_Number') || 'Institution Number'}
+              onBlur={() => {
+                const error = validateField('institution_number', values.institution_number || '')
+                setFieldErrors(prev => ({ ...prev, institution_number: error || undefined }))
+              }}
+              className={`w-full rounded border px-3 py-2 text-sm text-primary shadow-sm focus:outline-none focus:ring-1 ${
+                fieldErrors.institution_number
+                  ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
+                  : 'border-gray-300 bg-white focus:border-primary focus:ring-primary'
+              }`}
+              placeholder='000'
               required
             />
+            <p className='mt-1 text-xs text-gray-500'>3 digits</p>
+            {fieldErrors.institution_number && (
+              <p className='mt-1 text-xs text-red-600'>{fieldErrors.institution_number}</p>
+            )}
           </div>
 
           <div>
@@ -172,12 +250,26 @@ export default function BankInformationRequestForm({
             </label>
             <input
               type='text'
+              inputMode='numeric'
+              maxLength={5}
               value={values.transit_number || ''}
               onChange={e => updateValue('transit_number', e.target.value)}
-              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-primary shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
-              placeholder={tCommon('Transit_Number') || 'Transit Number'}
+              onBlur={() => {
+                const error = validateField('transit_number', values.transit_number || '')
+                setFieldErrors(prev => ({ ...prev, transit_number: error || undefined }))
+              }}
+              className={`w-full rounded border px-3 py-2 text-sm text-primary shadow-sm focus:outline-none focus:ring-1 ${
+                fieldErrors.transit_number
+                  ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
+                  : 'border-gray-300 bg-white focus:border-primary focus:ring-primary'
+              }`}
+              placeholder='00000'
               required
             />
+            <p className='mt-1 text-xs text-gray-500'>5 digits</p>
+            {fieldErrors.transit_number && (
+              <p className='mt-1 text-xs text-red-600'>{fieldErrors.transit_number}</p>
+            )}
           </div>
 
           <div>
@@ -186,12 +278,25 @@ export default function BankInformationRequestForm({
             </label>
             <input
               type='text'
+              inputMode='numeric'
+              maxLength={12}
               value={values.account_number || ''}
               onChange={e => updateValue('account_number', e.target.value)}
-              className='w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-primary shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
-              placeholder={tCommon('Account_Number') || 'Account Number'}
+              onBlur={() => {
+                const error = validateField('account_number', values.account_number || '')
+                setFieldErrors(prev => ({ ...prev, account_number: error || undefined }))
+              }}
+              className={`w-full rounded border px-3 py-2 text-sm text-primary shadow-sm focus:outline-none focus:ring-1 ${
+                fieldErrors.account_number
+                  ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
+                  : 'border-gray-300 bg-white focus:border-primary focus:ring-primary'
+              }`}
+              placeholder={tCommon('Account_Number') || 'Account number'}
               required
             />
+            {fieldErrors.account_number && (
+              <p className='mt-1 text-xs text-red-600'>{fieldErrors.account_number}</p>
+            )}
           </div>
         </div>
       </div>

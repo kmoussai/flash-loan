@@ -21,13 +21,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const admin = createServerSupabaseAdminClient()
     
-    // Get the document request with loan application, document type, and latest submission
+    // Get the document request with loan application, document type, latest submission, and group_id
     const { data: reqRow, error: reqErr } = await admin
       .from('document_requests' as any)
       .select(`
         id,
         loan_application_id,
         request_kind,
+        group_id,
         document_type_id,
         document_type:document_type_id(id, slug, name),
         loan_applications!inner(client_id),
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       id: string
       loan_application_id: string
       request_kind: string
+      group_id: string | null
       document_type_id: string | null
       document_type?: {
         id: string
@@ -97,7 +99,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 post: formData.post || '',
                 payroll_frequency: (formData.payrollFrequency as Frequency) || 'monthly',
                 date_hired: formData.dateHired || '',
-                next_pay_date: formData.nextPayDate || ''
+                next_pay_date: formData.nextPayDate || '',
+                // Work address fields (optional)
+                ...(formData.workAddress && { work_address: formData.workAddress }),
+                ...(formData.workProvince && { work_province: formData.workProvince })
               }
               break
               
@@ -114,7 +119,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 self_employed_phone: formData.selfEmployedPhone || '',
                 deposits_frequency: (formData.depositsFrequency as Frequency) || 'monthly',
                 self_employed_start_date: formData.selfEmployedStartDate || '',
-                next_deposit_date: formData.nextDepositDate || ''
+                next_deposit_date: formData.nextDepositDate || '',
+                // Business address fields (optional) - using workAddress/workProvince since we unified them
+                ...(formData.workAddress && { work_address: formData.workAddress }),
+                ...(formData.workProvince && { work_province: formData.workProvince })
               }
               break
               
@@ -242,6 +250,101 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             if (insertErr) {
               console.error('Error inserting references:', insertErr)
               // Don't fail the verify operation if insert fails, just log it
+            }
+          }
+        }
+      }
+    }
+
+    // If verifying a specimen document, also verify the associated bank request
+    if (status === 'verified' && requestRow.request_kind === 'document' && requestRow.document_type) {
+      const documentSlug = requestRow.document_type.slug?.toLowerCase() || ''
+      const documentName = requestRow.document_type.name?.toLowerCase() || ''
+      
+      const isSpecimenDocument = 
+        documentSlug === 'specimen_check' ||
+        documentSlug.includes('specimen') ||
+        documentName.includes('specimen')
+      
+      if (isSpecimenDocument && requestRow.group_id) {
+        // Find the bank request in the same group
+        const { data: bankRequest } = await admin
+          .from('document_requests' as any)
+          .select('id, status')
+          .eq('loan_application_id', requestRow.loan_application_id)
+          .eq('group_id', requestRow.group_id)
+          .eq('request_kind', 'bank')
+          .maybeSingle()
+        
+        // If bank request exists and is not already verified, verify it
+        if (bankRequest && (bankRequest as any).status !== 'verified') {
+          const { error: bankVerifyErr } = await admin
+            .from('document_requests' as any)
+            // @ts-ignore
+            .update({ status: 'verified' })
+            .eq('id', (bankRequest as any).id)
+          
+          if (bankVerifyErr) {
+            console.error('Error verifying associated bank request:', bankVerifyErr)
+            // Don't fail the specimen verify operation if bank verify fails, just log it
+          } else {
+            console.log(`[Verify] Verified bank request ${(bankRequest as any).id} along with specimen document ${reqId}`)
+            
+            // Also populate user's bank_account from the bank request
+            // Get the bank request with submissions to extract bank info
+            const { data: bankRequestWithSubmissions } = await admin
+              .from('document_requests' as any)
+              .select(`
+                loan_applications!inner(client_id),
+                request_form_submissions(id, form_data, submitted_at)
+              `)
+              .eq('id', (bankRequest as any).id)
+              .single()
+            
+            if (bankRequestWithSubmissions) {
+              const bankSubmissions = Array.isArray((bankRequestWithSubmissions as any).request_form_submissions) 
+                ? (bankRequestWithSubmissions as any).request_form_submissions 
+                : []
+              
+              if (bankSubmissions.length > 0 && (bankRequestWithSubmissions as any).loan_applications?.client_id) {
+                const latestBankSubmission = bankSubmissions.sort((a: any, b: any) => 
+                  new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+                )[0]
+                
+                const bankFormData = latestBankSubmission.form_data || {}
+                
+                // Validate required bank fields
+                if (
+                  bankFormData.bank_name &&
+                  bankFormData.account_number &&
+                  bankFormData.transit_number &&
+                  bankFormData.institution_number &&
+                  bankFormData.account_name
+                ) {
+                  const bankAccount = {
+                    bank_name: String(bankFormData.bank_name).trim(),
+                    account_number: String(bankFormData.account_number).trim(),
+                    transit_number: String(bankFormData.transit_number).trim(),
+                    institution_number: String(bankFormData.institution_number).trim(),
+                    account_name: String(bankFormData.account_name).trim()
+                  }
+                  
+                  // Update user's bank_account
+                  const { error: updateErr } = await admin
+                    .from('users' as any)
+                    // @ts-ignore
+                    .update({
+                      bank_account: bankAccount,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', (bankRequestWithSubmissions as any).loan_applications.client_id)
+                  
+                  if (updateErr) {
+                    console.error('Error updating bank account:', updateErr)
+                    // Don't fail the verify operation if update fails, just log it
+                  }
+                }
+              }
             }
           }
         }

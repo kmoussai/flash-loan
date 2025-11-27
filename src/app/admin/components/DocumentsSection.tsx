@@ -82,6 +82,8 @@ export default function DocumentsSection({
     national_id: string | null
   } | null>(null)
   const [previewIsIdDocument, setPreviewIsIdDocument] = useState(false)
+  const [previewIsSpecimenDocument, setPreviewIsSpecimenDocument] = useState(false)
+  const [previewBankInfo, setPreviewBankInfo] = useState<Record<string, any> | null>(null)
   const [previewRequestId, setPreviewRequestId] = useState<string | null>(null)
   const [loadingDocumentView, setLoadingDocumentView] = useState(false)
   const [requestModalOpen, setRequestModalOpen] = useState(false)
@@ -384,6 +386,19 @@ export default function DocumentsSection({
             )
           }
         }
+        // Check for address in both camelCase (form_data) and snake_case (income_fields) formats
+        const workAddress = formData.workAddress || formData.work_address
+        const workProvince = formData.workProvince || formData.work_province
+        if (workAddress || workProvince) {
+          const addressParts = [workAddress, workProvince].filter(Boolean)
+          if (addressParts.length > 0) {
+            parts.push(
+              <>
+                . Work address: <strong>{addressParts.join(', ')}</strong>
+              </>
+            )
+          }
+        }
         break
 
       case 'employment-insurance':
@@ -459,6 +474,19 @@ export default function DocumentsSection({
             parts.push(
               <>
                 . Next deposit: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        // Check for address in both camelCase (form_data) and snake_case (income_fields) formats
+        const businessAddress = formData.workAddress || formData.work_address || formData.businessAddress || formData.business_address
+        const businessProvince = formData.workProvince || formData.work_province || formData.businessProvince || formData.business_province
+        if (businessAddress || businessProvince) {
+          const addressParts = [businessAddress, businessProvince].filter(Boolean)
+          if (addressParts.length > 0) {
+            parts.push(
+              <>
+                . Business address: <strong>{addressParts.join(', ')}</strong>
               </>
             )
           }
@@ -590,6 +618,8 @@ export default function DocumentsSection({
     setPreviewFileName(null)
     setPreviewClientInfo(null)
     setPreviewIsIdDocument(false)
+    setPreviewIsSpecimenDocument(false)
+    setPreviewBankInfo(null)
     setPreviewRequestId(null)
   }
 
@@ -606,7 +636,9 @@ export default function DocumentsSection({
       setPreviewMime(data.mime_type || 'application/octet-stream')
       setPreviewFileName(data.file_name || 'document')
       setPreviewIsIdDocument(data.is_id_document || false)
+      setPreviewIsSpecimenDocument(data.is_specimen_document || false)
       setPreviewClientInfo(data.client_info || null)
+      setPreviewBankInfo(data.bank_info || null)
       setPreviewRequestId(requestId)
     } catch (e: any) {
       alert(e?.message || 'Failed to load document')
@@ -968,6 +1000,13 @@ export default function DocumentsSection({
                             documentName.includes('driver') ||
                             documentName.includes('license')
                           )
+                          
+                          // Check if this is a specimen document
+                          const isSpecimenDocument = isDocumentRequest && (
+                            documentSlug === 'specimen_check' ||
+                            documentSlug.includes('specimen') ||
+                            documentName.includes('specimen')
+                          )
 
                           return (
                             <div
@@ -1154,7 +1193,7 @@ export default function DocumentsSection({
                                         View
                                       </button>
                                     )}
-                                  {r.status === 'uploaded' && isIdDocument && (
+                                  {r.status === 'uploaded' && (isIdDocument || isSpecimenDocument) && (
                                     <>
                                       <button
                                         onClick={() => handleVerify(r.id)}
@@ -1320,6 +1359,11 @@ export default function DocumentsSection({
                     ID Document
                   </span>
                 )}
+                {previewIsSpecimenDocument && (
+                  <span className='ml-2 inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800'>
+                    Specimen Check
+                  </span>
+                )}
               </h4>
               <button
                 onClick={closePreview}
@@ -1389,11 +1433,52 @@ export default function DocumentsSection({
                 </div>
               </div>
             )}
-            {previewIsIdDocument && previewRequestId && (
+            {previewIsSpecimenDocument && previewBankInfo && (
+              <div className='border-b border-gray-200 bg-purple-50 px-4 py-3'>
+                <h5 className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700'>
+                  Submitted Bank Information (Compare with Document)
+                </h5>
+                <div className='grid grid-cols-2 gap-3 text-sm'>
+                  {previewBankInfo.bank_name && (
+                    <div>
+                      <span className='text-xs text-gray-500'>Bank Name:</span>
+                      <p className='font-medium text-gray-900'>{previewBankInfo.bank_name}</p>
+                    </div>
+                  )}
+                  {previewBankInfo.account_name && (
+                    <div>
+                      <span className='text-xs text-gray-500'>Account Name:</span>
+                      <p className='font-medium text-gray-900'>{previewBankInfo.account_name}</p>
+                    </div>
+                  )}
+                  {previewBankInfo.institution_number && (
+                    <div>
+                      <span className='text-xs text-gray-500'>Institution Number:</span>
+                      <p className='font-medium text-gray-900'>{previewBankInfo.institution_number}</p>
+                    </div>
+                  )}
+                  {previewBankInfo.transit_number && (
+                    <div>
+                      <span className='text-xs text-gray-500'>Transit Number:</span>
+                      <p className='font-medium text-gray-900'>{previewBankInfo.transit_number}</p>
+                    </div>
+                  )}
+                  {previewBankInfo.account_number && (
+                    <div className='col-span-2'>
+                      <span className='text-xs text-gray-500'>Account Number:</span>
+                      <p className='font-medium text-gray-900'>{previewBankInfo.account_number}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {(previewIsIdDocument || previewIsSpecimenDocument) && previewRequestId && (
               <div className='border-b border-gray-200 bg-amber-50 px-4 py-2'>
                 <div className='flex items-center justify-between'>
                   <p className='text-xs text-amber-800'>
-                    ⚠️ Verify this ID document matches the client information above
+                    {previewIsIdDocument 
+                      ? '⚠️ Verify this ID document matches the client information above'
+                      : '⚠️ Verify this specimen check matches the bank information above'}
                   </p>
                   {requests.find(r => r.id === previewRequestId)?.status === 'uploaded' && (
                     <button
@@ -1419,7 +1504,7 @@ export default function DocumentsSection({
                           d='M5 13l4 4L19 7'
                         />
                       </svg>
-                      Verify KYC
+                      {previewIsIdDocument ? 'Verify KYC' : 'Verify'}
                     </button>
                   )}
                 </div>
@@ -1641,6 +1726,38 @@ export default function DocumentsSection({
                   )}
                 </div>
               </div>
+              
+              {/* Note when bank information is selected */}
+              {infoRequestOptions.some(
+                dt => dt.default_request_kind === 'bank' && selectedTypes[dt.id]
+              ) && (
+                <div className='rounded-lg border border-blue-200 bg-blue-50 p-4'>
+                  <div className='flex items-start gap-3'>
+                    <svg
+                      className='h-5 w-5 shrink-0 text-blue-600'
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
+                      <path
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                        strokeWidth={2}
+                        d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                      />
+                    </svg>
+                    <div className='flex-1'>
+                      <p className='text-sm font-medium text-blue-900'>
+                        Specimen Document Required
+                      </p>
+                      <p className='mt-1 text-xs text-blue-700'>
+                        A specimen check document request will be automatically added along with the bank information request.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div>
                 <label className='mb-2 block text-sm font-semibold text-gray-700'>
                   Optional Note

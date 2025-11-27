@@ -170,21 +170,60 @@ const OverviewTab = ({
                       Income Details
                     </label>
                     <div className='space-y-1 text-sm text-gray-700'>
-                      {Object.entries(application.income_fields)
-                        .slice(0, 3)
-                        .map(([key, value]) => (
-                          <p key={key}>
-                            <span className='font-medium capitalize'>
-                              {key.replace(/_/g, ' ')}:
-                            </span>{' '}
-                            {String(value)}
-                          </p>
-                        ))}
-                      {Object.keys(application.income_fields).length > 3 && (
-                        <p className='text-xs text-gray-500'>
-                          +{Object.keys(application.income_fields).length - 3} more
-                        </p>
-                      )}
+                      {(() => {
+                        const fields = Object.entries(application.income_fields)
+                        // Prioritize address fields for employed/self-employed (handle both camelCase and snake_case)
+                        const addressFields = [
+                          'work_address', 'work_province', 
+                          'workAddress', 'workProvince',
+                          'business_address', 'business_province',
+                          'businessAddress', 'businessProvince'
+                        ]
+                        const addressEntries = fields.filter(([key]) => addressFields.includes(key))
+                        const otherEntries = fields.filter(([key]) => !addressFields.includes(key))
+                        // Show address fields first, then others
+                        const orderedFields = [...addressEntries, ...otherEntries]
+                        
+                        return orderedFields.map(([key, value]) => {
+                          if (!value || String(value).trim() === '') return null
+                          // Format address fields nicely (handle both formats)
+                          const isWorkAddress = key === 'work_address' || key === 'workAddress'
+                          const isBusinessAddress = key === 'business_address' || key === 'businessAddress'
+                          if (isWorkAddress || isBusinessAddress) {
+                            const provinceKey = isWorkAddress 
+                              ? (application.income_fields?.work_province ? 'work_province' : 'workProvince')
+                              : (application.income_fields?.business_province ? 'business_province' : 'businessProvince')
+                            const province = application.income_fields?.[provinceKey as keyof typeof application.income_fields]
+                            const addressParts = [String(value), province].filter(Boolean)
+                            return (
+                              <p key={key}>
+                                <span className='font-medium capitalize'>
+                                  {isWorkAddress ? 'Work Address' : 'Business Address'}:
+                                </span>{' '}
+                                {addressParts.join(', ')}
+                              </p>
+                            )
+                          }
+                          // Skip province if we already showed it with address
+                          const isProvince = key === 'work_province' || key === 'workProvince' || 
+                                            key === 'business_province' || key === 'businessProvince'
+                          if (isProvince) {
+                            // Check if corresponding address was already shown
+                            const hasWorkAddress = application.income_fields?.work_address || application.income_fields?.workAddress
+                            const hasBusinessAddress = application.income_fields?.business_address || application.income_fields?.businessAddress
+                            if ((key === 'work_province' || key === 'workProvince') && hasWorkAddress) return null
+                            if ((key === 'business_province' || key === 'businessProvince') && hasBusinessAddress) return null
+                          }
+                          return (
+                            <p key={key}>
+                              <span className='font-medium capitalize'>
+                                {key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim()}:
+                              </span>{' '}
+                              {String(value)}
+                            </p>
+                          )
+                        })
+                      })()}
                     </div>
                   </div>
                 )}
