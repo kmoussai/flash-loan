@@ -21,6 +21,8 @@ type EmploymentFormValues = {
   payrollFrequency: Frequency | ''
   dateHired: string
   nextPayDate: string
+  workAddress: string
+  workProvince: string
   // Employment Insurance fields
   employmentInsuranceStartDate: string
   // Self-Employed fields
@@ -64,6 +66,25 @@ export default function EmploymentRequestForm({
     [tCommon]
   )
 
+  const provinceOptions = useMemo(
+    () => [
+      { value: 'Alberta', label: 'Alberta' },
+      { value: 'British Columbia', label: 'British Columbia' },
+      { value: 'Manitoba', label: 'Manitoba' },
+      { value: 'New Brunswick', label: 'New Brunswick' },
+      { value: 'Newfoundland and Labrador', label: 'Newfoundland and Labrador' },
+      { value: 'Northwest Territories', label: 'Northwest Territories' },
+      { value: 'Nova Scotia', label: 'Nova Scotia' },
+      { value: 'Nunavut', label: 'Nunavut' },
+      { value: 'Ontario', label: 'Ontario' },
+      { value: 'Prince Edward Island', label: 'Prince Edward Island' },
+      { value: 'Quebec', label: 'Quebec' },
+      { value: 'Saskatchewan', label: 'Saskatchewan' },
+      { value: 'Yukon', label: 'Yukon' }
+    ],
+    []
+  )
+
   const [values, setValues] = useState<EmploymentFormValues>({
     incomeSource: '',
     occupation: '',
@@ -74,6 +95,8 @@ export default function EmploymentRequestForm({
     payrollFrequency: '',
     dateHired: '',
     nextPayDate: '',
+    workAddress: '',
+    workProvince: '',
     employmentInsuranceStartDate: '',
     paidByDirectDeposit: '',
     selfEmployedPhone: '',
@@ -102,6 +125,9 @@ export default function EmploymentRequestForm({
         payrollFrequency: (formData.payrollFrequency as Frequency) || '',
         dateHired: formData.dateHired || '',
         nextPayDate: formData.nextPayDate || '',
+        // Support both workAddress and businessAddress for backward compatibility
+        workAddress: formData.workAddress || formData.businessAddress || '',
+        workProvince: formData.workProvince || formData.businessProvince || '',
         employmentInsuranceStartDate: formData.employmentInsuranceStartDate || '',
         paidByDirectDeposit: (formData.paidByDirectDeposit as 'yes' | 'no') || '',
         selfEmployedPhone: formData.selfEmployedPhone || '',
@@ -194,6 +220,8 @@ export default function EmploymentRequestForm({
         payload.payrollFrequency = values.payrollFrequency
         payload.dateHired = values.dateHired
         payload.nextPayDate = values.nextPayDate
+        payload.workAddress = values.workAddress
+        payload.workProvince = values.workProvince
       } else if (values.incomeSource === 'employment-insurance') {
         payload.employmentInsuranceStartDate = values.employmentInsuranceStartDate
         payload.nextDepositDate = values.nextDepositDate
@@ -315,6 +343,8 @@ export default function EmploymentRequestForm({
           {renderField('payrollFrequency', tCommon('Payroll_Frequency') || 'Payroll Frequency', 'select', frequencyOptions)}
           {renderField('dateHired', tCommon('Date_Hired_Approximate') || 'Date Hired', 'date')}
           {renderField('nextPayDate', tCommon('Next_Pay_Date') || 'Next Pay Date', 'date')}
+          {renderField('workAddress', tCommon('Work_Address') || 'Work Address')}
+          {renderField('workProvince', tCommon('Province') || 'Province', 'select', provinceOptions)}
         </>
       )}
 
@@ -337,6 +367,8 @@ export default function EmploymentRequestForm({
           {renderField('depositsFrequency', tCommon('Deposits_Frequency') || 'Deposits Frequency', 'select', frequencyOptions)}
           {renderField('selfEmployedStartDate', tCommon('Start_Date_Self_Employed') || 'Self-Employed Start Date', 'date')}
           {renderField('nextDepositDate', tCommon('Next_Deposit_Date') || 'Next Deposit Date', 'date')}
+          {renderField('workAddress', tCommon('Work_Address') || 'Work Address')}
+          {renderField('workProvince', tCommon('Province') || 'Province', 'select', provinceOptions)}
         </>
       )}
 

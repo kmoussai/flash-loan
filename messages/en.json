@@ -192,6 +192,8 @@
   "Street_Name": "Street",
   "Apartment_Number": "Apt.",
   "Street_Address": "Street Address",
+  "Work_Address": "Work Address",
+  "Business_Address": "Business Address",
   "Search_Address": "Search your address",
   "Search_Address_Placeholder": "Start typing your address",
   "Address_Search_Unavailable": "Address suggestions are unavailable",

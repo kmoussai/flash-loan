@@ -384,6 +384,19 @@ export default function DocumentsSection({
             )
           }
         }
+        // Check for address in both camelCase (form_data) and snake_case (income_fields) formats
+        const workAddress = formData.workAddress || formData.work_address
+        const workProvince = formData.workProvince || formData.work_province
+        if (workAddress || workProvince) {
+          const addressParts = [workAddress, workProvince].filter(Boolean)
+          if (addressParts.length > 0) {
+            parts.push(
+              <>
+                . Work address: <strong>{addressParts.join(', ')}</strong>
+              </>
+            )
+          }
+        }
         break
 
       case 'employment-insurance':
@@ -459,6 +472,19 @@ export default function DocumentsSection({
             parts.push(
               <>
                 . Next deposit: <strong>{date}</strong>
+              </>
+            )
+          }
+        }
+        // Check for address in both camelCase (form_data) and snake_case (income_fields) formats
+        const businessAddress = formData.workAddress || formData.work_address || formData.businessAddress || formData.business_address
+        const businessProvince = formData.workProvince || formData.work_province || formData.businessProvince || formData.business_province
+        if (businessAddress || businessProvince) {
+          const addressParts = [businessAddress, businessProvince].filter(Boolean)
+          if (addressParts.length > 0) {
+            parts.push(
+              <>
+                . Business address: <strong>{addressParts.join(', ')}</strong>
               </>
             )
           }

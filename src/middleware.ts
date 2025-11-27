@@ -79,6 +79,37 @@ export default async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
+  // Handle all other API routes - require authentication
+  // Exceptions: /api/loan-application, /api/public routes, and webhook routes
+  if (pathname.startsWith('/api/')) {
+    // Allow loan application route without auth (public submission)
+    if (pathname === '/api/loan-application') {
+      return NextResponse.next()
+    }
+    
+    // Allow public routes without auth
+    if (pathname.startsWith('/api/public/')) {
+      return NextResponse.next()
+    }
+
+    // Allow webhook routes without auth (called by external services)
+    if (pathname.includes('/webhook')) {
+      return NextResponse.next()
+    }
+
+    // Require authentication for all other API routes
+    const { response, user } = await updateSession(req)
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Please sign in' },
+        { status: 401 }
+      )
+    }
+
+    return response
+  }
+
   // Handle admin page routes - NO localization
   if (pathname.startsWith('/admin')) {
     const { response, user } = await updateSession(req)
@@ -130,6 +161,6 @@ export const config = {
     '/',
     '/(fr|en)/:path*',
     '/admin/:path*',
-    '/api/admin/:path*'
+    '/api/:path*'
   ]
 }

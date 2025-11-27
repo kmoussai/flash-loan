@@ -97,7 +97,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 post: formData.post || '',
                 payroll_frequency: (formData.payrollFrequency as Frequency) || 'monthly',
                 date_hired: formData.dateHired || '',
-                next_pay_date: formData.nextPayDate || ''
+                next_pay_date: formData.nextPayDate || '',
+                // Work address fields (optional)
+                ...(formData.workAddress && { work_address: formData.workAddress }),
+                ...(formData.workProvince && { work_province: formData.workProvince })
               }
               break
               
@@ -114,7 +117,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 self_employed_phone: formData.selfEmployedPhone || '',
                 deposits_frequency: (formData.depositsFrequency as Frequency) || 'monthly',
                 self_employed_start_date: formData.selfEmployedStartDate || '',
-                next_deposit_date: formData.nextDepositDate || ''
+                next_deposit_date: formData.nextDepositDate || '',
+                // Business address fields (optional) - using workAddress/workProvince since we unified them
+                ...(formData.workAddress && { work_address: formData.workAddress }),
+                ...(formData.workProvince && { work_province: formData.workProvince })
               }
               break
               
