@@ -109,5 +109,6 @@ export type ContractDefaultsResponse = {
     account?: BankAccount
     accountOptions?: BankAccount[]
     paymentAmount?: number
+    employmentPayDates?: string[] // Array of ISO date strings for employment pay dates
   }
 }

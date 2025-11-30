@@ -32,7 +32,7 @@ export async function POST(
 
     if (!applicationId || !loanId) {
       return NextResponse.json(
-        { error: 'Application ID is required' },
+        { error: 'Application ID and Loan ID are required' },
         { status: 400 }
       )
     }
@@ -178,6 +178,35 @@ export async function POST(
       loanPrincipalAmount ??
       app.loan_amount
 
+    if (!resolvedLoanAmount || resolvedLoanAmount <= 0) {
+      return NextResponse.json(
+        { error: 'Loan amount is required and must be greater than 0' },
+        { status: 400 }
+      )
+    }
+
+    // Validate required fields
+    if (!payload?.paymentFrequency) {
+      return NextResponse.json(
+        { error: 'Payment frequency is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!payload?.numberOfPayments || payload.numberOfPayments <= 0) {
+      return NextResponse.json(
+        { error: 'Number of payments is required and must be greater than 0' },
+        { status: 400 }
+      )
+    }
+
+    if (!payload?.paymentAmount || payload.paymentAmount <= 0) {
+      return NextResponse.json(
+        { error: 'Payment amount is required and must be greater than 0' },
+        { status: 400 }
+      )
+    }
+
     //Todo: use payload?.termMonths and payload?.interestRate
     const resolvedTermMonths = payload?.termMonths ?? 3
     const resolvedInterestRate = payload?.interestRate ?? 29
@@ -202,6 +231,32 @@ export async function POST(
       }
     }
 
+    // Build payment schedule if not provided
+    let finalPaymentSchedule = payload?.paymentSchedule
+    if (!finalPaymentSchedule || !Array.isArray(finalPaymentSchedule) || finalPaymentSchedule.length === 0) {
+      finalPaymentSchedule = buildPaymentSchedule({
+        payment_frequency: payload?.paymentFrequency,
+        loan_amount: resolvedLoanAmount,
+        interest_rate: resolvedInterestRate,
+        num_payments: payload?.numberOfPayments as number,
+        start_date: payload?.firstPaymentDate
+          ? (typeof payload.firstPaymentDate === 'string' 
+              ? payload.firstPaymentDate 
+              : payload.firstPaymentDate.toISOString())
+          : payload?.nextPaymentDate
+          ? payload.nextPaymentDate
+          : undefined
+      })
+    }
+
+    // Validate payment schedule exists
+    if (!finalPaymentSchedule || !Array.isArray(finalPaymentSchedule) || finalPaymentSchedule.length === 0) {
+      return NextResponse.json(
+        { error: 'Payment schedule is required and could not be generated. Please check payment frequency, number of payments, and start date.' },
+        { status: 400 }
+      )
+    }
+
     // Build contract terms (calculation + borrower details + viewer aliases)
     const contractTerms = buildContractTermsFromApplication(
       {
@@ -220,15 +275,7 @@ export async function POST(
         firstPaymentDate: payload?.firstPaymentDate,
         paymentAmount: payload.paymentAmount,
         brokerageFee: payload.brokerageFee,
-        paymentSchedule: payload?.paymentSchedule ?? buildPaymentSchedule({
-          payment_frequency: payload?.paymentFrequency,
-          loan_amount: resolvedLoanAmount,
-          interest_rate: resolvedInterestRate,
-          num_payments: payload?.numberOfPayments as number,
-          start_date: payload?.firstPaymentDate
-            ? payload?.firstPaymentDate.toISOString()
-            : undefined
-        })
+        paymentSchedule: finalPaymentSchedule
       }
     )
 

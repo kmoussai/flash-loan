@@ -1,14 +1,18 @@
 /**
  * API Route: Send Contract
- * 
+ *
  * POST /api/admin/applications/[id]/contract/send
- * 
+ *
  * Sends a contract to the client (marks as sent)
  * Automatically signs the contract with staff signature when sending (updates database only, no PDF generation)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getContractByApplicationId, sendContract } from '@/src/lib/supabase/contract-helpers'
+import {
+  getContractByApplicationId,
+  getContractById,
+  sendContract
+} from '@/src/lib/supabase/contract-helpers'
 import {
   createServerSupabaseClient,
   createServerSupabaseAdminClient
@@ -19,14 +23,15 @@ import { getAppUrl } from '@/src/lib/config'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string; contract_id: string } }
 ) {
   try {
     const applicationId = params.id
+    const contractId = params.contract_id
 
-    if (!applicationId) {
+    if (!applicationId && !contractId) {
       return NextResponse.json(
-        { error: 'Application ID is required' },
+        { error: 'Params ID is required' },
         { status: 400 }
       )
     }
@@ -62,7 +67,17 @@ export async function POST(
 
     const staffId = (staffData as any).id
 
-    const body = await request.json()
+    // Parse request body, default to empty object if body is empty
+    let body: { method?: string } = {}
+    try {
+      const text = await request.text()
+      if (text) {
+        body = JSON.parse(text)
+      }
+    } catch (error) {
+      // If body is empty or invalid JSON, use defaults
+      console.warn('[POST /api/admin/applications/:id/contract/send] Empty or invalid request body, using defaults')
+    }
     const { method = 'email' } = body
 
     if (!['email', 'sms', 'portal'].includes(method)) {
@@ -73,13 +88,12 @@ export async function POST(
     }
 
     // Get contract with full details
-    const contractResult = await getContractByApplicationId(applicationId, true)
+    const contractResult = contractId
+      ? await getContractById(contractId)
+      : await getContractByApplicationId(applicationId, true)
 
     if (!contractResult.success || !contractResult.data) {
-      return NextResponse.json(
-        { error: 'Contract not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
     }
 
     const contract = contractResult.data
@@ -116,15 +130,20 @@ export async function POST(
         `[POST /api/admin/applications/:id/contract/send] Contract signed by staff ${staffId} at ${signedAt}`
       )
     } else {
-      console.log('[POST /api/admin/applications/:id/contract/send] Contract already signed by staff, proceeding to send')
+      console.log(
+        '[POST /api/admin/applications/:id/contract/send] Contract already signed by staff, proceeding to send'
+      )
     }
 
     // If sending via email, fetch client information and send email notification
     if (method === 'email') {
       // Get application with client information
-      const { data: applicationData, error: appError } = await (adminClient as any)
+      const { data: applicationData, error: appError } = await (
+        adminClient as any
+      )
         .from('loan_applications')
-        .select(`
+        .select(
+          `
           id,
           loan_amount,
           users!loan_applications_client_id_fkey (
@@ -134,7 +153,8 @@ export async function POST(
             email,
             preferred_language
           )
-        `)
+        `
+        )
         .eq('id', applicationId)
         .single()
 
@@ -147,7 +167,9 @@ export async function POST(
       } else {
         const client = (applicationData as any).users
         if (client && client.email) {
-          const preferredLanguage = (client.preferred_language || 'en') as 'en' | 'fr'
+          const preferredLanguage = (client.preferred_language || 'en') as
+            | 'en'
+            | 'fr'
           const dashboardUrl = `${getAppUrl()}/${preferredLanguage}/client/dashboard?section=contracts`
 
           // Generate email
@@ -155,7 +177,9 @@ export async function POST(
             firstName: client.first_name || 'Client',
             lastName: client.last_name || '',
             email: client.email,
-            contractNumber: contract.contract_number ? String(contract.contract_number) : null,
+            contractNumber: contract.contract_number
+              ? String(contract.contract_number)
+              : null,
             loanAmount: applicationData.loan_amount,
             dashboardUrl,
             preferredLanguage,
@@ -190,7 +214,11 @@ export async function POST(
     }
 
     // Now send the contract (mark as sent)
-    const sendResult = await sendContract(contract.id, method as 'email' | 'sms' | 'portal', true)
+    const sendResult = await sendContract(
+      contract.id,
+      method as 'email' | 'sms' | 'portal',
+      true
+    )
 
     if (!sendResult.success) {
       return NextResponse.json(
@@ -211,4 +239,3 @@ export async function POST(
     )
   }
 }
-

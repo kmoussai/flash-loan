@@ -39,7 +39,11 @@ export default function PaymentsTab({ loanId }: PaymentsTabProps) {
     switch (status) {
       case 'confirmed':
         return 'bg-green-100 text-green-800'
+      case 'paid':
+        return 'bg-emerald-100 text-emerald-800'
       case 'failed':
+        return 'bg-red-100 text-red-800'
+      case 'rejected':
         return 'bg-red-100 text-red-800'
       case 'pending':
         return 'bg-yellow-100 text-yellow-800'
@@ -49,10 +53,10 @@ export default function PaymentsTab({ loanId }: PaymentsTabProps) {
   }
 
   return (
-    <div className='space-y-6'>
+    <div className='space-y-2'>
       <div className='rounded-xl border border-gray-200 bg-white shadow-sm'>
         <div className='border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4'>
-          <h3 className='text-lg font-bold text-gray-900'>Payment History</h3>
+          <h3 className='text-xs font-medium text-gray-900'>Payment History</h3>
         </div>
         <div className='overflow-x-auto'>
           {payments.length === 0 ? (
@@ -76,7 +80,7 @@ export default function PaymentsTab({ loanId }: PaymentsTabProps) {
                     Status
                   </th>
                   <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                    Transaction ID
+                    Notes
                   </th>
                 </tr>
               </thead>
@@ -101,8 +105,8 @@ export default function PaymentsTab({ loanId }: PaymentsTabProps) {
                         {payment.status.toUpperCase()}
                       </span>
                     </td>
-                    <td className='whitespace-nowrap px-4 py-2 text-xs font-mono text-gray-500'>
-                      {payment.accept_pay_transaction_id || 'N/A'}
+                    <td className='px-4 py-2 text-sm text-gray-500'>
+                      {payment.notes || '-'}
                     </td>
                   </tr>
                 ))}

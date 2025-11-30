@@ -1,12 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
+import LoanSummary from './components/LoanSummary'
+import { fetcher } from '@/lib/utils'
+import useSWR from 'swr'
 
 // Loan status type matching database enum
-type LoanStatusDB = 'pending_disbursement' | 'active' | 'completed' | 'defaulted' | 'cancelled'
+type LoanStatusDB =
+  | 'pending_disbursement'
+  | 'active'
+  | 'completed'
+  | 'defaulted'
+  | 'cancelled'
 type LoanStatusUI = 'active' | 'paid' | 'defaulted' | 'pending' | 'cancelled'
 
 // API response interface
@@ -95,12 +103,13 @@ const transformLoan = (apiLoan: LoanFromAPI, index: number): Loan => {
   const firstName = apiLoan.users?.first_name || ''
   const lastName = apiLoan.users?.last_name || ''
   const borrowerName = `${firstName} ${lastName}`.trim() || 'N/A'
-  
+
   return {
     id: apiLoan.id,
-    loan_number: apiLoan.loan_number !== undefined && apiLoan.loan_number !== null
-      ? `LN-${String(apiLoan.loan_number).padStart(6, '0')}`
-      : `LN-${String(index + 1).padStart(6, '0')}`,
+    loan_number:
+      apiLoan.loan_number !== undefined && apiLoan.loan_number !== null
+        ? `LN-${String(apiLoan.loan_number).padStart(6, '0')}`
+        : `LN-${String(index + 1).padStart(6, '0')}`,
     borrower_name: borrowerName,
     borrower_email: apiLoan.users?.email || 'N/A',
     borrower_phone: apiLoan.users?.phone || 'N/A',
@@ -119,88 +128,73 @@ const transformLoan = (apiLoan: LoanFromAPI, index: number): Loan => {
 
 export default function LoansPage() {
   const router = useRouter()
-  const [loans, setLoans] = useState<Loan[]>([])
-  const [filteredLoans, setFilteredLoans] = useState<Loan[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<LoanStatusUI | 'all'>('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusCounts, setStatusCounts] = useState<StatusCounts>({
-    active: 0,
-    paid: 0,
-    defaulted: 0,
-    pending: 0,
-    cancelled: 0
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null)
+  const limit = 50 // Items per page
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setPage(1) // Reset to first page on new search
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Reset page when status filter changes
+  useEffect(() => {
+    setPage(1)
+  }, [statusFilter])
+
+  // Build API URL with query params
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (statusFilter !== 'all') {
+      const dbStatus = mapStatusToDB(statusFilter)
+      if (dbStatus !== 'all') {
+        params.append('status', dbStatus)
+      }
+    }
+    if (debouncedSearchTerm) {
+      params.append('search', debouncedSearchTerm)
+    }
+    params.append('page', page.toString())
+    params.append('limit', limit.toString())
+    return `/api/admin/loans?${params.toString()}`
+  }, [statusFilter, debouncedSearchTerm, page, limit])
+
+  const {
+    data,
+    isLoading: loading,
+    error,
+    mutate: fetchLoans,
+    isValidating: validating
+  } = useSWR(apiUrl, fetcher, {
+    revalidateOnFocus: false
   })
 
-  const fetchLoans = async () => {
-    try {
-      setLoading(true)
-      
-      const response = await fetch('/api/admin/loans')
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to fetch loans')
-      }
-      
-      const data = await response.json()
-      const apiLoans: LoanFromAPI[] = data.loans || []
-      
-      // Transform API loans to UI format
-      const transformedLoans = apiLoans.map((loan, index) => transformLoan(loan, index))
-      
-      setLoans(transformedLoans)
-      
-      // Map status counts from API to UI format
-      const apiCounts = data.statusCounts || {}
-      const counts: StatusCounts = {
-        active: apiCounts.active || 0,
-        paid: apiCounts.completed || 0,
-        defaulted: apiCounts.defaulted || 0,
-        pending: apiCounts.pending_disbursement || 0,
-        cancelled: apiCounts.cancelled || 0
-      }
-      setStatusCounts(counts)
-      setError(null)
-    } catch (err: any) {
-      console.error('Error fetching loans:', err)
-      setError(err.message || 'Failed to load loans')
-    } finally {
-      setLoading(false)
+  const [loans, statusCounts, pagination] = useMemo(() => {
+    const apiLoans: LoanFromAPI[] = data?.loans || []
+    const apiCounts = data?.statusCounts || {}
+    const apiPagination = data?.pagination || {
+      page: 1,
+      limit,
+      total: 0,
+      totalPages: 0
     }
-  }
-
-  useEffect(() => {
-    fetchLoans()
-  }, [])
-
-  useEffect(() => {
-    let filtered = loans
-
-    // Filter by status
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(loan => loan.status === statusFilter)
+    const counts: StatusCounts = {
+      active: apiCounts.active || 0,
+      paid: apiCounts.completed || 0,
+      defaulted: apiCounts.defaulted || 0,
+      pending: apiCounts.pending_disbursement || 0,
+      cancelled: apiCounts.cancelled || 0
     }
-
-    // Filter by search term (name, email, phone, loan number)
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(loan => {
-        const name = loan.borrower_name.toLowerCase()
-        const email = loan.borrower_email.toLowerCase()
-        const phone = loan.borrower_phone.toLowerCase()
-        const loanNumber = loan.loan_number.toLowerCase()
-        
-        return name.includes(term) || 
-               email.includes(term) || 
-               phone.includes(term) ||
-               loanNumber.includes(term)
-      })
-    }
-
-    setFilteredLoans(filtered)
-  }, [statusFilter, searchTerm, loans])
+    return [apiLoans, counts, apiPagination]
+  }, [data?.loans, data?.statusCounts, data?.pagination, limit])
 
   const getStatusBadgeColor = (status: LoanStatusUI) => {
     switch (status) {
@@ -241,9 +235,7 @@ export default function LoansPage() {
         {/* Header */}
         <div className='flex items-center justify-between'>
           <div>
-            <h1 className='text-lg font-bold text-gray-900'>
-              Loans
-            </h1>
+            <h1 className='text-lg font-bold text-gray-900'>Loans</h1>
             <p className='text-[10px] text-gray-600'>
               Manage and track all active and historical loans
             </p>
@@ -252,23 +244,28 @@ export default function LoansPage() {
             <button
               onClick={fetchLoans}
               disabled={loading}
-              className='flex items-center gap-1.5 rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed'
+              className='flex items-center gap-1.5 rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-md transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50'
             >
-              <svg 
-                className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} 
-                fill='none' 
-                viewBox='0 0 24 24' 
+              <svg
+                className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`}
+                fill='none'
+                viewBox='0 0 24 24'
                 stroke='currentColor'
               >
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
+                />
               </svg>
-              {loading ? 'Refreshing...' : 'Refresh'}
+              {loading || validating ? 'Refreshing...' : 'Refresh'}
             </button>
             <div className='rounded-md bg-white px-3 py-1.5 shadow-sm'>
               <div className='flex items-center gap-1.5'>
                 <span className='text-sm'>💰</span>
                 <span className='text-lg font-bold text-gray-900'>
-                  {loans.length}
+                  {pagination?.total || 0}
                 </span>
               </div>
             </div>
@@ -277,8 +274,10 @@ export default function LoansPage() {
 
         {/* Stats Cards */}
         <div className='grid gap-2 md:grid-cols-5'>
-          <div className='cursor-pointer rounded-md bg-blue-50 p-2 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('active')}>
+          <div
+            className='cursor-pointer rounded-md bg-blue-50 p-2 shadow-sm transition-all hover:shadow-md'
+            onClick={() => setStatusFilter('active')}
+          >
             <div className='mb-0.5 flex items-center justify-between'>
               <h3 className='text-[10px] font-medium text-blue-800'>Active</h3>
               <span className='text-xs'>📊</span>
@@ -288,8 +287,10 @@ export default function LoansPage() {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-md bg-green-50 p-2 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('paid')}>
+          <div
+            className='cursor-pointer rounded-md bg-green-50 p-2 shadow-sm transition-all hover:shadow-md'
+            onClick={() => setStatusFilter('paid')}
+          >
             <div className='mb-0.5 flex items-center justify-between'>
               <h3 className='text-[10px] font-medium text-green-800'>Paid</h3>
               <span className='text-xs'>✅</span>
@@ -299,10 +300,14 @@ export default function LoansPage() {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-md bg-red-50 p-2 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('defaulted')}>
+          <div
+            className='cursor-pointer rounded-md bg-red-50 p-2 shadow-sm transition-all hover:shadow-md'
+            onClick={() => setStatusFilter('defaulted')}
+          >
             <div className='mb-0.5 flex items-center justify-between'>
-              <h3 className='text-[10px] font-medium text-red-800'>Defaulted</h3>
+              <h3 className='text-[10px] font-medium text-red-800'>
+                Defaulted
+              </h3>
               <span className='text-xs'>⚠️</span>
             </div>
             <p className='text-lg font-bold text-red-900'>
@@ -310,10 +315,14 @@ export default function LoansPage() {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-md bg-yellow-50 p-2 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('pending')}>
+          <div
+            className='cursor-pointer rounded-md bg-yellow-50 p-2 shadow-sm transition-all hover:shadow-md'
+            onClick={() => setStatusFilter('pending')}
+          >
             <div className='mb-0.5 flex items-center justify-between'>
-              <h3 className='text-[10px] font-medium text-yellow-800'>Pending</h3>
+              <h3 className='text-[10px] font-medium text-yellow-800'>
+                Pending
+              </h3>
               <span className='text-xs'>⏳</span>
             </div>
             <p className='text-lg font-bold text-yellow-900'>
@@ -321,10 +330,14 @@ export default function LoansPage() {
             </p>
           </div>
 
-          <div className='cursor-pointer rounded-md bg-gray-50 p-2 shadow-sm transition-all hover:shadow-md'
-               onClick={() => setStatusFilter('cancelled')}>
+          <div
+            className='cursor-pointer rounded-md bg-gray-50 p-2 shadow-sm transition-all hover:shadow-md'
+            onClick={() => setStatusFilter('cancelled')}
+          >
             <div className='mb-0.5 flex items-center justify-between'>
-              <h3 className='text-[10px] font-medium text-gray-800'>Cancelled</h3>
+              <h3 className='text-[10px] font-medium text-gray-800'>
+                Cancelled
+              </h3>
               <span className='text-xs'>🚫</span>
             </div>
             <p className='text-lg font-bold text-gray-900'>
@@ -343,7 +356,9 @@ export default function LoansPage() {
               <div className='w-40'>
                 <Select
                   value={statusFilter}
-                  onValueChange={(value) => setStatusFilter(value as LoanStatusUI | 'all')}
+                  onValueChange={value =>
+                    setStatusFilter(value as LoanStatusUI | 'all')
+                  }
                   options={[
                     { value: 'all', label: 'All Loans' },
                     { value: 'active', label: 'Active' },
@@ -353,23 +368,23 @@ export default function LoansPage() {
                     { value: 'cancelled', label: 'Cancelled' }
                   ]}
                   placeholder='Select status'
-                  className='!py-1.5 !px-2 !text-xs'
+                  className='!px-2 !py-1.5 !text-xs'
                 />
               </div>
             </div>
-            
+
             <div className='flex items-center gap-1.5'>
               <input
                 type='text'
                 placeholder='Search by name, email, phone, or loan number...'
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className='w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs md:w-56 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                onChange={e => setSearchTerm(e.target.value)}
+                className='w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 md:w-56'
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className='text-gray-400 hover:text-gray-600 text-xs'
+                  className='text-xs text-gray-400 hover:text-gray-600'
                 >
                   ✕
                 </button>
@@ -383,151 +398,226 @@ export default function LoansPage() {
           <div className='border-b border-gray-200 px-2 py-1.5'>
             <div className='flex items-center justify-between'>
               <h2 className='text-xs font-semibold text-gray-900'>
-                {statusFilter === 'all' ? 'All Loans' : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Loans`}
+                {statusFilter === 'all'
+                  ? 'All Loans'
+                  : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Loans`}
               </h2>
               <span className='text-[10px] text-gray-500'>
-                {filteredLoans.length} {filteredLoans.length === 1 ? 'result' : 'results'}
+                {pagination?.total || 0}{' '}
+                {(pagination?.total || 0) === 1 ? 'result' : 'results'}
+                {pagination && pagination.totalPages > 1 && (
+                  <span className='ml-1'>
+                    (Page {pagination.page} of {pagination.totalPages})
+                  </span>
+                )}
               </span>
             </div>
           </div>
 
           <div className='overflow-x-auto'>
-            {loading ? (
-              <div className='p-8 text-center'>
-                <div className='mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600'></div>
-                <p className='mt-2 text-xs text-gray-600'>Loading loans...</p>
-              </div>
-            ) : error ? (
-              <div className='p-8 text-center'>
-                <span className='mb-2 block text-2xl'>⚠️</span>
-                <p className='text-xs text-red-600'>{error}</p>
-              </div>
-            ) : filteredLoans.length === 0 ? (
+            <table className='min-w-full divide-y divide-gray-200'>
+              <thead className='bg-gray-50'>
+                <tr>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Loan #
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Borrower
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Amount
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Balance
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Rate
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Status
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Next Payment
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Originated
+                  </th>
+                  <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className='divide-y divide-gray-200 bg-white'>
+                {loans.map((l, index) => {
+                  const loan = transformLoan(l, index)
+                  return (
+                    <Fragment key={loan.id}>
+                      <tr
+                        key={loan.id}
+                        className='cursor-pointer transition-colors hover:bg-gray-50'
+                        onClick={() =>
+                          selectedLoanId === loan.id
+                            ? setSelectedLoanId(null)
+                            : setSelectedLoanId(loan.id)
+                        }
+                        // onClick={() => router.push(`/admin/loan/${loan.id}`)}
+                      >
+                        <td className='whitespace-nowrap px-2 py-1.5'>
+                          <div className='text-xs font-semibold text-gray-900'>
+                            {loan.loan_number}
+                          </div>
+                          <div className='text-[10px] text-gray-500'>
+                            {loan.province}
+                          </div>
+                        </td>
+                        <td className='px-2 py-1.5'>
+                          <div className='flex items-center'>
+                            <div className='flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-purple-100 text-[10px] font-medium text-purple-600'>
+                              {loan.borrower_name &&
+                              loan.borrower_name !== 'N/A'
+                                ? loan.borrower_name[0]
+                                : '?'}
+                            </div>
+                            <div className='ml-2'>
+                              <div className='text-xs font-medium text-gray-900'>
+                                {loan.borrower_name}
+                              </div>
+                              <div className='text-[10px] text-gray-500'>
+                                {loan.borrower_email}
+                              </div>
+                              <div className='text-[10px] text-gray-400'>
+                                {loan.borrower_phone}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className='whitespace-nowrap px-2 py-1.5'>
+                          <div className='text-xs font-semibold text-gray-900'>
+                            {formatCurrency(loan.loan_amount)}
+                          </div>
+                          <div className='text-[10px] text-gray-500'>
+                            {loan.term_months}m
+                          </div>
+                        </td>
+                        <td className='whitespace-nowrap px-2 py-1.5'>
+                          <div className='text-xs font-semibold text-gray-900'>
+                            {formatCurrency(loan.remaining_balance)}
+                          </div>
+                          <div className='text-[10px] text-gray-500'>
+                            {loan.total_payments} paid
+                          </div>
+                        </td>
+                        <td className='whitespace-nowrap px-2 py-1.5 text-xs text-gray-900'>
+                          {loan.interest_rate}%
+                        </td>
+                        <td className='whitespace-nowrap px-2 py-1.5'>
+                          <span
+                            className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getStatusBadgeColor(loan.status)}`}
+                          >
+                            {loan.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className='whitespace-nowrap px-2 py-1.5 text-[10px] text-gray-500'>
+                          {formatDate(loan.next_payment_date)}
+                        </td>
+                        <td className='whitespace-nowrap px-2 py-1.5 text-[10px] text-gray-500'>
+                          {formatDate(loan.origination_date)}
+                        </td>
+                        <td
+                          className='whitespace-nowrap px-2 py-1.5 text-xs'
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <button
+                            className='mr-1.5 text-[10px] text-blue-600 hover:text-blue-800'
+                            onClick={() =>
+                              router.push(`/admin/loan/${loan.id}`)
+                            }
+                          >
+                            View
+                          </button>
+                          <button
+                            className='text-[10px] text-green-600 hover:text-green-800'
+                            onClick={() =>
+                              router.push(`/admin/loan/${loan.id}`)
+                            }
+                          >
+                            Details
+                          </button>
+                        </td>
+                      </tr>
+
+                      {selectedLoanId === loan.id && (
+                        <tr>
+                          <td colSpan={10}>
+                            <LoanSummary loan={l} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+            {!loading && !validating && loans.length === 0 && (
               <div className='p-8 text-center'>
                 <span className='mb-2 block text-2xl'>💰</span>
                 <p className='text-xs text-gray-600'>No loans found</p>
                 <p className='mt-1 text-[10px] text-gray-400'>
-                  {searchTerm || statusFilter !== 'all' 
-                    ? 'Try adjusting your filters' 
+                  {debouncedSearchTerm || statusFilter !== 'all'
+                    ? 'Try adjusting your filters'
                     : 'Loans will appear here once they are created'}
                 </p>
               </div>
-            ) : (
-              <table className='min-w-full divide-y divide-gray-200'>
-                <thead className='bg-gray-50'>
-                  <tr>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Loan #
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Borrower
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Amount
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Balance
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Rate
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Status
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Next Payment
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Originated
-                    </th>
-                    <th className='px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className='divide-y divide-gray-200 bg-white'>
-                  {filteredLoans.map(loan => (
-                    <tr
-                      key={loan.id}
-                      className='transition-colors hover:bg-gray-50 cursor-pointer'
-                      onClick={() => router.push(`/admin/loan/${loan.id}`)}
+            )}
+            {/* Pagination Controls */}
+            {pagination && pagination.totalPages > 1 && (
+              <div className='border-t border-gray-200 px-2 py-2'>
+                <div className='flex items-center justify-between'>
+                  <div className='text-[10px] text-gray-500'>
+                    Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+                    {Math.min(
+                      pagination.page * pagination.limit,
+                      pagination.total
+                    )}{' '}
+                    of {pagination.total} results
+                  </div>
+                  <div className='flex items-center gap-1'>
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={pagination.page === 1 || loading}
+                      className='rounded-md border border-gray-300 bg-white px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
                     >
-                      <td className='whitespace-nowrap px-2 py-1.5'>
-                        <div className='text-xs font-semibold text-gray-900'>
-                          {loan.loan_number}
-                        </div>
-                        <div className='text-[10px] text-gray-500'>
-                          {loan.province}
-                        </div>
-                      </td>
-                      <td className='px-2 py-1.5'>
-                        <div className='flex items-center'>
-                          <div className='flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-purple-100 text-[10px] font-medium text-purple-600'>
-                            {loan.borrower_name && loan.borrower_name !== 'N/A' ? loan.borrower_name[0] : '?'}
-                          </div>
-                          <div className='ml-2'>
-                            <div className='text-xs font-medium text-gray-900'>
-                              {loan.borrower_name}
-                            </div>
-                            <div className='text-[10px] text-gray-500'>
-                              {loan.borrower_email}
-                            </div>
-                            <div className='text-[10px] text-gray-400'>
-                              {loan.borrower_phone}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className='whitespace-nowrap px-2 py-1.5'>
-                        <div className='text-xs font-semibold text-gray-900'>
-                          {formatCurrency(loan.loan_amount)}
-                        </div>
-                        <div className='text-[10px] text-gray-500'>
-                          {loan.term_months}m
-                        </div>
-                      </td>
-                      <td className='whitespace-nowrap px-2 py-1.5'>
-                        <div className='text-xs font-semibold text-gray-900'>
-                          {formatCurrency(loan.remaining_balance)}
-                        </div>
-                        <div className='text-[10px] text-gray-500'>
-                          {loan.total_payments} paid
-                        </div>
-                      </td>
-                      <td className='whitespace-nowrap px-2 py-1.5 text-xs text-gray-900'>
-                        {loan.interest_rate}%
-                      </td>
-                      <td className='whitespace-nowrap px-2 py-1.5'>
-                        <span
-                          className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getStatusBadgeColor(loan.status)}`}
-                        >
-                          {loan.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className='whitespace-nowrap px-2 py-1.5 text-[10px] text-gray-500'>
-                        {formatDate(loan.next_payment_date)}
-                      </td>
-                      <td className='whitespace-nowrap px-2 py-1.5 text-[10px] text-gray-500'>
-                        {formatDate(loan.origination_date)}
-                      </td>
-                      <td className='whitespace-nowrap px-2 py-1.5 text-xs' onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          className='mr-1.5 text-blue-600 hover:text-blue-800 text-[10px]'
-                          onClick={() => router.push(`/admin/loan/${loan.id}`)}
-                        >
-                          View
-                        </button>
-                        <button 
-                          className='text-green-600 hover:text-green-800 text-[10px]'
-                          onClick={() => router.push(`/admin/loan/${loan.id}`)}
-                        >
-                          Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      Previous
+                    </button>
+                    <span className='px-2 text-[10px] text-gray-500'>
+                      Page {pagination.page} of {pagination.totalPages}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setPage(p => Math.min(pagination.totalPages, p + 1))
+                      }
+                      disabled={
+                        pagination.page === pagination.totalPages || loading
+                      }
+                      className='rounded-md border border-gray-300 bg-white px-2 py-1 text-[10px] font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {loading && (
+              <div className='p-8 text-center'>
+                <div className='mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600'></div>
+                <p className='mt-2 text-xs text-gray-600'>Loading loans...</p>
+              </div>
+            )}
+            {error && error.message && (
+              <div className='p-8 text-center'>
+                <span className='mb-2 block text-2xl'>⚠️</span>
+                <p className='text-xs text-red-600'>{error.message}</p>
+              </div>
             )}
           </div>
         </div>
@@ -535,4 +625,3 @@ export default function LoansPage() {
     </AdminDashboardLayout>
   )
 }
-
