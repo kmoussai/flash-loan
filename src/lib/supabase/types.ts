@@ -69,7 +69,7 @@ export type LoanStatus =
   | 'completed'
   | 'defaulted'
   | 'cancelled'
-export type PaymentStatus = 'pending' | 'confirmed' | 'failed'
+export type PaymentStatus = 'pending' | 'confirmed' | 'paid' | 'failed' | 'rejected'
 export type DocumentRequestStatus =
   | 'requested'
   | 'uploaded'
@@ -442,6 +442,8 @@ export interface LoanPayment {
   method: string | null
   status: PaymentStatus
   created_at: string
+  // Payment sequence
+  payment_number: number | null
   // Accept Pay fields
   accept_pay_customer_id: number | null
   accept_pay_transaction_id: number | null
@@ -456,6 +458,10 @@ export interface LoanPayment {
   retry_count: number
   voided_at: string | null
   void_reason: string | null
+  // Notes/description
+  notes: string | null
+  // CRM original data
+  crm_original_data: Record<string, any> | null
 }
 
 // ===========================
@@ -843,6 +849,7 @@ export interface LoanPaymentInsert {
   payment_date?: string
   method?: string | null
   status?: PaymentStatus
+  payment_number?: number | null
   accept_pay_customer_id?: number | null
   accept_pay_transaction_id?: number | null
   process_date?: string | null
@@ -856,6 +863,8 @@ export interface LoanPaymentInsert {
   retry_count?: number
   voided_at?: string | null
   void_reason?: string | null
+  notes?: string | null
+  crm_original_data?: Record<string, any> | null
 }
 
 export interface LoanUpdate {
@@ -883,6 +892,7 @@ export interface LoanPaymentUpdate {
   payment_date?: string
   method?: string | null
   status?: PaymentStatus
+  payment_number?: number | null
   accept_pay_customer_id?: number | null
   accept_pay_transaction_id?: number | null
   process_date?: string | null
@@ -896,6 +906,8 @@ export interface LoanPaymentUpdate {
   retry_count?: number
   voided_at?: string | null
   void_reason?: string | null
+  notes?: string | null
+  crm_original_data?: Record<string, any> | null
 }
 
 export interface LoanPaymentScheduleInsert {

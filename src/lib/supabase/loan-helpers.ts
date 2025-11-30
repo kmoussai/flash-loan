@@ -18,7 +18,8 @@ import type {
   RequestFormSubmission,
   RequestFormSubmissionInsert,
   RequestFormSubmissionUpdate,
-  LoanUpdate
+  LoanUpdate,
+  LoanPayment
 } from './types'
 import { createClient } from './client'
 import { Loan } from '@/src/types'
@@ -242,6 +243,26 @@ export async function createLoanApplication(
   }
 
   return { success: true, data: data as LoanApplication, error: null }
+}
+
+/**
+ * Get all payments for a loan
+ * params: loanId: string
+ * return: LoanPayment[]
+ */
+
+export async function getLoanPayments(loanId: string) {
+  const supabase = await (await import('./server')).createServerSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('loan_payments')
+    .select('id, amount, payment_date, status, created_at, payment_number, notes')
+    .eq('loan_id', loanId)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Error fetching loan payments:', error)
+    return []
+  }
+  return data as LoanPayment[]
 }
 
 /**
