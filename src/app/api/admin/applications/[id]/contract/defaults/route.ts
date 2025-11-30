@@ -20,7 +20,12 @@ import {
   getLoanByApplicationId
 } from '@/src/lib/supabase/loan-helpers'
 import { BankAccount } from '@/src/types'
-import { calculateNumberOfPayments, calculatePaymentAmount } from '@/src/lib/utils/loan'
+import {
+  calculateNumberOfPayments,
+  calculatePaymentAmount
+} from '@/src/lib/utils/loan'
+import { addDays, addMonths } from 'date-fns'
+import { frequencyConfig } from '@/src/lib/utils/schedule'
 
 const getLowestPaymentFrequencyFromIbv = (
   ibvResults?: IBVSummary | null
@@ -160,6 +165,105 @@ const getNextPayDateFromIbv = (
 }
 
 /**
+ * Get all employment pay dates from loan application
+ * Calculates future payment dates based on frequency, starting from next pay date
+ * Includes all future payments from IBV as well
+ */
+const getAllEmploymentPayDates = (
+  incomeSource?: IncomeSourceType | null,
+  incomeFields?: Record<string, any> | null,
+  ibvResults?: IBVSummary | null
+): string[] => {
+  const payDates: string[] = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Get next pay date from employment info
+  const nextPayDateStr = getNextPayDateFromEmploymentInfo(incomeSource, incomeFields)
+  const nextPayDate = nextPayDateStr ? parseDateValue(nextPayDateStr) : null
+
+  // Get frequency from employment info, default to monthly if we have employment info but no frequency
+  let frequency = getFrequencyFromEmploymentInfo(incomeSource, incomeFields)
+  
+  // If we have employment info but no frequency, default to monthly
+  if (!frequency && incomeSource && incomeFields) {
+    frequency = 'monthly'
+  }
+
+  // Calculate future payment dates based on frequency
+  if (nextPayDate && frequency) {
+    const normalizedNextDate = new Date(nextPayDate)
+    normalizedNextDate.setHours(0, 0, 0, 0)
+
+    // Only proceed if next pay date is in the future
+    if (normalizedNextDate.getTime() >= today.getTime()) {
+      // Generate approximately 12 months worth of payment dates
+      // For monthly: 12 payments
+      // For bi-weekly: ~26 payments (52 weeks / 2)
+      // For weekly: ~52 payments
+      // For twice-monthly: ~24 payments
+      const paymentsPerYear = 12
+      const numberOfPayments = Math.ceil(paymentsPerYear) // Generate 1 year worth
+
+      const isMonthly = frequency === 'monthly'
+      
+      for (let i = 0; i < numberOfPayments; i++) {
+        const paymentDate = isMonthly
+          ? addMonths(normalizedNextDate, i)
+          : addDays(
+              normalizedNextDate,
+              i * frequencyConfig[frequency].daysBetween
+            )
+        
+        // Only include future dates
+        if (paymentDate.getTime() >= today.getTime()) {
+          const isoDate = toIsoDate(paymentDate)
+          if (!payDates.includes(isoDate)) {
+            payDates.push(isoDate)
+          }
+        }
+      }
+    }
+  }
+
+  // Get all future payments from IBV (these take priority as they're actual data)
+  if (ibvResults && Array.isArray(ibvResults.accounts)) {
+    for (const account of ibvResults.accounts) {
+      const incomes = Array.isArray(account?.income) ? account.income : []
+
+      for (const income of incomes) {
+        const futurePayments = Array.isArray(income?.future_payments)
+          ? income.future_payments
+          : []
+
+        for (const futurePayment of futurePayments) {
+          const parsedDate = parseDateValue(futurePayment)
+
+          if (!parsedDate) {
+            continue
+          }
+
+          const normalizedDate = new Date(parsedDate)
+          normalizedDate.setHours(0, 0, 0, 0)
+
+          // Only include future dates
+          if (normalizedDate.getTime() >= today.getTime()) {
+            const isoDate = toIsoDate(normalizedDate)
+            // Avoid duplicates
+            if (!payDates.includes(isoDate)) {
+              payDates.push(isoDate)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Sort and return unique dates
+  return Array.from(new Set(payDates)).sort()
+}
+
+/**
  * Resolve next payment date with priority:
  * 1. Contract terms (payment schedule or effective date)
  * 2. Employment information (next_pay_date or next_deposit_date)
@@ -210,7 +314,10 @@ const resolveNextPaymentDate = (
   }
 
   // Priority 2: Employment information
-  const employmentNextDate = getNextPayDateFromEmploymentInfo(incomeSource, incomeFields)
+  const employmentNextDate = getNextPayDateFromEmploymentInfo(
+    incomeSource,
+    incomeFields
+  )
   if (employmentNextDate) {
     const parsedEmploymentDate = parseDateValue(employmentNextDate)
     if (parsedEmploymentDate) {
@@ -403,7 +510,7 @@ export async function GET(
     const defaultsresponse: ContractDefaultsResponse = {
       success: true,
       defaults: {
-        brokerageFee: contractData?.contract_terms?.fees?.brokerage_fee ?? 200,
+        brokerageFee: contractData?.contract_terms?.fees?.brokerage_fee ?? 250,
         loanAmount,
         account:
           contractData?.bank_account ??
@@ -426,7 +533,12 @@ export async function GET(
             loanAmount + 250.61,
             29,
             numberOfPayments ?? 6
-          )
+          ),
+        employmentPayDates: getAllEmploymentPayDates(
+          loanApplicationData?.income_source,
+          loanApplicationData?.income_fields,
+          loanApplicationData?.ibv_results
+        )
       }
     }
 

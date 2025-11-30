@@ -1,19 +1,82 @@
 import { fetcher } from '@/lib/utils'
-import React from 'react'
+import React, { useState } from 'react'
 import useSWR from 'swr'
-import { LoanPayment } from '@/src/lib/supabase/types'
+import { LoanPayment, LoanContract } from '@/src/lib/supabase/types'
 import { formatCurrency, formatDate } from '../[id]/utils'
 import { Loan } from '@/src/lib/supabase'
+import Select from '@/src/app/[locale]/components/Select'
+import GenerateContractModal from '../../applications/[id]/components/GenerateContractModal'
+import ContractViewer from '../../components/ContractViewer'
+import { GenerateContractPayload } from '@/src/app/types/contract'
 
 interface LoanSummaryProps {
   loan: any
 }
 function LoanSummary({ loan }: LoanSummaryProps) {
   const loanId = loan.id
+  const applicationId = loan.application_id
+  const [openGenerator, setOpenGenerator] = useState(false)
+  const [submittingContract, setSubmittingContract] = useState(false)
+  const [showContractViewer, setShowContractViewer] = useState(false)
+  const [contract, setContract] = useState<LoanContract | null>(null)
+  const [loadingContract, setLoadingContract] = useState(false)
   const { data, error, isLoading } = useSWR<LoanPayment[]>(
     `/api/admin/loans/${loanId}/payments`,
     fetcher
   )
+
+  const handleSubmit = async (payload: GenerateContractPayload) => {
+    try {
+      setSubmittingContract(true)
+      const response = await fetch(
+        `/api/admin/applications/${loan.application_id}/contract/generate?loanId=${loanId}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        }
+      )
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to submit contract')
+      }
+      alert('Contract submitted successfully')
+      setOpenGenerator(false)
+      setSubmittingContract(false)
+    } catch (error) {
+      setSubmittingContract(false)
+      console.error('Error submitting contract:', error)
+    }
+  }
+
+  const handleViewContract = async () => {
+    if (!applicationId) return
+    setLoadingContract(true)
+    try {
+      const response = await fetch(
+        `/api/admin/applications/${applicationId}/contract`
+      )
+      if (!response.ok) {
+        if (response.status === 404) {
+          setContract(null)
+          setShowContractViewer(true)
+          return
+        }
+        const err = await response.json()
+        throw new Error(err.error || 'Failed to fetch contract')
+      }
+      const result = await response.json()
+      setContract(result.contract as LoanContract)
+      setShowContractViewer(true)
+    } catch (e: any) {
+      console.error('Error fetching contract:', e)
+      alert(e.message || 'Failed to fetch contract')
+    } finally {
+      setLoadingContract(false)
+    }
+  }
   if (isLoading) {
     return <div>Loading...</div>
   }
@@ -22,8 +85,33 @@ function LoanSummary({ loan }: LoanSummaryProps) {
   }
   return (
     <div className='space-y-3 p-2'>
-      <LoanSummaryTable loan={loan} />
+      <LoanSummaryTable
+        loan={loan}
+        openGenerator={openGenerator}
+        setOpenGenerator={setOpenGenerator}
+        onViewContract={handleViewContract}
+        loadingContract={loadingContract}
+      />
       <PaymentTable payments={data ?? []} />
+      {openGenerator && (
+        <GenerateContractModal
+          applicationId={loan.application_id}
+          open={openGenerator}
+          loadingContract={submittingContract}
+          onSubmit={handleSubmit}
+          onClose={() => setOpenGenerator(false)}
+        />
+      )}
+      {showContractViewer && applicationId && (
+        <ContractViewer
+          contract={contract}
+          applicationId={applicationId}
+          onClose={() => {
+            setShowContractViewer(false)
+            setContract(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -120,7 +208,22 @@ function PaymentTable({ payments }: { payments: LoanPayment[] }) {
   )
 }
 
-function LoanSummaryTable({ loan }: LoanSummaryProps) {
+function LoanSummaryTable({
+  loan,
+  openGenerator,
+  setOpenGenerator,
+  onViewContract,
+  loadingContract
+}: {
+  loan: any
+  openGenerator: boolean
+  setOpenGenerator: (open: boolean) => void
+  onViewContract: () => void
+  loadingContract: boolean
+}) {
+  const handleGenerateContract = async () => {
+    setOpenGenerator(true)
+  }
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
@@ -167,6 +270,8 @@ function LoanSummaryTable({ loan }: LoanSummaryProps) {
     (contract.contract_status === 'generated' ||
       contract.contract_status === 'draft' ||
       isContractSent)
+
+  const hasContract = contract !== null || loan.crmContractPath !== null
 
   const handleSendContract = async () => {
     if (!contract || !loan.application_id) return
@@ -249,6 +354,46 @@ function LoanSummaryTable({ loan }: LoanSummaryProps) {
                   />
                 </svg>
                 View Contract
+              </button>
+            )}
+            {/* View Contract */}
+            {hasContract && !loan.crmContractPath && (
+              <button
+                onClick={onViewContract}
+                disabled={loadingContract}
+                className='flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
+              >
+                <svg
+                  className='h-3 w-3'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M15 12a3 3 0 11-6 0 3 3 0 016 0z'
+                  />
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'
+                  />
+                </svg>
+                {loadingContract ? 'Loading...' : 'View Contract'}
+              </button>
+            )}
+            {/* Generate contract */}
+            {!loan.crmContractPath && contract.contract_status !== 'signed' && (
+              <button
+                className='flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700'
+                onClick={handleGenerateContract}
+              >
+                {contract.contract_status === 'generated'
+                  ? 'Regenerate Contract'
+                  : 'Generate Contract'}
               </button>
             )}
           </div>

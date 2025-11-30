@@ -176,3 +176,71 @@
 [data-radix-popper-content-wrapper] {
   z-index: 9999 !important;
 }
+
+/* DatePicker Holiday Highlighting */
+.rdp-day_holiday {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  font-weight: 600;
+  position: relative;
+  border: 1px solid #fbbf24 !important;
+}
+
+.rdp-day_holiday:hover {
+  background-color: #fde68a !important;
+  color: #78350f !important;
+  border-color: #f59e0b !important;
+}
+
+.rdp-day_holiday.rdp-day_selected {
+  background-color: #f59e0b !important;
+  color: white !important;
+  border-color: #d97706 !important;
+}
+
+.rdp-day_holiday::before {
+  content: '★';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  font-size: 8px;
+  line-height: 1;
+  color: #f59e0b;
+}
+
+/* DatePicker Employment Pay Date Highlighting */
+.rdp-day_employment-pay-date {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
+  font-weight: 600;
+  position: relative;
+  border: 1px solid #60a5fa !important;
+}
+
+.rdp-day_employment-pay-date:hover {
+  background-color: #bfdbfe !important;
+  color: #1e3a8a !important;
+  border-color: #3b82f6 !important;
+}
+
+.rdp-day_employment-pay-date.rdp-day_selected {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  border-color: #2563eb !important;
+}
+
+.rdp-day_employment-pay-date::after {
+  content: '💰';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  font-size: 8px;
+  line-height: 1;
+}
+
+/* Combined: Employment pay date that is also a holiday */
+.rdp-day_employment-pay-date.rdp-day_holiday {
+  background: linear-gradient(135deg, #dbeafe 50%, #fef3c7 50%) !important;
+  border: 2px solid #3b82f6 !important;
+  border-style: double !important;
+}
