@@ -67,7 +67,17 @@ export async function POST(
 
     const staffId = (staffData as any).id
 
-    const body = await request.json()
+    // Parse request body, default to empty object if body is empty
+    let body: { method?: string } = {}
+    try {
+      const text = await request.text()
+      if (text) {
+        body = JSON.parse(text)
+      }
+    } catch (error) {
+      // If body is empty or invalid JSON, use defaults
+      console.warn('[POST /api/admin/applications/:id/contract/send] Empty or invalid request body, using defaults')
+    }
     const { method = 'email' } = body
 
     if (!['email', 'sms', 'portal'].includes(method)) {
