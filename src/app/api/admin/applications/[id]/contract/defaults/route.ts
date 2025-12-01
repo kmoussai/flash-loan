@@ -179,12 +179,15 @@ const getAllEmploymentPayDates = (
   today.setHours(0, 0, 0, 0)
 
   // Get next pay date from employment info
-  const nextPayDateStr = getNextPayDateFromEmploymentInfo(incomeSource, incomeFields)
+  const nextPayDateStr = getNextPayDateFromEmploymentInfo(
+    incomeSource,
+    incomeFields
+  )
   const nextPayDate = nextPayDateStr ? parseDateValue(nextPayDateStr) : null
 
   // Get frequency from employment info, default to monthly if we have employment info but no frequency
   let frequency = getFrequencyFromEmploymentInfo(incomeSource, incomeFields)
-  
+
   // If we have employment info but no frequency, default to monthly
   if (!frequency && incomeSource && incomeFields) {
     frequency = 'monthly'
@@ -206,7 +209,7 @@ const getAllEmploymentPayDates = (
       const numberOfPayments = Math.ceil(paymentsPerYear) // Generate 1 year worth
 
       const isMonthly = frequency === 'monthly'
-      
+
       for (let i = 0; i < numberOfPayments; i++) {
         const paymentDate = isMonthly
           ? addMonths(normalizedNextDate, i)
@@ -214,7 +217,7 @@ const getAllEmploymentPayDates = (
               normalizedNextDate,
               i * frequencyConfig[frequency].daysBetween
             )
-        
+
         // Only include future dates
         if (paymentDate.getTime() >= today.getTime()) {
           const isoDate = toIsoDate(paymentDate)
@@ -510,7 +513,9 @@ export async function GET(
     const defaultsresponse: ContractDefaultsResponse = {
       success: true,
       defaults: {
-        brokerageFee: contractData?.contract_terms?.fees?.brokerage_fee ?? 250,
+        brokerageFee:
+          contractData?.contract_terms?.fees?.brokerage_fee ??
+          getBrokerageFee(loanAmount),
         loanAmount,
         account:
           contractData?.bank_account ??
@@ -550,4 +555,7 @@ export async function GET(
       { status: 500 }
     )
   }
+}
+function getBrokerageFee(loanAmount: number): number {
+  return Math.floor(loanAmount * 0.68)
 }

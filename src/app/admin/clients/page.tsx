@@ -5,6 +5,19 @@ import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
 import type { User } from '@/src/lib/supabase/types'
+import {
+  IconCheckCircle,
+  IconClose,
+  IconDatabase,
+  IconEye,
+  IconKey,
+  IconRefresh,
+  IconSearch,
+  IconShieldCheck,
+  IconSpinner,
+  IconTempPassword,
+  IconXCircle
+} from '@/src/app/components/icons'
 
 interface PaginationInfo {
   page: number
@@ -37,6 +50,8 @@ export default function ClientsPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [showCrmModal, setShowCrmModal] = useState(false)
   const [selectedCrmData, setSelectedCrmData] = useState<Record<string, any> | null>(null)
+  const [sendingTempPassword, setSendingTempPassword] = useState<string | null>(null)
+  const [tempPasswordMessage, setTempPasswordMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null)
 
   // Debounce search input
   useEffect(() => {
@@ -169,6 +184,50 @@ export default function ClientsPage() {
     })
   }
 
+  const handleSendTempPassword = async (clientId: string, clientEmail: string) => {
+    if (!clientEmail) {
+      setTempPasswordMessage({
+        type: 'error',
+        message: 'Client email is required'
+      })
+      setTimeout(() => setTempPasswordMessage(null), 5000)
+      return
+    }
+
+    setSendingTempPassword(clientId)
+    setTempPasswordMessage(null)
+
+    try {
+      const response = await fetch(`/api/admin/clients/${clientId}/send-temp-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send temporary password')
+      }
+
+      setTempPasswordMessage({
+        type: 'success',
+        message: `Temporary password sent successfully to ${clientEmail}`
+      })
+      setTimeout(() => setTempPasswordMessage(null), 5000)
+    } catch (err: any) {
+      console.error('Error sending temp password:', err)
+      setTempPasswordMessage({
+        type: 'error',
+        message: err.message || 'Failed to send temporary password'
+      })
+      setTimeout(() => setTempPasswordMessage(null), 5000)
+    } finally {
+      setSendingTempPassword(null)
+    }
+  }
+
   return (
     <AdminDashboardLayout>
       <div className='space-y-4'>
@@ -188,14 +247,7 @@ export default function ClientsPage() {
               disabled={loading}
               className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
             >
-              <svg 
-                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} 
-                fill='none' 
-                viewBox='0 0 24 24' 
-                stroke='currentColor'
-              >
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-              </svg>
+              <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               {loading ? 'Refreshing...' : 'Refresh'}
             </button>
             <button
@@ -258,6 +310,32 @@ export default function ClientsPage() {
           </div>
         </div>
 
+        {/* Temp Password Message */}
+        {tempPasswordMessage && (
+          <div className={`rounded-lg p-4 shadow-sm ${
+            tempPasswordMessage.type === 'success' 
+              ? 'bg-green-50 text-green-800 border border-green-200' 
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            <div className='flex items-center justify-between'>
+              <div className='flex items-center gap-2'>
+                {tempPasswordMessage.type === 'success' ? (
+                  <IconCheckCircle className='h-5 w-5' />
+                ) : (
+                  <IconXCircle className='h-5 w-5' />
+                )}
+                <span className='text-sm font-medium'>{tempPasswordMessage.message}</span>
+              </div>
+              <button
+                onClick={() => setTempPasswordMessage(null)}
+                className='text-gray-400 hover:text-gray-600'
+              >
+                <IconClose className='h-5 w-5' />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Search and Filters */}
         <div className='rounded-lg bg-white p-4 shadow-sm'>
           <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
@@ -265,19 +343,7 @@ export default function ClientsPage() {
               {/* Search Input */}
               <div className='relative flex-1 max-w-md'>
                 <div className='pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3'>
-                  <svg
-                    className='h-5 w-5 text-gray-400'
-                    fill='none'
-                    viewBox='0 0 24 24'
-                    stroke='currentColor'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'
-                    />
-                  </svg>
+                  <IconSearch className='h-5 w-5 text-gray-400' />
                 </div>
                 <input
                   type='text'
@@ -503,27 +569,64 @@ export default function ClientsPage() {
                         </td>
                         <td className='whitespace-nowrap px-4 py-2 text-sm'>
                           <div className='flex items-center gap-2'>
-                            <button 
-                              className='text-blue-600 hover:text-blue-800'
+                            {/* View client */}
+                            <button
+                              type='button'
+                              className='inline-flex items-center justify-center rounded-full p-1.5 text-blue-600 hover:bg-blue-50 hover:text-blue-800'
                               onClick={() => router.push(`/admin/clients/${client.id}`)}
+                              title='View client details'
+                              aria-label='View client details'
                             >
-                              View
+                              <IconEye className='h-4 w-4' />
                             </button>
+
+                            {/* CRM data */}
                             {client.crm_original_data && (
                               <button
-                                className='text-purple-600 hover:text-purple-800'
+                                type='button'
+                                className='inline-flex items-center justify-center rounded-full p-1.5 text-purple-600 hover:bg-purple-50 hover:text-purple-800'
                                 onClick={() => {
                                   setSelectedCrmData(client.crm_original_data)
                                   setShowCrmModal(true)
                                 }}
-                                title='View CRM Original Data'
+                                title='View CRM original data'
+                                aria-label='View CRM original data'
                               >
-                                CRM Data
+                                <IconDatabase className='h-4 w-4' />
                               </button>
                             )}
-                            <button className='text-green-600 hover:text-green-800'>
-                              Verify KYC
+
+                            {/* Send temp password */}
+                            <button
+                              type='button'
+                              className='inline-flex items-center justify-center rounded-full p-1.5 text-orange-600 hover:bg-orange-50 hover:text-orange-800 disabled:opacity-50 disabled:cursor-not-allowed'
+                              onClick={() =>
+                                handleSendTempPassword(client.id, client.email || '')
+                              }
+                              disabled={sendingTempPassword === client.id || !client.email}
+                              title={
+                                client.email
+                                  ? 'Send temporary password'
+                                  : 'Client email required to send temporary password'
+                              }
+                              aria-label='Send temporary password'
+                            >
+                              {sendingTempPassword === client.id ? (
+                                <IconSpinner className='h-4 w-4 animate-spin' />
+                              ) : (
+                                <IconTempPassword className='h-4 w-4' />
+                              )}
                             </button>
+
+                            {/* Verify KYC (placeholder action) */}
+                            {/* <button
+                              type='button'
+                              className='inline-flex items-center justify-center rounded-full p-1.5 text-green-600 hover:bg-green-50 hover:text-green-800'
+                              title='Verify KYC'
+                              aria-label='Verify KYC'
+                            >
+                              <IconShieldCheck className='h-4 w-4' />
+                            </button> */}
                           </div>
                         </td>
                       </tr>
@@ -607,10 +710,10 @@ export default function ClientsPage() {
                       setSelectedCrmData(null)
                     }}
                     className='text-gray-400 hover:text-gray-600 transition-colors'
+                    title='Close'
+                    aria-label='Close'
                   >
-                    <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
-                    </svg>
+                    <IconClose className='h-6 w-6' />
                   </button>
                 </div>
               </div>

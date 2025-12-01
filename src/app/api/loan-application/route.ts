@@ -15,8 +15,7 @@ import {
 } from '@/src/lib/supabase/types'
 import { assertFrequency } from '@/src/lib/utils/frequency'
 import { generateReadablePassword } from '@/src/lib/utils/password'
-import { generateInvitationEmail } from '@/src/lib/email/templates/invitation'
-import { sendEmail } from '@/src/lib/email/smtp'
+import { sendInvitationEmail } from '@/src/lib/utils/temp-password'
 import { validateMinimumAge } from '@/src/lib/utils/age'
 
 // ===========================
@@ -467,24 +466,18 @@ export async function POST(request: NextRequest) {
         // Wait for trigger to create public.users record
         await new Promise(resolve => setTimeout(resolve, 500))
 
-        // Send invitation email with temporary password
+        // Send invitation email with temporary password using reusable utility
         try {
           const preferredLanguage = (
             body.preferredLanguage === 'fr' ? 'fr' : 'en'
           ) as 'en' | 'fr'
-          const { subject, html, text } = generateInvitationEmail({
+          
+          const emailResult = await sendInvitationEmail({
+            email: body.email,
             firstName: body.firstName,
             lastName: body.lastName,
-            email: body.email,
             temporaryPassword: tempPassword,
             preferredLanguage
-          })
-
-          const emailResult = await sendEmail({
-            to: body.email,
-            subject,
-            html,
-            text
           })
 
           if (emailResult.success) {

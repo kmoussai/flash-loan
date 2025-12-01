@@ -21,6 +21,7 @@ export type ContractTerms = {
     brokerage_fee?: number
     origination_fee?: number
     processing_fee?: number
+    deferral_fee?: number
     other_fees?: number
   }
   payment_schedule?: Array<{

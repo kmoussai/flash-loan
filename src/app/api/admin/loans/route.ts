@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
           contract_document_path,
           sent_at,
           sent_method,
-          client_signed_at
+          client_signed_at,
+          contract_terms
         )
 
       `, { count: 'exact' })

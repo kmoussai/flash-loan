@@ -444,6 +444,9 @@ export interface LoanPayment {
   created_at: string
   // Payment sequence
   payment_number: number | null
+  // Payment breakdown
+  interest: number | null
+  principal: number | null
   // Accept Pay fields
   accept_pay_customer_id: number | null
   accept_pay_transaction_id: number | null
@@ -850,6 +853,8 @@ export interface LoanPaymentInsert {
   method?: string | null
   status?: PaymentStatus
   payment_number?: number | null
+  interest?: number | null
+  principal?: number | null
   accept_pay_customer_id?: number | null
   accept_pay_transaction_id?: number | null
   process_date?: string | null
