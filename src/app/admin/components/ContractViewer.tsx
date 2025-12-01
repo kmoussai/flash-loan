@@ -358,6 +358,9 @@ export default function ContractViewer({
     .signature-line {
       flex: 1;
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
     }
     .signature-line .line {
       display: block;
@@ -445,12 +448,10 @@ export default function ContractViewer({
           <span class="line"></span>
           <div>Client Signature</div>
           ${signatureDateClient ? `<div>Signed on ${signatureDateClient}</div>` : ''}
-          ${signatureMethod ? `<div>Method: ${signatureMethod}</div>` : ''}
-          ${signatureIp ? `<div>IP: ${signatureIp}</div>` : ''}
         </div>
-    <div class="signature-line">
+        <div class="signature-line">
           <div>
-              <img src="${signatureImage}" alt="" class="" />
+            <img src="${signatureImage}" alt="" class="" />
           </div>
           <span class="line"></span>
           <div>Representative Signature</div>

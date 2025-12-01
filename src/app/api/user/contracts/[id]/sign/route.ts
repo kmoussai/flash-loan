@@ -301,6 +301,8 @@ export async function POST(
                 amount: Number(item.amount) || 0,
                 payment_date: paymentDate,
                 payment_number: index + 1,
+                interest: item.interest !== undefined ? Number(item.interest) : null,
+                principal: item.principal !== undefined ? Number(item.principal) : null,
                 status: 'pending' as const,
                 method: null
               }
