@@ -66,7 +66,8 @@ export async function POST(
       )
     }
 
-    const currentRemainingBalance = Number(loan.remaining_balance || 0)
+    const typedLoan = loan as { id: string; remaining_balance: number | null; status: string }
+    const currentRemainingBalance = Number(typedLoan.remaining_balance || 0)
 
     // Get the max payment number for this loan
     const { data: existingPayments } = await supabase
@@ -77,7 +78,7 @@ export async function POST(
       .limit(1)
 
     const maxPaymentNumber = existingPayments && existingPayments.length > 0
-      ? (existingPayments[0].payment_number || 0)
+      ? ((existingPayments[0] as { payment_number: number | null })?.payment_number || 0)
       : 0
 
     // Calculate new remaining balance (reduce by rebate amount)
@@ -109,8 +110,8 @@ export async function POST(
 
     // Use a transaction-like approach: update loan and create payment
     // First, update the loan's remaining balance (and status if needed)
-    const { error: updateLoanError } = await supabase
-      .from('loans')
+    const { error: updateLoanError } = await (supabase
+      .from('loans') as any)
       .update(loanUpdate)
       .eq('id', loanId)
 
@@ -132,11 +133,11 @@ export async function POST(
     if (paymentError) {
       console.error('Error creating rebate payment:', paymentError)
       // Try to revert the loan update
-      await supabase
-        .from('loans')
+      await (supabase
+        .from('loans') as any)
         .update({ 
           remaining_balance: currentRemainingBalance,
-          status: loan.status // Revert status as well
+          status: typedLoan.status // Revert status as well
         })
         .eq('id', loanId)
       
@@ -154,7 +155,7 @@ export async function POST(
       success: true,
       payment: newPayment,
       remaining_balance: newRemainingBalance,
-      loan_status: shouldMarkAsCompleted ? 'completed' : loan.status,
+      loan_status: shouldMarkAsCompleted ? 'completed' : typedLoan.status,
       message: successMessage
     })
   } catch (error: any) {

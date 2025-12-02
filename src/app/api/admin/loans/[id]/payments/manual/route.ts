@@ -66,7 +66,7 @@ export async function POST(
       )
     }
 
-    const currentRemainingBalance = Number(loan.remaining_balance || 0)
+    const currentRemainingBalance = Number((loan as { id: string; remaining_balance: number | null }).remaining_balance || 0)
 
     // Check if payment amount exceeds remaining balance
     if (paymentAmount > currentRemainingBalance) {
@@ -85,7 +85,7 @@ export async function POST(
       .limit(1)
 
     const maxPaymentNumber = existingPayments && existingPayments.length > 0
-      ? (existingPayments[0].payment_number || 0)
+      ? ((existingPayments[0] as { payment_number: number | null })?.payment_number || 0)
       : 0
 
     // Calculate new remaining balance
@@ -104,8 +104,8 @@ export async function POST(
 
     // Use a transaction-like approach: update loan and create payment
     // First, update the loan's remaining balance
-    const { error: updateLoanError } = await supabase
-      .from('loans')
+    const { error: updateLoanError } = await (supabase
+      .from('loans') as any)
       .update({ remaining_balance: newRemainingBalance })
       .eq('id', loanId)
 
@@ -127,8 +127,8 @@ export async function POST(
     if (paymentError) {
       console.error('Error creating payment:', paymentError)
       // Try to revert the loan update
-      await supabase
-        .from('loans')
+      await (supabase
+        .from('loans') as any)
         .update({ remaining_balance: currentRemainingBalance })
         .eq('id', loanId)
       
