@@ -9,6 +9,7 @@ import ContractViewer from '../../components/ContractViewer'
 import { GenerateContractPayload } from '@/src/app/types/contract'
 import ManualPaymentModal from './ManualPaymentModal'
 import RebatePaymentModal from './RebatePaymentModal'
+import ModifyLoanModal from './ModifyLoanModal'
 import PaymentTable from './PaymentTable'
 import LoanSummaryTable from './LoanSummaryTable'
 
@@ -27,6 +28,7 @@ export default function LoanSummary({ loan, onLoanUpdate }: LoanSummaryProps) {
   const [loadingContract, setLoadingContract] = useState(false)
   const [showManualPaymentModal, setShowManualPaymentModal] = useState(false)
   const [showRebatePaymentModal, setShowRebatePaymentModal] = useState(false)
+  const [showModifyLoanModal, setShowModifyLoanModal] = useState(false)
   const { data, error, isLoading, mutate } = useSWR<LoanPayment[]>(
     `/api/admin/loans/${loanId}/payments`,
     fetcher
@@ -121,6 +123,7 @@ export default function LoanSummary({ loan, onLoanUpdate }: LoanSummaryProps) {
         setOpenGenerator={setOpenGenerator}
         onViewContract={handleViewContract}
         loadingContract={loadingContract}
+        onModifyLoan={() => setShowModifyLoanModal(true)}
       />
       <PaymentTable 
         payments={data ?? []} 
@@ -160,6 +163,20 @@ export default function LoanSummary({ loan, onLoanUpdate }: LoanSummaryProps) {
             }
           }}
           remainingBalance={calculatedRemainingBalance}
+        />
+      )}
+      {showModifyLoanModal && (
+        <ModifyLoanModal
+          loanId={loanId}
+          open={showModifyLoanModal}
+          onClose={() => setShowModifyLoanModal(false)}
+          onSuccess={async () => {
+            await mutate()
+            if (onLoanUpdate) {
+              await onLoanUpdate()
+            }
+          }}
+          loan={loan}
         />
       )}
       {openGenerator && (

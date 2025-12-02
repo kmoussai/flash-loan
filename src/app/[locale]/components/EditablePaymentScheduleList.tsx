@@ -172,10 +172,20 @@ const EditablePaymentScheduleList: React.FC<EditablePaymentScheduleListProps> = 
       className={`border-border/40 rounded-lg border bg-background ${className}`}
     >
       <div className='overflow-hidden rounded-lg text-sm'>
-        <div className='border-border/40 bg-background-secondary/60 relative z-0 grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-4 border-b px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary'>
+        <div className={`border-border/40 bg-background-secondary/60 relative z-0 grid items-center gap-x-4 border-b px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary ${
+          schedule.some(item => item.interest !== undefined || item.principal !== undefined)
+            ? 'grid-cols-[auto_1fr_auto_auto_auto_1fr]'
+            : 'grid-cols-[auto_1fr_auto_1fr]'
+        }`}>
           <span>#</span>
           <span>Due Date</span>
           <span className='text-right'>Amount</span>
+          {schedule.some(item => item.interest !== undefined || item.principal !== undefined) && (
+            <>
+              <span className='text-right'>Interest</span>
+              <span className='text-right'>Principal</span>
+            </>
+          )}
           <span className='text-right'>Actions</span>
         </div>
         <div className='divide-border/30 relative max-h-[300px] divide-y overflow-y-auto'>
@@ -186,8 +196,12 @@ const EditablePaymentScheduleList: React.FC<EditablePaymentScheduleListProps> = 
             return (
               <div
                 key={key}
-                className={`grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-4 px-4 py-3 hover:bg-gray-50 ${
+                className={`grid items-center gap-x-4 px-4 py-3 hover:bg-gray-50 ${
                   isEditing ? 'bg-blue-50' : ''
+                } ${
+                  item.interest !== undefined || item.principal !== undefined
+                    ? 'grid-cols-[auto_1fr_auto_auto_auto_1fr]'
+                    : 'grid-cols-[auto_1fr_auto_1fr]'
                 }`}
               >
                 <span className='text-xs font-semibold text-text-secondary'>
@@ -241,6 +255,16 @@ const EditablePaymentScheduleList: React.FC<EditablePaymentScheduleListProps> = 
                 <span className='text-right text-sm font-semibold text-primary'>
                   {formatCurrency(item.amount)}
                 </span>
+                {(item.interest !== undefined || item.principal !== undefined) && (
+                  <>
+                    <span className='text-right text-xs text-text-secondary'>
+                      {item.interest !== undefined ? formatCurrency(item.interest) : '—'}
+                    </span>
+                    <span className='text-right text-xs text-text-secondary'>
+                      {item.principal !== undefined ? formatCurrency(item.principal) : '—'}
+                    </span>
+                  </>
+                )}
                 <div className='flex justify-end'>
                   {!isEditing && (
                     <button
