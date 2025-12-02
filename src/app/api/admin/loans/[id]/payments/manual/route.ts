@@ -23,7 +23,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { payment_date, amount, notes } = body
+    const { payment_date, amount, notes, mark_loan_as_paid } = body
 
     // Validation
     if (!payment_date) {
@@ -52,10 +52,10 @@ export async function POST(
 
     const supabase = await createServerSupabaseAdminClient()
 
-    // Get the loan to check remaining balance and get payment number
+    // Get the loan to check remaining balance, status, and get payment number
     const { data: loan, error: loanError } = await supabase
       .from('loans')
-      .select('id, remaining_balance')
+      .select('id, remaining_balance, status')
       .eq('id', loanId)
       .single()
 
@@ -66,7 +66,8 @@ export async function POST(
       )
     }
 
-    const currentRemainingBalance = Number((loan as { id: string; remaining_balance: number | null }).remaining_balance || 0)
+    const typedLoan = loan as { id: string; remaining_balance: number | null; status: string }
+    const currentRemainingBalance = Number(typedLoan.remaining_balance || 0)
 
     // Check if payment amount exceeds remaining balance
     if (paymentAmount > currentRemainingBalance) {
@@ -91,6 +92,9 @@ export async function POST(
     // Calculate new remaining balance
     const newRemainingBalance = Math.max(0, currentRemainingBalance - paymentAmount)
 
+    // Determine if loan should be marked as completed
+    const shouldMarkAsCompleted = mark_loan_as_paid === true && newRemainingBalance === 0
+
     // Create the manual payment
     const paymentInsert: LoanPaymentInsert = {
       loan_id: loanId,
@@ -102,11 +106,21 @@ export async function POST(
       notes: notes || `Manual payment created on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`
     }
 
+    // Prepare loan update
+    const loanUpdate: { remaining_balance: number; status?: string } = {
+      remaining_balance: newRemainingBalance
+    }
+
+    // Mark loan as completed if requested and balance is 0
+    if (shouldMarkAsCompleted) {
+      loanUpdate.status = 'completed'
+    }
+
     // Use a transaction-like approach: update loan and create payment
-    // First, update the loan's remaining balance
+    // First, update the loan's remaining balance (and status if needed)
     const { error: updateLoanError } = await (supabase
       .from('loans') as any)
-      .update({ remaining_balance: newRemainingBalance })
+      .update(loanUpdate)
       .eq('id', loanId)
 
     if (updateLoanError) {
@@ -129,7 +143,10 @@ export async function POST(
       // Try to revert the loan update
       await (supabase
         .from('loans') as any)
-        .update({ remaining_balance: currentRemainingBalance })
+        .update({ 
+          remaining_balance: currentRemainingBalance,
+          status: typedLoan.status // Revert status as well
+        })
         .eq('id', loanId)
       
       return NextResponse.json(
@@ -138,11 +155,16 @@ export async function POST(
       )
     }
 
+    const successMessage = shouldMarkAsCompleted
+      ? `Manual payment of $${paymentAmount.toFixed(2)} created successfully. Loan marked as completed.`
+      : `Manual payment of $${paymentAmount.toFixed(2)} created successfully. Remaining balance: $${newRemainingBalance.toFixed(2)}`
+
     return NextResponse.json({
       success: true,
       payment: newPayment,
       remaining_balance: newRemainingBalance,
-      message: `Manual payment of $${paymentAmount.toFixed(2)} created successfully. Remaining balance: $${newRemainingBalance.toFixed(2)}`
+      loan_status: shouldMarkAsCompleted ? 'completed' : typedLoan.status,
+      message: successMessage
     })
   } catch (error: any) {
     console.error('Error creating manual payment:', error)

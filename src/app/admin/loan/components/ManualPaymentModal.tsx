@@ -23,8 +23,15 @@ export default function ManualPaymentModal({
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [amount, setAmount] = useState<string>('')
   const [notes, setNotes] = useState<string>('')
+  const [markAsPaid, setMarkAsPaid] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Calculate if payment would bring balance to 0
+  const wouldBalanceBeZero = remainingBalance !== undefined && 
+    amount && 
+    !isNaN(Number(amount)) && 
+    Number(amount) >= remainingBalance
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +64,8 @@ export default function ManualPaymentModal({
         body: JSON.stringify({
           payment_date: paymentDate,
           amount: Number(amount),
-          notes: notes.trim() || undefined
+          notes: notes.trim() || undefined,
+          mark_loan_as_paid: markAsPaid
         })
       })
 
@@ -70,6 +78,7 @@ export default function ManualPaymentModal({
       setPaymentDate(new Date().toISOString().split('T')[0])
       setAmount('')
       setNotes('')
+      setMarkAsPaid(false)
       setError(null)
 
       // Refresh payment list
@@ -87,6 +96,7 @@ export default function ManualPaymentModal({
       setPaymentDate(new Date().toISOString().split('T')[0])
       setAmount('')
       setNotes('')
+      setMarkAsPaid(false)
       setError(null)
       onClose()
     }
@@ -208,6 +218,28 @@ export default function ManualPaymentModal({
                 className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-primary focus:outline-none focus:ring-2'
               />
             </div>
+
+            {wouldBalanceBeZero && (
+              <div className='rounded-lg border border-green-200 bg-green-50 p-4'>
+                <label className='flex cursor-pointer items-start gap-3'>
+                  <input
+                    type='checkbox'
+                    checked={markAsPaid}
+                    onChange={e => setMarkAsPaid(e.target.checked)}
+                    disabled={isSubmitting}
+                    className='mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500'
+                  />
+                  <div className='flex-1'>
+                    <div className='text-sm font-medium text-green-900'>
+                      Mark Loan as Paid/Completed
+                    </div>
+                    <div className='mt-1 text-xs text-green-700'>
+                      This payment will bring the remaining balance to $0.00. Check this box to mark the loan as completed.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
