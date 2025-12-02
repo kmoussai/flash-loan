@@ -8,6 +8,7 @@ interface LoanSummaryTableProps {
   setOpenGenerator: (open: boolean) => void
   onViewContract: () => void
   loadingContract: boolean
+  onModifyLoan?: () => void
 }
 
 export default function LoanSummaryTable({
@@ -15,7 +16,8 @@ export default function LoanSummaryTable({
   openGenerator,
   setOpenGenerator,
   onViewContract,
-  loadingContract
+  loadingContract,
+  onModifyLoan
 }: LoanSummaryTableProps) {
   const handleGenerateContract = async () => {
     setOpenGenerator(true)
@@ -119,6 +121,28 @@ export default function LoanSummaryTable({
             Loan Summary
           </h3>
           <div className='flex items-center gap-2'>
+            {onModifyLoan && loan.status !== 'completed' && (
+              <button
+                onClick={onModifyLoan}
+                className='flex items-center gap-1.5 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-purple-700'
+                title='Modify loan payment schedule'
+              >
+                <svg
+                  className='h-3 w-3'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
+                  />
+                </svg>
+                Modify Loan
+              </button>
+            )}
             {canSendContract && contract?.contract_status !== 'signed' && (
               <button
                 onClick={handleSendContract}

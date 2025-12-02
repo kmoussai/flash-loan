@@ -87,3 +87,64 @@ export function calculatePaymentAmount(
   // Round to 2 decimal places and return
   return Number(payment.toFixed(2))
 }
+
+/**
+ * Calculate interest and principal breakdown for each payment in an amortization schedule
+ * 
+ * @param totalBalance - Starting balance (principal + fees)
+ * @param paymentAmount - Fixed payment amount per period
+ * @param interestRate - Annual interest rate as a percentage (e.g., 29 for 29%)
+ * @param paymentFrequency - Payment frequency (weekly, bi-weekly, twice-monthly, monthly)
+ * @param numberOfPayments - Total number of payments
+ * @returns Array of objects with interest and principal for each payment
+ * 
+ * @example
+ * calculatePaymentBreakdown(500.61, 175.00, 29, 'monthly', 3)
+ * // Returns: [{ interest: 12.09, principal: 162.91 }, { interest: 8.18, principal: 166.82 }, ...]
+ */
+export function calculatePaymentBreakdown(
+  totalBalance: number,
+  paymentAmount: number,
+  interestRate: number,
+  paymentFrequency: PaymentFrequency,
+  numberOfPayments: number
+) {
+  const breakdown = []
+
+  const paymentsPerYearMap = {
+    weekly: 52,
+    'bi-weekly': 26,
+    'twice-monthly': 24,
+    monthly: 12
+  }
+
+  const paymentsPerYear = paymentsPerYearMap[paymentFrequency]
+  const periodicRate = interestRate / 100 / paymentsPerYear
+
+  let remaining = totalBalance
+
+  for (let i = 0; i < numberOfPayments; i++) {
+    const interest = remaining * periodicRate
+
+    // Prevent negative amortization
+    const principal = Math.max(0, paymentAmount - interest)
+
+    // Last payment: pay off the remaining balance fully
+    const actualPrincipal =
+      i === numberOfPayments - 1 ? remaining : principal
+
+    const actualInterest =
+      i === numberOfPayments - 1 ? interest : interest
+
+    remaining = remaining - actualPrincipal
+
+    breakdown.push({
+      interest: Number(actualInterest.toFixed(2)),
+      principal: Number(actualPrincipal.toFixed(2)),
+      remainingBalance: Number(remaining.toFixed(2))
+    })
+  }
+
+  return breakdown
+}
+

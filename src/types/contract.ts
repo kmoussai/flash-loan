@@ -79,6 +79,7 @@ export type LoanContract = {
 }
 
 export type PayementScheduleItem = {
+  remainingBalance?: number
   due_date: string
   amount: number
   principal?: number
