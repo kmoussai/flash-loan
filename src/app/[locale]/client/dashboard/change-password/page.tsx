@@ -101,12 +101,27 @@ export default function ChangePasswordPage() {
         return
       }
 
+      // Re-authenticate the user with the new password to ensure a fresh session
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: newPassword
+      })
+
+      if (reauthError) {
+        setError(
+          t('Authentication_Error') ||
+            'Password changed, but there was an issue updating your session. Please sign in again with your new password.'
+        )
+        setLoading(false)
+        return
+      }
+
       setSuccess(true)
       setLoading(false)
 
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
-        router.push('/client/dashboard')
+        router.replace('/client/dashboard')
         router.refresh()
       }, 2000)
     } catch (err: any) {
