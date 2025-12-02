@@ -549,7 +549,7 @@ export default function LoansPage() {
                       {selectedLoanId === loan.id && (
                         <tr>
                           <td colSpan={10}>
-                            <LoanSummary loan={l} />
+                            <LoanSummary loan={l} onLoanUpdate={fetchLoans} />
                           </td>
                         </tr>
                       )}

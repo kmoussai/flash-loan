@@ -12,11 +12,14 @@ import { IconEdit, IconClock } from '@/src/app/components/icons'
 import DatePicker from '@/src/app/[locale]/components/DatePicker'
 import { getCanadianHolidays } from '@/src/lib/utils/date'
 import { ContractDefaultsResponse } from '@/src/types'
+import ManualPaymentModal from './ManualPaymentModal'
+import RebatePaymentModal from './RebatePaymentModal'
 
 interface LoanSummaryProps {
   loan: any
+  onLoanUpdate?: () => Promise<void> | void
 }
-function LoanSummary({ loan }: LoanSummaryProps) {
+function LoanSummary({ loan, onLoanUpdate }: LoanSummaryProps) {
   const loanId = loan.id
   const applicationId = loan.application_id
   const [openGenerator, setOpenGenerator] = useState(false)
@@ -24,6 +27,8 @@ function LoanSummary({ loan }: LoanSummaryProps) {
   const [showContractViewer, setShowContractViewer] = useState(false)
   const [contract, setContract] = useState<LoanContract | null>(null)
   const [loadingContract, setLoadingContract] = useState(false)
+  const [showManualPaymentModal, setShowManualPaymentModal] = useState(false)
+  const [showRebatePaymentModal, setShowRebatePaymentModal] = useState(false)
   const { data, error, isLoading, mutate } = useSWR<LoanPayment[]>(
     `/api/admin/loans/${loanId}/payments`,
     fetcher
@@ -82,7 +87,13 @@ function LoanSummary({ loan }: LoanSummaryProps) {
     }
   }
   if (isLoading) {
-    return <div>Loading...</div>
+    return (
+      <div className='flex min-h-[200px] items-center justify-center'>
+        <div className='text-center'>
+          <div className='mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent'></div>
+        </div>
+      </div>
+    )
   }
   if (error) {
     return <div>Error: {error.message}</div>
@@ -101,8 +112,41 @@ function LoanSummary({ loan }: LoanSummaryProps) {
         loanId={loanId} 
         applicationId={applicationId}
         loan={loan}
-        onPaymentUpdate={mutate} 
+        onPaymentUpdate={mutate}
+        onAddManualPayment={() => setShowManualPaymentModal(true)}
+        onAddRebatePayment={() => setShowRebatePaymentModal(true)}
+        onLoanUpdate={onLoanUpdate}
       />
+      {showManualPaymentModal && (
+        <ManualPaymentModal
+          loanId={loanId}
+          applicationId={applicationId}
+          open={showManualPaymentModal}
+          onClose={() => setShowManualPaymentModal(false)}
+          onSuccess={async () => {
+            await mutate()
+            if (onLoanUpdate) {
+              await onLoanUpdate()
+            }
+          }}
+          remainingBalance={loan.remaining_balance}
+        />
+      )}
+      {showRebatePaymentModal && (
+        <RebatePaymentModal
+          loanId={loanId}
+          applicationId={applicationId}
+          open={showRebatePaymentModal}
+          onClose={() => setShowRebatePaymentModal(false)}
+          onSuccess={async () => {
+            await mutate()
+            if (onLoanUpdate) {
+              await onLoanUpdate()
+            }
+          }}
+          remainingBalance={loan.remaining_balance}
+        />
+      )}
       {openGenerator && (
         <GenerateContractModal
           applicationId={loan.application_id}
@@ -133,13 +177,19 @@ function PaymentTable({
   loanId,
   applicationId,
   loan,
-  onPaymentUpdate
+  onPaymentUpdate,
+  onAddManualPayment,
+  onLoanUpdate,
+  onAddRebatePayment
 }: {
   payments: LoanPayment[]
   loanId: string
   applicationId?: string
   loan?: any
   onPaymentUpdate: () => Promise<any>
+  onAddManualPayment?: () => void
+  onLoanUpdate?: () => Promise<void> | void
+  onAddRebatePayment?: () => void
 }) {
   const [editingPayment, setEditingPayment] = useState<LoanPayment | null>(null)
   const [editAmount, setEditAmount] = useState<string>('')
@@ -147,8 +197,7 @@ function PaymentTable({
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deferringPayment, setDeferringPayment] = useState<LoanPayment | null>(null)
-  const [deferFeeOption, setDeferFeeOption] = useState<'immediate' | 'end' | null>(null)
-  const [deferNewDate, setDeferNewDate] = useState<string>('')
+  const [deferFeeOption, setDeferFeeOption] = useState<'none' | 'end' | null>(null)
   const [deferFeeAmount, setDeferFeeAmount] = useState<string>('50')
   const [isDeferring, setIsDeferring] = useState(false)
   const [deferError, setDeferError] = useState<string | null>(null)
@@ -293,15 +342,11 @@ function PaymentTable({
                 50
     setDeferFeeAmount(fee.toString())
     setDeferError(null)
-    // Set default new date to 7 days from current payment date
-    const currentDate = new Date(payment.payment_date)
-    currentDate.setDate(currentDate.getDate() + 7)
-    setDeferNewDate(currentDate.toISOString().split('T')[0])
   }
 
   const handleDeferSave = async () => {
-    if (!deferringPayment || !deferFeeOption || !deferNewDate) {
-      setDeferError('Please select fee option and new payment date')
+    if (!deferringPayment || !deferFeeOption) {
+      setDeferError('Please select a fee option')
       return
     }
 
@@ -309,8 +354,8 @@ function PaymentTable({
     setIsDeferring(true)
 
     try {
-      const feeAmount = Number(deferFeeAmount)
-      if (isNaN(feeAmount) || feeAmount < 0) {
+      const feeAmount = deferFeeOption === 'none' ? 0 : Number(deferFeeAmount)
+      if (deferFeeOption !== 'none' && (isNaN(feeAmount) || feeAmount < 0)) {
         setDeferError('Fee amount must be a positive number')
         setIsDeferring(false)
         return
@@ -324,9 +369,9 @@ function PaymentTable({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            new_payment_date: deferNewDate,
+            move_to_end: true,
             fee_amount: feeAmount,
-            charge_fee_immediately: deferFeeOption === 'immediate'
+            add_fee_to_payment: deferFeeOption === 'end'
           })
         }
       )
@@ -338,9 +383,12 @@ function PaymentTable({
 
       // Refresh the payment list
       await onPaymentUpdate()
+      // Refresh loan data if callback provided
+      if (onLoanUpdate) {
+        await onLoanUpdate()
+      }
       setDeferringPayment(null)
       setDeferFeeOption(null)
-      setDeferNewDate('')
       setDeferFeeAmount('50')
     } catch (err: any) {
       setDeferError(err.message || 'Failed to defer payment')
@@ -352,7 +400,6 @@ function PaymentTable({
   const handleDeferCancel = () => {
     setDeferringPayment(null)
     setDeferFeeOption(null)
-    setDeferNewDate('')
     setDeferFeeAmount('50')
     setDeferError(null)
   }
@@ -366,6 +413,14 @@ function PaymentTable({
         return 'bg-red-100 text-red-800'
       case 'rejected':
         return 'bg-red-100 text-red-800'
+      case 'deferred':
+        return 'bg-orange-100 text-orange-800'
+      case 'manual':
+        return 'bg-blue-100 text-blue-800'
+      case 'cancelled':
+        return 'bg-gray-100 text-gray-800'
+      case 'rebate':
+        return 'bg-purple-100 text-purple-800'
       case 'pending':
         return 'bg-yellow-100 text-yellow-800'
       default:
@@ -374,13 +429,59 @@ function PaymentTable({
   }
 
   return (
-    <div className='space-y-3 p-2'>
-      <div className='rounded-lg border border-gray-200 bg-white shadow-sm'>
-        <div className='border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2'>
-          <h3 className='text-base font-semibold text-gray-900'>
-            Payment History
-          </h3>
-        </div>
+      <div className='space-y-3 p-2'>
+        <div className='rounded-lg border border-gray-200 bg-white shadow-sm'>
+          <div className='border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2 flex items-center justify-between'>
+            <h3 className='text-base font-semibold text-gray-900'>
+              Payment History
+            </h3>
+            <div className='flex items-center gap-2'>
+              {onAddManualPayment && (
+                <button
+                  onClick={onAddManualPayment}
+                  className='inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700'
+                  title='Add manual payment'
+                >
+                  <svg
+                    className='mr-1.5 h-4 w-4'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M12 4v16m8-8H4'
+                    />
+                  </svg>
+                  Add Manual Payment
+                </button>
+              )}
+              {onAddRebatePayment && (
+                <button
+                  onClick={onAddRebatePayment}
+                  className='inline-flex items-center rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-purple-700'
+                  title='Add rebate payment'
+                >
+                  <svg
+                    className='mr-1.5 h-4 w-4'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M12 4v16m8-8H4'
+                    />
+                  </svg>
+                  Add Rebate
+                </button>
+              )}
+            </div>
+          </div>
         <div className='max-h-[300px] overflow-x-auto overflow-y-auto'>
           {payments.length === 0 ? (
             <div className='p-4 text-center'>
@@ -630,72 +731,39 @@ function PaymentTable({
               <div className='space-y-4'>
                 <div>
                   <label className='mb-1 block text-sm font-medium text-gray-700'>
-                    Current Payment Date
+                    Current Payment Information
                   </label>
-                  <div className='rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600'>
-                    {formatDate(deferringPayment.payment_date)}
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor='defer-new-date'
-                    className='mb-1 block text-sm font-medium text-gray-700'
-                  >
-                    New Payment Date <span className='text-red-500'>*</span>
-                  </label>
-                  <DatePicker
-                    id='defer-new-date'
-                    value={deferNewDate}
-                    onChange={date => setDeferNewDate(date || '')}
-                    disabled={isDeferring}
-                    required
-                    placeholder='Select new payment date'
-                    holidays={holidays}
-                    employmentPayDates={employmentPayDates}
-                    minDate={(() => {
-                      const tomorrow = new Date()
-                      tomorrow.setDate(tomorrow.getDate() + 1)
-                      tomorrow.setHours(0, 0, 0, 0)
-                      return tomorrow
-                    })()}
-                    className='w-full'
-                  />
-                </div>
-
-                <div>
-                  <label className='mb-1 block text-sm font-medium text-gray-700'>
-                    Deferral Fee Amount (CAD)
-                  </label>
-                  <div className='rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600'>
-                    {formatCurrency(Number(deferFeeAmount))}
-                    <span className='ml-2 text-xs text-gray-500'>
-                      (from contract fees)
-                    </span>
+                  <div className='space-y-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600'>
+                    <div>
+                      <span className='font-medium'>Date:</span> {formatDate(deferringPayment.payment_date)}
+                    </div>
+                    <div>
+                      <span className='font-medium'>Amount:</span> {formatCurrency(Number(deferringPayment.amount))}
+                    </div>
                   </div>
                 </div>
 
                 <div>
                   <label className='mb-2 block text-sm font-medium text-gray-700'>
-                    Fee Payment Option <span className='text-red-500'>*</span>
+                    Deferral Fee Option <span className='text-red-500'>*</span>
                   </label>
                   <div className='space-y-2'>
                     <label className='flex cursor-pointer items-center rounded-lg border border-gray-300 p-3 transition hover:bg-gray-50'>
                       <input
                         type='radio'
                         name='fee-option'
-                        value='immediate'
-                        checked={deferFeeOption === 'immediate'}
-                        onChange={() => setDeferFeeOption('immediate')}
+                        value='none'
+                        checked={deferFeeOption === 'none'}
+                        onChange={() => setDeferFeeOption('none')}
                         disabled={isDeferring}
                         className='h-4 w-4 text-indigo-600 focus:ring-indigo-500'
                       />
                       <div className='ml-3'>
                         <div className='text-sm font-medium text-gray-900'>
-                          Charge Fee Immediately
+                          No Deferral Fee
                         </div>
                         <div className='text-xs text-gray-500'>
-                          Fee will be charged now and added to the payment amount
+                          Payment will be moved to the end without any additional fees
                         </div>
                       </div>
                     </label>
@@ -709,16 +777,44 @@ function PaymentTable({
                         disabled={isDeferring}
                         className='h-4 w-4 text-indigo-600 focus:ring-indigo-500'
                       />
-                      <div className='ml-3'>
+                      <div className='ml-3 flex-1'>
                         <div className='text-sm font-medium text-gray-900'>
-                          Charge Fee at End
+                          Add Fee to Payment at End
                         </div>
                         <div className='text-xs text-gray-500'>
-                          Fee will be added to the final payment
+                          Fee of {formatCurrency(Number(deferFeeAmount))} will be added to the payment amount when moved to the end
                         </div>
                       </div>
                     </label>
                   </div>
+                </div>
+
+                {deferFeeOption === 'end' && (
+                  <div>
+                    <label className='mb-1 block text-sm font-medium text-gray-700'>
+                      Deferral Fee Amount (CAD)
+                    </label>
+                    <div className='rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600'>
+                      {formatCurrency(Number(deferFeeAmount))}
+                      <span className='ml-2 text-xs text-gray-500'>
+                        (from contract fees)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className='rounded-lg bg-blue-50 p-3 text-sm text-blue-800'>
+                  <p className='font-medium'>What will happen:</p>
+                  <ul className='mt-1 list-inside list-disc space-y-1 text-xs'>
+                    <li>Current payment amount, interest, and principal will be set to $0</li>
+                    <li>Payment will be moved to the end of the schedule</li>
+                    {deferFeeOption === 'end' && (
+                      <li>New payment amount will be {formatCurrency(Number(deferringPayment.amount) + Number(deferFeeAmount))} (original + fee)</li>
+                    )}
+                    {deferFeeOption === 'none' && (
+                      <li>New payment amount will be {formatCurrency(Number(deferringPayment.amount))} (original amount)</li>
+                    )}
+                  </ul>
                 </div>
               </div>
             </div>
@@ -736,7 +832,7 @@ function PaymentTable({
               <button
                 type='button'
                 onClick={handleDeferSave}
-                disabled={isDeferring || !deferFeeOption || !deferNewDate}
+                disabled={isDeferring || !deferFeeOption}
                 className='rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50'
               >
                 {isDeferring ? 'Processing...' : 'Defer Payment'}
@@ -1056,3 +1152,4 @@ function LoanSummaryTable({
     </div>
   )
 }
+

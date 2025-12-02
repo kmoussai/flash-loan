@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/admin/loans/[id]/payments/[paymentId]/defer
- * Defer a payment to a new date with optional fee
+ * Defer a payment to the end of the schedule with optional fee
+ * Sets current payment amount, interest, and principal to 0
+ * Creates a new payment at the end with original amount (+ fee if applicable)
  */
 export async function POST(
   request: NextRequest,
@@ -23,20 +25,11 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { new_payment_date, fee_amount, charge_fee_immediately } = body
+    const { move_to_end, fee_amount, add_fee_to_payment } = body
 
-    if (!new_payment_date) {
+    if (!move_to_end) {
       return NextResponse.json(
-        { error: 'New payment date is required' },
-        { status: 400 }
-      )
-    }
-
-    // Validate date format
-    const newDate = new Date(new_payment_date)
-    if (isNaN(newDate.getTime())) {
-      return NextResponse.json(
-        { error: 'Invalid payment date format' },
+        { error: 'move_to_end flag is required' },
         { status: 400 }
       )
     }
@@ -77,7 +70,48 @@ export async function POST(
       )
     }
 
-    const updates: LoanPaymentUpdate = {}
+    // Get all payments for this loan to find the last one
+    const { data: allPayments, error: paymentsError } = await supabase
+      .from('loan_payments')
+      .select('id, payment_date, payment_number')
+      .eq('loan_id', loanId)
+      .order('payment_date', { ascending: false })
+
+    if (paymentsError) {
+      console.error('Error fetching payments:', paymentsError)
+      return NextResponse.json(
+        { error: 'Failed to fetch payment schedule' },
+        { status: 500 }
+      )
+    }
+
+    if (!allPayments || allPayments.length === 0) {
+      return NextResponse.json(
+        { error: 'No payments found for this loan' },
+        { status: 404 }
+      )
+    }
+
+    // Type assertion for payments
+    const paymentsList = allPayments as Array<{
+      id: string
+      payment_date: string
+      payment_number: number | null
+    }>
+
+    // Find the last payment date (excluding the current payment being deferred)
+    const lastPayment = paymentsList.find(p => p.id !== paymentId) || paymentsList[0]
+    const lastPaymentDate = new Date(lastPayment.payment_date)
+    
+    // Calculate new payment date (day after last payment)
+    const newPaymentDate = new Date(lastPaymentDate)
+    newPaymentDate.setDate(newPaymentDate.getDate() + 1)
+
+    // Get max payment number
+    const maxPaymentNumber = paymentsList.reduce((max, p) => {
+      return Math.max(max, p.payment_number || 0)
+    }, 0)
+
     const now = new Date().toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -86,111 +120,85 @@ export async function POST(
       minute: '2-digit'
     })
 
-    // Update payment date
-    updates.payment_date = newDate.toISOString()
+    // Store original payment amount
+    const originalAmount = Number(paymentData.amount)
+    const originalInterest = Number(paymentData.interest || 0)
+    const originalPrincipal = Number(paymentData.principal || 0)
 
-    // Handle fee based on option
-    if (feeAmount > 0) {
-      if (charge_fee_immediately) {
-        // Add fee to current payment amount
-        updates.amount = Number(paymentData.amount) + feeAmount
-        const noteText = `[${now}] Payment deferred to ${newDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}. Deferral fee of ${feeAmount.toFixed(2)} charged immediately.`
-        const existingNotes = paymentData.notes || ''
-        updates.notes = existingNotes
-          ? `${existingNotes}\n${noteText}`
-          : noteText
-      } else {
-        // Create a separate fee payment entry at the end
-        // First, get all payments for this loan to find the last one
-        const { data: allPayments, error: paymentsError } = await supabase
-          .from('loan_payments')
-          .select('id, payment_date, payment_number')
-          .eq('loan_id', loanId)
-          .order('payment_date', { ascending: false })
-
-        if (paymentsError) {
-          console.error('Error fetching payments:', paymentsError)
-        } else if (allPayments && allPayments.length > 0) {
-          // Type assertion for payments
-          const paymentsList = allPayments as Array<{
-            id: string
-            payment_date: string
-            payment_number: number | null
-          }>
-
-          // Find the last payment date
-          const lastPayment = paymentsList[0]
-          const lastPaymentDate = new Date(lastPayment.payment_date)
-          
-          // Create a new payment entry for the fee
-          const feePaymentDate = new Date(lastPaymentDate)
-          feePaymentDate.setDate(feePaymentDate.getDate() + 1) // Day after last payment
-
-          const maxPaymentNumber = paymentsList.reduce((max, p) => {
-            return Math.max(max, p.payment_number || 0)
-          }, 0)
-
-          const feePaymentInsert: LoanPaymentInsert = {
-            loan_id: loanId,
-            amount: feeAmount,
-            payment_date: feePaymentDate.toISOString(),
-            status: 'pending',
-            method: null,
-            payment_number: maxPaymentNumber + 1,
-            notes: `[${now}] Deferral fee for payment #${paymentData.payment_number || 'N/A'} deferred to ${newDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`
-          }
-
-          const { error: feePaymentError } = await (supabase
-            .from('loan_payments') as any)
-            .insert(feePaymentInsert)
-
-          if (feePaymentError) {
-            console.error('Error creating fee payment:', feePaymentError)
-            return NextResponse.json(
-              { error: 'Failed to create fee payment entry' },
-              { status: 500 }
-            )
-          }
-        }
-
-        // Add note to original payment
-        const noteText = `[${now}] Payment deferred to ${newDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}. Deferral fee of ${feeAmount.toFixed(2)} will be charged at the end.`
-        const existingNotes = paymentData.notes || ''
-        updates.notes = existingNotes
-          ? `${existingNotes}\n${noteText}`
-          : noteText
-      }
-    } else {
-      // No fee, just add deferral note
-      const noteText = `[${now}] Payment deferred to ${newDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}.`
-      const existingNotes = paymentData.notes || ''
-      updates.notes = existingNotes
-        ? `${existingNotes}\n${noteText}`
-        : noteText
+    // Step 1: Set current payment amount, interest, and principal to 0, and status to deferred
+    const updates: LoanPaymentUpdate = {
+      amount: 0,
+      interest: 0,
+      principal: 0,
+      status: 'deferred'
     }
 
-    // Update the payment
-    const { data: updatedPayment, error: updateError } = await (supabase
+    // Add deferral note
+    const noteText = `Payment deferred. Original amount: ${originalAmount.toFixed(2)}${feeAmount > 0 && add_fee_to_payment ? `, fee: ${feeAmount.toFixed(2)}` : ''}.`
+    const existingNotes = paymentData.notes || ''
+    updates.notes = existingNotes
+      ? `${existingNotes}\n${noteText}`
+      : noteText
+
+    // Update the current payment
+    const { error: updateError } = await (supabase
       .from('loan_payments') as any)
       .update(updates)
       .eq('id', paymentId)
-      .select()
-      .single()
 
     if (updateError) {
       console.error('Error updating payment:', updateError)
       return NextResponse.json(
-        { error: updateError.message || 'Failed to defer payment' },
+        { error: updateError.message || 'Failed to update payment' },
+        { status: 500 }
+      )
+    }
+
+    // Step 2: Create new payment at the end with original amount (+ fee if applicable)
+    const newPaymentAmount = originalAmount + (add_fee_to_payment && feeAmount > 0 ? feeAmount : 0)
+    
+    const newPaymentInsert: LoanPaymentInsert = {
+      loan_id: loanId,
+      amount: newPaymentAmount,
+      interest: originalInterest,
+      principal: originalPrincipal,
+      payment_date: newPaymentDate.toISOString(),
+      status: 'pending',
+      method: null,
+      payment_number: maxPaymentNumber + 1,
+      notes: `Deferred payment from #${paymentData.payment_number || 'N/A'}${feeAmount > 0 && add_fee_to_payment ? ` (includes deferral fee of ${feeAmount.toFixed(2)})` : ''}.`
+    }
+
+    const { data: newPayment, error: insertError } = await (supabase
+      .from('loan_payments') as any)
+      .insert(newPaymentInsert)
+      .select()
+      .single()
+
+    if (insertError) {
+      console.error('Error creating new payment:', insertError)
+      // Try to revert the update
+      await (supabase
+        .from('loan_payments') as any)
+        .update({
+          amount: originalAmount,
+          interest: originalInterest,
+          principal: originalPrincipal
+        })
+        .eq('id', paymentId)
+      
+      return NextResponse.json(
+        { error: 'Failed to create deferred payment' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({
       success: true,
-      payment: updatedPayment,
-      message: charge_fee_immediately
-        ? `Payment deferred. Fee of $${feeAmount.toFixed(2)} charged immediately.`
-        : `Payment deferred. Fee of $${feeAmount.toFixed(2)} will be charged at the end.`
+      payment: newPayment,
+      message: feeAmount > 0 && add_fee_to_payment
+        ? `Payment deferred to end. New payment amount: $${newPaymentAmount.toFixed(2)} (original + fee).`
+        : `Payment deferred to end. New payment amount: $${newPaymentAmount.toFixed(2)}.`
     })
   } catch (error: any) {
     console.error('Error deferring payment:', error)
