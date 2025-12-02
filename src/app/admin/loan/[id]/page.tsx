@@ -285,6 +285,19 @@ export default function LoanDetailsPage() {
                 loan={loan}
                 applicationId={applicationId}
                 applicationStatus={applicationStatus}
+                onLoanUpdate={async () => {
+                  // Refresh loan data in the page
+                  const response = await fetch(`/api/admin/loans/${loanId}`)
+                  if (response.ok) {
+                    const data: LoanDetailsResponse = await response.json()
+                    setApplicationId(data.loan.application_id)
+                    setApplicationStatus(
+                      (data.loan.loan_applications?.application_status as ApplicationStatus) || null
+                    )
+                    const transformedLoan = transformLoanDetails(data)
+                    setLoan(transformedLoan)
+                  }
+                }}
               />
             )}
             {activeTab === 'payments' && <PaymentsTab loanId={loanId} />}

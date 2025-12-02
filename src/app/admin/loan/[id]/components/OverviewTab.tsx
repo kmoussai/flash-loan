@@ -14,6 +14,7 @@ interface OverviewTabProps {
   loan: LoanDetail
   applicationId: string | null
   applicationStatus: ApplicationStatus | null
+  onLoanUpdate?: () => Promise<void> | void
 }
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
@@ -22,8 +23,17 @@ export default function OverviewTab({
   loanId,
   loan,
   applicationId,
-  applicationStatus
+  applicationStatus,
+  onLoanUpdate
 }: OverviewTabProps) {
+  // Refresh loan data when callback is called
+  const handleLoanUpdate = async () => {
+    if (onLoanUpdate) {
+      await onLoanUpdate()
+    }
+    // Also refresh SWR data in this component
+    await refreshLoanData()
+  }
   const [showContractModal, setShowContractModal] = useState(false)
   const [loadingContract, setLoadingContract] = useState(false)
   const [showContractViewer, setShowContractViewer] = useState(false)
@@ -32,7 +42,7 @@ export default function OverviewTab({
   const [contractStatus, setContractStatus] = useState<string | null>(null)
 
   // Fetch loan details with statistics (only when tab is active and applicationId exists)
-  const { data: loanData, error } = useSWR<LoanDetailsResponse>(
+  const { data: loanData, error, mutate: refreshLoanData } = useSWR<LoanDetailsResponse>(
     loanId && applicationId ? `/api/admin/loans/${loanId}` : null,
     fetcher
   )

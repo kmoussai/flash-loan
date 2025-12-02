@@ -69,7 +69,7 @@ export type LoanStatus =
   | 'completed'
   | 'defaulted'
   | 'cancelled'
-export type PaymentStatus = 'pending' | 'confirmed' | 'paid' | 'failed' | 'rejected'
+export type PaymentStatus = 'pending' | 'confirmed' | 'paid' | 'failed' | 'rejected' | 'deferred' | 'manual' | 'cancelled' | 'rebate'
 export type DocumentRequestStatus =
   | 'requested'
   | 'uploaded'
@@ -898,6 +898,8 @@ export interface LoanPaymentUpdate {
   method?: string | null
   status?: PaymentStatus
   payment_number?: number | null
+  interest?: number | null
+  principal?: number | null
   accept_pay_customer_id?: number | null
   accept_pay_transaction_id?: number | null
   process_date?: string | null
