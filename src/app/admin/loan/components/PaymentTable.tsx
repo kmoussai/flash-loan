@@ -1,7 +1,7 @@
 'use client'
 
 import { fetcher } from '@/lib/utils'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { LoanPayment } from '@/src/lib/supabase/types'
 import { formatCurrency, formatDate } from '../[id]/utils'
@@ -41,6 +41,20 @@ export default function PaymentTable({
   const [deferFeeAmount, setDeferFeeAmount] = useState<string>('50')
   const [isDeferring, setIsDeferring] = useState(false)
   const [deferError, setDeferError] = useState<string | null>(null)
+
+  // Prevent body scroll when edit or defer modals are open
+  useEffect(() => {
+    if (editingPayment || deferringPayment) {
+      // Save current overflow style
+      const originalStyle = window.getComputedStyle(document.body).overflow
+      // Disable scrolling
+      document.body.style.overflow = 'hidden'
+      // Re-enable scrolling when modal closes
+      return () => {
+        document.body.style.overflow = originalStyle
+      }
+    }
+  }, [editingPayment, deferringPayment])
 
   // Fetch employment pay dates if applicationId is available
   const { data: defaultsData } = useSWR<ContractDefaultsResponse>(
@@ -427,8 +441,8 @@ export default function PaymentTable({
 
       {/* Edit Payment Modal */}
       {editingPayment && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4'>
-          <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl'>
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4 overflow-y-auto'>
+          <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl my-auto'>
             {/* Header */}
             <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
               <h3 className='text-lg font-semibold text-gray-900'>
@@ -532,8 +546,8 @@ export default function PaymentTable({
 
       {/* Defer Payment Modal */}
       {deferringPayment && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4'>
-          <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl'>
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4 overflow-y-auto'>
+          <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl my-auto'>
             {/* Header */}
             <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
               <h3 className='text-lg font-semibold text-gray-900'>
