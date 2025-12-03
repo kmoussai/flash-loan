@@ -34,6 +34,20 @@ export default function ModifyLoanModal({
       onClose()
     }
   }, [open, loan?.status, onClose])
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (open) {
+      // Save current overflow style
+      const originalStyle = window.getComputedStyle(document.body).overflow
+      // Disable scrolling
+      document.body.style.overflow = 'hidden'
+      // Re-enable scrolling when modal closes
+      return () => {
+        document.body.style.overflow = originalStyle
+      }
+    }
+  }, [open])
   const [action, setAction] = useState<'modify' | 'stop'>('modify')
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('')
   const [paymentFrequency, setPaymentFrequency] = useState<PaymentFrequency>('monthly')
@@ -105,15 +119,25 @@ export default function ModifyLoanModal({
   const interestRate = loan?.interest_rate || 29
 
   // Extract contract term values to use as stable dependencies
-  const contractPaymentFrequency = useMemo(() => contractTerms.payment_frequency || 'monthly', [contractTerms.payment_frequency])
+  const contractPaymentFrequency = useMemo(() => {
+    if (contractTerms?.payment_frequency) {
+      return contractTerms.payment_frequency as PaymentFrequency
+    }
+    return 'monthly' as PaymentFrequency
+  }, [contractTerms?.payment_frequency])
   const contractPaymentAmount = useMemo(() => contractTerms.payment_amount || 0, [contractTerms.payment_amount])
   const contractNumberOfPayments = useMemo(() => contractTerms.number_of_payments || 0, [contractTerms.number_of_payments])
 
-  // Initialize form with current loan data
+  // Initialize form with current loan data when modal opens
   useEffect(() => {
     if (!open || !loan) return
 
-    setPaymentFrequency(contractPaymentFrequency as PaymentFrequency)
+    // Always set frequency from contract, defaulting to monthly if not available
+    // Validate that the frequency is a valid option value
+    const validFrequency: PaymentFrequency = (['weekly', 'bi-weekly', 'twice-monthly', 'monthly'].includes(contractPaymentFrequency)
+      ? contractPaymentFrequency
+      : 'monthly') as PaymentFrequency
+    setPaymentFrequency(validFrequency)
     setPaymentAmount(contractPaymentAmount)
     setNumberOfPayments(contractNumberOfPayments)
     setAction('modify')
@@ -299,8 +323,8 @@ export default function ModifyLoanModal({
   if (!open || loan?.status === 'completed') return null
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4'>
-      <div className='w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-xl'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4 overflow-y-auto'>
+      <div className='w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-xl my-auto'>
         {/* Header */}
         <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
           <h3 className='text-lg font-semibold text-gray-900'>

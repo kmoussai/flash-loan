@@ -145,7 +145,7 @@ export default function DashboardShell({
                 <path d='M4 7h16M4 12h16M4 17h16' strokeLinecap='round' />
               </svg>
             </button>
-            <div>
+            <div className='hidden sm:block'>
               <p className='text-sm font-medium text-gray-500'>
                 {t('Welcome_Back')}
               </p>
@@ -167,9 +167,31 @@ export default function DashboardShell({
             <button
               type='button'
               onClick={handleSignOut}
-              className='rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100'
+              className='rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 hidden sm:inline-flex'
+              aria-label={t('Sign_Out')}
             >
               {t('Sign_Out')}
+            </button>
+            <button
+              type='button'
+              onClick={handleSignOut}
+              className='inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-700 transition hover:bg-gray-100 sm:hidden'
+              aria-label={t('Sign_Out')}
+            >
+              <svg
+                xmlns='http://www.w3.org/2000/svg'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                strokeWidth='1.5'
+                className='h-5 w-5'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  d='M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75'
+                />
+              </svg>
             </button>
           </div>
         </div>
@@ -236,7 +258,6 @@ export default function DashboardShell({
             {activeSection === 'documents' && (
               <DocumentsSection
                 locale={locale}
-                onNavigateToApplications={goToApplications}
               />
             )}
 

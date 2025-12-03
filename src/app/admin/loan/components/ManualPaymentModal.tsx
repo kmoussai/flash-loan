@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DatePicker from '@/src/app/[locale]/components/DatePicker'
 
 interface ManualPaymentModalProps {
@@ -32,6 +32,20 @@ export default function ManualPaymentModal({
     amount && 
     !isNaN(Number(amount)) && 
     Number(amount) >= remainingBalance
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (open) {
+      // Save current overflow style
+      const originalStyle = window.getComputedStyle(document.body).overflow
+      // Disable scrolling
+      document.body.style.overflow = 'hidden'
+      // Re-enable scrolling when modal closes
+      return () => {
+        document.body.style.overflow = originalStyle
+      }
+    }
+  }, [open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -105,8 +119,8 @@ export default function ManualPaymentModal({
   if (!open) return null
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4'>
-      <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4 overflow-y-auto'>
+      <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl my-auto'>
         {/* Header */}
         <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
           <h3 className='text-lg font-semibold text-gray-900'>

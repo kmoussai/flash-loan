@@ -26,7 +26,6 @@ import SubmittedInformationDisplay from './request-forms/SubmittedInformationDis
 
 interface DocumentsSectionProps {
   locale: string
-  onNavigateToApplications: () => void
 }
 
 const requestKindKeys: Partial<Record<RequestKind, string>> = {
@@ -46,37 +45,57 @@ const documentStatusKeys: Record<DocumentRequestStatus, string> = {
   expired: 'Expired'
 }
 
-export default function DocumentsSection({
-  locale,
-  onNavigateToApplications
-}: DocumentsSectionProps) {
+export default function DocumentsSection({ locale }: DocumentsSectionProps) {
   const t = useTranslations('Client_Dashboard')
   const { data, error, isLoading, mutate } = useSWR<{
     documentRequests: ClientDocumentRequest[]
+    pendingCount?: number
+    totalCount?: number
   }>('/api/client/document-requests', fetcher)
 
+  // Filter state: show only pending requests by default
+  const [showOnlyPending, setShowOnlyPending] = useState(true)
+
   // Local inline form state for non-document requests
-  const [inlineValues, setInlineValues] = useState<Record<string, Record<string, any>>>({})
-  const [inlineErrors, setInlineErrors] = useState<Record<string, string | null>>({})
-  const [inlineSubmitting, setInlineSubmitting] = useState<Record<string, boolean>>({})
-  const [inlineSuccess, setInlineSuccess] = useState<Record<string, boolean>>({})
-  
+  const [inlineValues, setInlineValues] = useState<
+    Record<string, Record<string, any>>
+  >({})
+  const [inlineErrors, setInlineErrors] = useState<
+    Record<string, string | null>
+  >({})
+  const [inlineSubmitting, setInlineSubmitting] = useState<
+    Record<string, boolean>
+  >({})
+  const [inlineSuccess, setInlineSuccess] = useState<Record<string, boolean>>(
+    {}
+  )
+
   // File upload state for document requests
   const [files, setFiles] = useState<Record<string, File | null>>({})
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
-  const [uploadSuccess, setUploadSuccess] = useState<Record<string, boolean>>({})
+  const [uploadSuccess, setUploadSuccess] = useState<Record<string, boolean>>(
+    {}
+  )
 
   // Initialize defaults from latest submission or schema defaults when data changes
   useEffect(() => {
     const nextValues: Record<string, Record<string, any>> = {}
     ;(data?.documentRequests || []).forEach(req => {
-      if (req.request_kind === 'document' || req.request_kind === 'employment' || req.request_kind === 'reference' || req.request_kind === 'bank') return
+      if (
+        req.request_kind === 'document' ||
+        req.request_kind === 'employment' ||
+        req.request_kind === 'reference' ||
+        req.request_kind === 'bank'
+      )
+        return
 
-      const latest = (req.request_form_submissions || []).slice().sort((a, b) => {
-        const at = a.submitted_at ? new Date(a.submitted_at).getTime() : 0
-        const bt = b.submitted_at ? new Date(b.submitted_at).getTime() : 0
-        return bt - at
-      })[0]
+      const latest = (req.request_form_submissions || [])
+        .slice()
+        .sort((a, b) => {
+          const at = a.submitted_at ? new Date(a.submitted_at).getTime() : 0
+          const bt = b.submitted_at ? new Date(b.submitted_at).getTime() : 0
+          return bt - at
+        })[0]
 
       const initial: Record<string, any> = {}
 
@@ -87,8 +106,6 @@ export default function DocumentsSection({
         initial[field?.id] = latest?.form_data?.[field?.id] ?? fallback
       })
 
-
-
       nextValues[req.id] = initial
     })
     if (Object.keys(nextValues).length > 0) {
@@ -96,119 +113,154 @@ export default function DocumentsSection({
     }
   }, [data?.documentRequests])
 
-  const updateInlineValue = useCallback((requestId: string, fieldId: string, value: any) => {
-    setInlineValues(prev => ({
-      ...prev,
-      [requestId]: {
-        ...(prev[requestId] || {}),
-        [fieldId]: value
+  const updateInlineValue = useCallback(
+    (requestId: string, fieldId: string, value: any) => {
+      setInlineValues(prev => ({
+        ...prev,
+        [requestId]: {
+          ...(prev[requestId] || {}),
+          [fieldId]: value
+        }
+      }))
+    },
+    []
+  )
+
+  const submitInline = useCallback(
+    async (request: ClientDocumentRequest) => {
+      const requestId = request.id
+      const values = inlineValues[requestId] || {}
+
+      if (
+        request.request_kind !== 'document' &&
+        request.request_kind !== 'employment' &&
+        request.request_kind !== 'reference'
+      ) {
+        const fields: Array<any> = (request.form_schema?.fields as any[]) || []
+        const missing = fields.filter(
+          f => f?.required && !String(values[f.id] ?? '').trim()
+        )
+        if (missing.length > 0) {
+          setInlineErrors(prev => ({
+            ...prev,
+            [requestId]:
+              t('Please_Fill_Required_Fields') ||
+              'Please fill all required fields.'
+          }))
+          return
+        }
       }
-    }))
-  }, [])
 
-  const submitInline = useCallback(async (request: ClientDocumentRequest) => {
-    const requestId = request.id
-    const values = inlineValues[requestId] || {}
+      try {
+        setInlineSubmitting(prev => ({ ...prev, [requestId]: true }))
+        setInlineSuccess(prev => ({ ...prev, [requestId]: false }))
+        setInlineErrors(prev => ({ ...prev, [requestId]: null }))
 
-    if (request.request_kind !== 'document' && request.request_kind !== 'employment' && request.request_kind !== 'reference') {
-      const fields: Array<any> = (request.form_schema?.fields as any[]) || []
-      const missing = fields.filter(f => f?.required && !String(values[f.id] ?? '').trim())
-      if (missing.length > 0) {
+        const payload: Record<string, any> = { ...values }
+        delete payload.references
+
+        const res = await fetch(
+          `/api/public/document-requests/${encodeURIComponent(requestId)}/submit`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ form_data: payload })
+          }
+        )
+
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error || 'Submission failed')
+        }
+
+        setInlineSuccess(prev => ({ ...prev, [requestId]: true }))
+        await mutate()
+      } catch (e: any) {
         setInlineErrors(prev => ({
           ...prev,
-          [requestId]: t('Please_Fill_Required_Fields') || 'Please fill all required fields.'
+          [requestId]: e?.message || 'Submission failed'
+        }))
+      } finally {
+        setInlineSubmitting(prev => ({ ...prev, [requestId]: false }))
+      }
+    },
+    [inlineValues, mutate, t]
+  )
+
+  const handleFileChange = useCallback(
+    (requestId: string, file: File | null) => {
+      setFiles(prev => ({ ...prev, [requestId]: file }))
+      setUploadSuccess(prev => ({ ...prev, [requestId]: false }))
+      setInlineErrors(prev => ({ ...prev, [requestId]: null }))
+    },
+    []
+  )
+
+  const uploadDocument = useCallback(
+    async (request: ClientDocumentRequest) => {
+      const requestId = request.id
+      const file = files[requestId]
+
+      if (!file) {
+        setInlineErrors(prev => ({
+          ...prev,
+          [requestId]: t('Please_Select_File') || 'Please select a file'
         }))
         return
       }
-    }
 
-    try {
-      setInlineSubmitting(prev => ({ ...prev, [requestId]: true }))
-      setInlineSuccess(prev => ({ ...prev, [requestId]: false }))
-      setInlineErrors(prev => ({ ...prev, [requestId]: null }))
+      try {
+        setUploading(prev => ({ ...prev, [requestId]: true }))
+        setUploadSuccess(prev => ({ ...prev, [requestId]: false }))
+        setInlineErrors(prev => ({ ...prev, [requestId]: null }))
 
-      const payload: Record<string, any> = { ...values }
-      delete payload.references
+        const formData = new FormData()
+        formData.append('file', file)
 
-      const res = await fetch(`/api/public/document-requests/${encodeURIComponent(requestId)}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ form_data: payload })
-      })
+        const res = await fetch(
+          `/api/public/document-requests/${encodeURIComponent(requestId)}/upload`,
+          {
+            method: 'POST',
+            body: formData
+          }
+        )
 
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error || 'Submission failed')
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error || 'Upload failed')
+        }
+
+        setUploadSuccess(prev => ({ ...prev, [requestId]: true }))
+        setFiles(prev => ({ ...prev, [requestId]: null }))
+        await mutate()
+      } catch (e: any) {
+        setInlineErrors(prev => ({
+          ...prev,
+          [requestId]: e?.message || 'Upload failed'
+        }))
+      } finally {
+        setUploading(prev => ({ ...prev, [requestId]: false }))
       }
+    },
+    [files, mutate, t]
+  )
 
-      setInlineSuccess(prev => ({ ...prev, [requestId]: true }))
-      await mutate()
-    } catch (e: any) {
-      setInlineErrors(prev => ({
-        ...prev,
-        [requestId]: e?.message || 'Submission failed'
-      }))
-    } finally {
-      setInlineSubmitting(prev => ({ ...prev, [requestId]: false }))
+  // Filter requests: show only pending if filter is enabled
+  const filteredRequests = useMemo(() => {
+    const requests = data?.documentRequests || []
+    if (showOnlyPending) {
+      return requests.filter(req => req.status === 'requested')
     }
-  }, [inlineValues, mutate, t])
+    return requests
+  }, [data?.documentRequests, showOnlyPending])
 
-  const handleFileChange = useCallback((requestId: string, file: File | null) => {
-    setFiles(prev => ({ ...prev, [requestId]: file }))
-    setUploadSuccess(prev => ({ ...prev, [requestId]: false }))
-    setInlineErrors(prev => ({ ...prev, [requestId]: null }))
-  }, [])
-
-  const uploadDocument = useCallback(async (request: ClientDocumentRequest) => {
-    const requestId = request.id
-    const file = files[requestId]
-    
-    if (!file) {
-      setInlineErrors(prev => ({
-        ...prev,
-        [requestId]: t('Please_Select_File') || 'Please select a file'
-      }))
-      return
-    }
-
-    try {
-      setUploading(prev => ({ ...prev, [requestId]: true }))
-      setUploadSuccess(prev => ({ ...prev, [requestId]: false }))
-      setInlineErrors(prev => ({ ...prev, [requestId]: null }))
-
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const res = await fetch(`/api/public/document-requests/${encodeURIComponent(requestId)}/upload`, {
-        method: 'POST',
-        body: formData
-      })
-
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error || 'Upload failed')
-      }
-
-      setUploadSuccess(prev => ({ ...prev, [requestId]: true }))
-      setFiles(prev => ({ ...prev, [requestId]: null }))
-      await mutate()
-    } catch (e: any) {
-      setInlineErrors(prev => ({
-        ...prev,
-        [requestId]: e?.message || 'Upload failed'
-      }))
-    } finally {
-      setUploading(prev => ({ ...prev, [requestId]: false }))
-    }
-  }, [files, mutate, t])
-
-
-  const hasRequests =
-    data?.documentRequests?.length && data.documentRequests.length > 0
+  const pendingCount = data?.pendingCount ?? 0
+  const totalCount = data?.totalCount ?? 0
+  const hasRequests = filteredRequests.length > 0
 
   const normalizedRequests = useMemo(
     () =>
-      data?.documentRequests?.map(request => {
+      filteredRequests.map(request => {
         const statusLabelKey = documentStatusKeys[request.status]
         const statusLabel =
           (statusLabelKey ? t(statusLabelKey) : request.status) ||
@@ -242,45 +294,71 @@ export default function DocumentsSection({
               )
             : null
         }
-      }) ?? [],
-    [data?.documentRequests, t]
+      }),
+    [filteredRequests, t]
   )
 
   return (
     <section className='space-y-6'>
-      <div className='rounded-lg bg-background-secondary p-8'>
-        <h2 className='text-lg font-semibold text-gray-900'>
-          {t('Documents_Title')}
-        </h2>
-        <p className='mt-2 text-sm text-gray-600'>
-          {t('Documents_Description')}
-        </p>
-        <div className='mt-6 flex flex-wrap gap-3'>
-          <Link
-            href='/upload-documents'
-            className='hover:bg-primary/90 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition'
-          >
-            {t('Upload_New_Documents')}
-          </Link>
-          <button
-            type='button'
-            onClick={onNavigateToApplications}
-            className='inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100'
-          >
-            {t('View_Document_Requests')}
-          </button>
-        </div>
-      </div>
-
       <div className='space-y-4'>
-        <div>
-          <h3 className='text-base font-semibold text-gray-900'>
-            {t('Requested_Items_Title')}
-          </h3>
-          <p className='text-sm text-gray-600'>
-            {t('Requested_Items_Subtitle')}
-          </p>
-        </div>
+        {/* Pending Count Header */}
+        {!isLoading && totalCount > 0 && (
+          <div className='rounded-lg border border-gray-200 bg-gradient-to-r from-amber-50 to-amber-100/50 p-4 sm:p-6'>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='space-y-1'>
+                <h3 className='text-base font-semibold text-gray-900'>
+                  {t('Requested_Items_Title') || 'Requested Items'}
+                </h3>
+                <p className='text-sm text-gray-600'>
+                  {pendingCount > 0
+                    ? t('Pending_Requests_Count', {
+                        count: pendingCount,
+                        defaultValue: `${pendingCount} pending request${pendingCount === 1 ? '' : 's'}`
+                      })
+                    : t('No_Pending_Requests', {
+                        defaultValue: 'No pending requests'
+                      })}
+                </p>
+              </div>
+              {pendingCount > 0 && (
+                <div className='flex items-center gap-2'>
+                  <span className='inline-flex items-center rounded-full bg-amber-500 px-3 py-1 text-sm font-semibold text-white'>
+                    {pendingCount}
+                  </span>
+                  {totalCount > pendingCount && (
+                    <button
+                      type='button'
+                      onClick={() => setShowOnlyPending(!showOnlyPending)}
+                      className='text-sm font-medium text-gray-700 underline hover:text-gray-900'
+                    >
+                      {showOnlyPending
+                        ? t('Show_All_Requests', {
+                            totalCount,
+                            defaultValue: `Show all (${totalCount})`
+                          })
+                        : t('Show_Pending_Only', {
+                            defaultValue: 'Show pending only'
+                          })}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Section Header (shown when loading or when no requests exist) */}
+        {(isLoading || (!error && totalCount === 0)) && (
+          <div>
+            <h3 className='text-base font-semibold text-gray-900'>
+              {t('Requested_Items_Title') || 'Requested Items'}
+            </h3>
+            <p className='text-sm text-gray-600'>
+              {t('Requested_Items_Subtitle') ||
+                'Items requested for your applications'}
+            </p>
+          </div>
+        )}
 
         {isLoading && (
           <div className='rounded-lg border border-dashed border-gray-200 bg-white p-12 text-center'>
@@ -307,80 +385,126 @@ export default function DocumentsSection({
         )}
 
         {!isLoading && !error && !hasRequests && (
-          <div className='rounded-lg border border-dashed border-gray-200 bg-white p-12 text-center'>
-            <p className='text-sm text-gray-600'>
-              {t('Requested_Items_Empty')}
-            </p>
+          <div className='rounded-lg border border-dashed border-gray-200 bg-white p-8 text-center sm:p-12'>
+            {showOnlyPending && totalCount > 0 ? (
+              <div className='space-y-3'>
+                <p className='text-sm font-medium text-gray-900'>
+                  {t('No_Pending_Requests_Title', {
+                    defaultValue: 'No pending requests'
+                  })}
+                </p>
+                <p className='text-sm text-gray-600'>
+                  {t('All_Requests_Completed', {
+                    defaultValue:
+                      'All your requests have been completed. Great job!'
+                  })}
+                </p>
+                <button
+                  type='button'
+                  onClick={() => setShowOnlyPending(false)}
+                  className='hover:text-primary/80 mt-4 inline-flex items-center text-sm font-semibold text-primary'
+                >
+                  {t('View_All_Requests', {
+                    totalCount,
+                    defaultValue: `View all ${totalCount} request${totalCount === 1 ? '' : 's'}`
+                  })}
+                </button>
+              </div>
+            ) : (
+              <p className='text-sm text-gray-600'>
+                {t('Requested_Items_Empty', {
+                  defaultValue: 'No document requests at this time.'
+                })}
+              </p>
+            )}
           </div>
         )}
 
         {!isLoading && !error && hasRequests && (
-          <ul className='space-y-4'>
+          <ul className='space-y-3 sm:space-y-4'>
             {normalizedRequests.map(request => (
               <li
                 key={request.id}
-                className='rounded-lg border border-gray-200 bg-white p-6 shadow-sm'
+                className='rounded-lg border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md'
               >
-                <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
-                  <div className='space-y-2'>
-                    <p className='text-sm font-medium text-gray-500'>
-                      {t('Requested_For')}
-                    </p>
-                    <p className='text-lg font-semibold text-gray-900'>
-                      {request.documentName}
-                    </p>
-                    <p className='text-sm text-gray-600'>
-                      {t('Requested_On', {
-                        date: formatDate(
-                          locale,
-                          request.created_at,
-                          t('Not_Available')
-                        )
-                      })}
-                    </p>
-                    {request.expires_at && (
-                      <p className='text-sm font-medium text-amber-600'>
-                        {t('Expires_On', {
-                          date: formatDate(
-                            locale,
-                            request.expires_at,
-                            t('Not_Available')
-                          )
-                        })}
-                      </p>
-                    )}
-                    {request.application && (
-                      <div className='space-y-1 text-sm text-gray-600'>
-                        <p>{t('Linked_Application_Title')}</p>
-                        <p className='font-medium text-gray-900'>
-                          {formatCurrency(
-                            locale,
-                            request.application.loan_amount,
-                            t('Not_Available')
-                          )}
+                {/* Mobile-optimized card layout */}
+                <div className='p-4 sm:p-6'>
+                  <div className='flex flex-col gap-3 sm:gap-4'>
+                    {/* Header row: Status and request kind */}
+                    <div className='flex items-start justify-between gap-3'>
+                      <div className='min-w-0 flex-1'>
+                        <p className='text-xs font-medium uppercase tracking-wide text-gray-500 sm:text-sm'>
+                          {request.requestKindLabel}
                         </p>
-                        {request.applicationStatusLabel &&
-                          request.applicationStatusClass && (
-                            <span className={request.applicationStatusClass}>
-                              {request.applicationStatusLabel}
-                            </span>
-                          )}
+                        <h4 className='mt-1 text-base font-semibold text-gray-900 sm:text-lg'>
+                          {request.documentName}
+                        </h4>
                       </div>
-                    )}
-                  </div>
-                  <div className='flex flex-col items-start gap-3 sm:items-end'>
-                    <span className={request.statusClass}>
-                      {request.statusLabel}
-                    </span>
-                    <span className='text-xs font-medium uppercase tracking-wide text-gray-500'>
-                      {request.requestKindLabel}
-                    </span>
+                      <div className='flex flex-shrink-0 flex-col items-end gap-2'>
+                        <span className={request.statusClass}>
+                          {request.statusLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Details grid */}
+                    <div className='grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 sm:gap-3'>
+                      <div>
+                        <p className='text-xs text-gray-500 sm:text-sm'>
+                          {t('Requested_On', {
+                            date: formatDate(
+                              locale,
+                              request.created_at,
+                              t('Not_Available')
+                            )
+                          })}
+                        </p>
+                      </div>
+                      {request.expires_at && (
+                        <div>
+                          <p className='text-xs font-medium text-amber-600 sm:text-sm'>
+                            {t('Expires_On', {
+                              date: formatDate(
+                                locale,
+                                request.expires_at,
+                                t('Not_Available')
+                              )
+                            })}
+                          </p>
+                        </div>
+                      )}
+                      {request.application && (
+                        <div className='col-span-full mt-1 space-y-1 border-t border-gray-100 pt-2'>
+                          <p className='text-xs text-gray-500 sm:text-sm'>
+                            {t('Linked_Application_Title') ||
+                              'Linked Application'}
+                          </p>
+                          <div className='flex flex-wrap items-center gap-2'>
+                            <p className='text-sm font-semibold text-gray-900'>
+                              {formatCurrency(
+                                locale,
+                                request.application.loan_amount,
+                                t('Not_Available')
+                              )}
+                            </p>
+                            {request.applicationStatusLabel &&
+                              request.applicationStatusClass && (
+                                <span
+                                  className={request.applicationStatusClass}
+                                >
+                                  {request.applicationStatusLabel}
+                                </span>
+                              )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Document upload section */}
                 {request.request_kind === 'document' && (
-                  <div className='mt-5 border-t border-gray-200 pt-4'>
+                  <div className='border-t border-gray-200 bg-gray-50 p-4 sm:rounded-b-lg sm:p-6'>
                     <DocumentRequestForm
                       request={request}
                       file={files[request.id] || null}
@@ -395,10 +519,12 @@ export default function DocumentsSection({
 
                 {/* Non-document request forms */}
                 {request.request_kind !== 'document' && (
-                  <div className='mt-5 border-t border-gray-200 pt-4'>
+                  <div className='border-t border-gray-200 bg-gray-50 p-4 sm:rounded-b-lg sm:p-6'>
                     {(() => {
-                      const latestSubmission = request.request_form_submissions?.[0]
-                      const hasSubmission = latestSubmission && request.status !== 'requested'
+                      const latestSubmission =
+                        request.request_form_submissions?.[0]
+                      const hasSubmission =
+                        latestSubmission && request.status !== 'requested'
 
                       // If submitted, show only submitted data
                       if (hasSubmission) {
