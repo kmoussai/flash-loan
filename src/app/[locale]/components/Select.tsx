@@ -29,8 +29,18 @@ export default function Select({
   disabled = false,
   className = ''
 }: SelectProps) {
+  // Ensure value is a valid string that matches one of the options
+  // Radix UI Select needs the value to match an option value exactly
+  const validValue = React.useMemo(() => {
+    if (!value || typeof value !== 'string') return ''
+    // Check if value exists in options
+    const optionExists = options.some(opt => opt.value === value)
+    // Return the value if it exists, otherwise return empty string (which will show placeholder)
+    return optionExists ? value : ''
+  }, [value, options])
+
   return (
-    <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
+    <SelectPrimitive.Root defaultValue={validValue} onValueChange={onValueChange} disabled={disabled}>
       <SelectPrimitive.Trigger
         className={`flex w-full items-center justify-between rounded-lg border border-gray-300 bg-background p-3 text-left text-primary transition-all hover:border-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       >

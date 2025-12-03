@@ -119,15 +119,25 @@ export default function ModifyLoanModal({
   const interestRate = loan?.interest_rate || 29
 
   // Extract contract term values to use as stable dependencies
-  const contractPaymentFrequency = useMemo(() => contractTerms.payment_frequency || 'monthly', [contractTerms.payment_frequency])
+  const contractPaymentFrequency = useMemo(() => {
+    if (contractTerms?.payment_frequency) {
+      return contractTerms.payment_frequency as PaymentFrequency
+    }
+    return 'monthly' as PaymentFrequency
+  }, [contractTerms?.payment_frequency])
   const contractPaymentAmount = useMemo(() => contractTerms.payment_amount || 0, [contractTerms.payment_amount])
   const contractNumberOfPayments = useMemo(() => contractTerms.number_of_payments || 0, [contractTerms.number_of_payments])
 
-  // Initialize form with current loan data
+  // Initialize form with current loan data when modal opens
   useEffect(() => {
     if (!open || !loan) return
 
-    setPaymentFrequency(contractPaymentFrequency as PaymentFrequency)
+    // Always set frequency from contract, defaulting to monthly if not available
+    // Validate that the frequency is a valid option value
+    const validFrequency: PaymentFrequency = (['weekly', 'bi-weekly', 'twice-monthly', 'monthly'].includes(contractPaymentFrequency)
+      ? contractPaymentFrequency
+      : 'monthly') as PaymentFrequency
+    setPaymentFrequency(validFrequency)
     setPaymentAmount(contractPaymentAmount)
     setNumberOfPayments(contractNumberOfPayments)
     setAction('modify')
