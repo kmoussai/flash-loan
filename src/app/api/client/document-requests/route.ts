@@ -1,11 +1,19 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/src/lib/supabase/server'
 import { getUserType } from '@/src/lib/supabase/db-helpers'
 import { getClientDocumentRequests } from '@/src/lib/supabase/loan-helpers'
+import type { DocumentRequestStatus } from '@/src/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+/**
+ * GET /api/client/document-requests
+ * Fetch document requests for the authenticated client
+ * Security: Only returns requests for the authenticated client's applications
+ * Query params:
+ *   - status: Optional filter by status (e.g., 'requested' for pending)
+ */
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
 
@@ -30,9 +38,26 @@ export async function GET() {
       )
     }
 
-    const documentRequests = await getClientDocumentRequests(user.id, true)
+    // Get all document requests for this client (already filtered by client_id in helper)
+    const allRequests = await getClientDocumentRequests(user.id, true)
 
-    return NextResponse.json({ documentRequests })
+    // Optional status filter from query params
+    const { searchParams } = new URL(request.url)
+    const statusFilter = searchParams.get('status') as DocumentRequestStatus | null
+
+    // Filter by status if provided, otherwise return all
+    const documentRequests = statusFilter
+      ? allRequests.filter(req => req.status === statusFilter)
+      : allRequests
+
+    // Calculate pending count (status === 'requested')
+    const pendingCount = allRequests.filter(req => req.status === 'requested').length
+
+    return NextResponse.json({ 
+      documentRequests,
+      pendingCount,
+      totalCount: allRequests.length
+    })
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : 'Unexpected error occurred'

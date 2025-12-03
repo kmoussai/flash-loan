@@ -739,6 +739,7 @@ export async function getClientDocumentRequests(
       `
     )
     .eq('loan_applications.client_id', clientId)
+    .eq('status', 'requested')
     .order('created_at', { ascending: false })
 
   if (error) {

@@ -19,6 +19,12 @@ export interface DashboardStats {
   latestUpdate: string | null
 }
 
+export interface ClientStats {
+  loanCount: number
+  applicationCount: number
+  nextPaymentDate: string | null
+}
+
 export type { LoanApplication }
 
 

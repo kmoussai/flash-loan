@@ -3,8 +3,10 @@
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/src/navigation'
+import useSWR from 'swr'
+import { fetcher } from '@/lib/utils'
 import type { LoanApplication } from '@/src/lib/supabase/types'
-import type { DashboardStats } from '../../types'
+import type { DashboardStats, ClientStats } from '../../types'
 import {
   formatCurrency,
   formatDate,
@@ -25,6 +27,15 @@ export default function OverviewSection({
   onNavigateToApplications
 }: OverviewSectionProps) {
   const t = useTranslations('Client_Dashboard')
+  
+  // Fetch client stats from API
+  const { data: clientStats, isLoading: statsLoading } = useSWR<ClientStats>(
+    '/api/client/stats',
+    fetcher,
+    {
+      revalidateOnFocus: false
+    }
+  )
 
   const latestApplicationStatus = useMemo(() => {
     if (!latestApplication) {
@@ -46,7 +57,7 @@ export default function OverviewSection({
 
   return (
     <section className='space-y-6'>
-      <div className='grid gap-4 md:grid-cols-3'>
+      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
         <div className='rounded-lg bg-background-secondary p-6'>
           <p className='text-sm font-medium text-gray-500'>
             {t('Active_Applications')}
@@ -57,18 +68,32 @@ export default function OverviewSection({
         </div>
         <div className='rounded-lg bg-background-secondary p-6'>
           <p className='text-sm font-medium text-gray-500'>
-            {t('Approved_Applications')}
+            {t('Total_Applications')}
           </p>
           <p className='mt-2 text-3xl font-semibold text-gray-900'>
-            {stats.approved}
+            {statsLoading ? '...' : clientStats?.applicationCount ?? 0}
           </p>
         </div>
         <div className='rounded-lg bg-background-secondary p-6'>
           <p className='text-sm font-medium text-gray-500'>
-            {t('Last_Update')}
+            {t('Total_Loans')}
+          </p>
+          <p className='mt-2 text-3xl font-semibold text-gray-900'>
+            {statsLoading ? '...' : clientStats?.loanCount ?? 0}
+          </p>
+        </div>
+        <div className='rounded-lg bg-background-secondary p-6'>
+          <p className='text-sm font-medium text-gray-500'>
+            {t('Next_Payment')}
           </p>
           <p className='mt-2 text-lg font-semibold text-gray-900'>
-            {formatDate(locale, stats.latestUpdate, t('Not_Available'))}
+            {statsLoading ? (
+              '...'
+            ) : clientStats?.nextPaymentDate ? (
+              formatDate(locale, clientStats.nextPaymentDate, t('Not_Available'))
+            ) : (
+              t('No_Upcoming_Payments') || 'No upcoming payments'
+            )}
           </p>
         </div>
       </div>
