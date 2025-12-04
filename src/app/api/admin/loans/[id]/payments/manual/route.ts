@@ -3,7 +3,6 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { LoanPaymentInsert, PaymentFrequency } from '@/src/lib/supabase/types'
 import {
   validatePaymentAmount,
-  calculateNewBalance,
   calculatePaymentBreakdown,
   roundCurrency,
   PAYMENT_FREQUENCY_CONFIG
@@ -108,15 +107,14 @@ export async function POST(
     const interest = roundCurrency(currentRemainingBalance * periodicRate)
     const principal = roundCurrency(Math.max(0, paymentAmount - interest))
 
-    // Calculate new remaining balance using loan library
-    const balanceResult = calculateNewBalance({
-      currentBalance: currentRemainingBalance,
-      paymentAmount: paymentAmount
-    })
-    const newRemainingBalance = balanceResult.newBalance
+    // Calculate new remaining balance
+    // For manual payments, only subtract the principal amount (not the full payment amount)
+    // The interest portion doesn't reduce the remaining balance
+    const newRemainingBalance = roundCurrency(Math.max(0, currentRemainingBalance - principal))
+    const isPaidOff = newRemainingBalance <= 0
 
     // Determine if loan should be marked as completed
-    const shouldMarkAsCompleted = mark_loan_as_paid === true && balanceResult.isPaidOff
+    const shouldMarkAsCompleted = mark_loan_as_paid === true && isPaidOff
 
     // Prepare loan update
     const loanUpdate: { remaining_balance: number; status?: string } = {
