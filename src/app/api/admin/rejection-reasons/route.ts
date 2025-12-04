@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 
-export const dynamic = 'force-dynamic'
-
 /**
  * GET /api/admin/rejection-reasons
  * Returns the standardized list of active rejection reasons for loan applications.

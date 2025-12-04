@@ -4,7 +4,7 @@ import * as SelectPrimitive from '@radix-ui/react-select'
 
 /**
  * Custom Select Component
- * 
+ *
  * A styled select component using Radix UI primitives
  * - Works consistently across all browsers (including Safari)
  * - Matches the application's design system
@@ -39,10 +39,48 @@ export default function Select({
     return optionExists ? value : ''
   }, [value, options])
 
+  // Inject styles to show scrollbar (override Radix's default hidden scrollbar)
+  React.useEffect(() => {
+    const styleId = 'radix-select-scrollbar-styles'
+    if (document.getElementById(styleId)) return
+
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = `
+      [data-radix-select-viewport]::-webkit-scrollbar {
+        display: block !important;
+        width: 8px !important;
+      }
+      [data-radix-select-viewport]::-webkit-scrollbar-track {
+        background: rgb(243 244 246) !important;
+        border-radius: 4px;
+      }
+      [data-radix-select-viewport]::-webkit-scrollbar-thumb {
+        background: rgb(209 213 219) !important;
+        border-radius: 4px !important;
+      }
+      [data-radix-select-viewport]::-webkit-scrollbar-thumb:hover {
+        background: rgb(156 163 175) !important;
+      }
+    `
+    document.head.appendChild(style)
+
+    return () => {
+      const existingStyle = document.getElementById(styleId)
+      if (existingStyle) {
+        existingStyle.remove()
+      }
+    }
+  }, [])
+
   return (
-    <SelectPrimitive.Root defaultValue={validValue} onValueChange={onValueChange} disabled={disabled}>
+    <SelectPrimitive.Root
+      defaultValue={validValue}
+      onValueChange={onValueChange}
+      disabled={disabled}
+    >
       <SelectPrimitive.Trigger
-        className={`flex w-full items-center justify-between rounded-lg border border-gray-300 bg-background p-3 text-left text-primary transition-all hover:border-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+        className={`focus:ring-primary/20 flex w-full items-center justify-between rounded-lg border border-gray-300 bg-background p-3 text-left text-primary transition-all hover:border-primary focus:border-primary focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       >
         <SelectPrimitive.Value placeholder={placeholder} />
         <SelectPrimitive.Icon className='ml-2'>
@@ -67,16 +105,22 @@ export default function Select({
 
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
-          className='overflow-hidden rounded-lg border border-gray-300 bg-background shadow-lg'
+          className='rounded-lg border border-gray-300 bg-background shadow-lg'
           position='popper'
           sideOffset={5}
         >
-          <SelectPrimitive.Viewport className='p-1'>
-            {options.map((option) => (
+          <SelectPrimitive.Viewport
+            className='max-h-60 overflow-y-auto p-1'
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgb(209 213 219) rgb(243 244 246)'
+            }}
+          >
+            {options.map(option => (
               <SelectPrimitive.Item
                 key={option.value}
                 value={option.value}
-                className='relative flex cursor-pointer select-none items-center rounded-md px-8 py-2.5 text-sm text-primary outline-none transition-colors hover:bg-primary/10 focus:bg-primary/10 data-[disabled]:pointer-events-none data-[disabled]:opacity-50'
+                className='hover:bg-primary/10 focus:bg-primary/10 relative flex cursor-pointer select-none items-center rounded-md px-8 py-2.5 text-sm text-primary outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50'
               >
                 <SelectPrimitive.ItemIndicator className='absolute left-2 flex h-3.5 w-3.5 items-center justify-center'>
                   <svg
@@ -96,7 +140,9 @@ export default function Select({
                     />
                   </svg>
                 </SelectPrimitive.ItemIndicator>
-                <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemText>
+                  {option.label}
+                </SelectPrimitive.ItemText>
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>
@@ -105,4 +151,3 @@ export default function Select({
     </SelectPrimitive.Root>
   )
 }
-
