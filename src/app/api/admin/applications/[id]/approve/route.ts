@@ -3,6 +3,7 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { createNotification } from '@/src/lib/supabase'
 import type { LoanApplicationUpdate } from '@/src/lib/supabase/types'
 import type { NotificationCategory } from '@/src/types'
+import { calculateTotalLoanAmount } from '@/src/lib/loan'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,6 +130,20 @@ export async function POST(
     const interestRate = Number.isFinite(app.interest_rate ?? NaN) ? (app.interest_rate as number) : 29
     const termMonths = 3
 
+    // Calculate total loan amount including fees
+    // Default fees: origination_fee = 55, brokerage_fee = 0 (will be set when contract is generated)
+    // For pre-approval, we use default fees since contract doesn't exist yet
+    const defaultOriginationFee = 55
+    const defaultBrokerageFee = 0 // Brokerage fee is typically set during contract generation
+    const totalLoanAmount = calculateTotalLoanAmount({
+      principalAmount: principalAmount,
+      interestRate: interestRate,
+      paymentFrequency: 'monthly', // Default, will be updated when contract is generated
+      numberOfPayments: 3, // Default, will be updated when contract is generated
+      originationFee: defaultOriginationFee,
+      brokerageFee: defaultBrokerageFee
+    })
+
     const { data: createdLoan, error: loanError } = await (supabase
       .from('loans') as any)
       .insert({
@@ -139,7 +154,7 @@ export async function POST(
         term_months: termMonths,
         disbursement_date: null,
         due_date: null,
-        remaining_balance: principalAmount,
+        remaining_balance: totalLoanAmount, // Include fees
         status: 'pending_disbursement'
       })
       .select('*')

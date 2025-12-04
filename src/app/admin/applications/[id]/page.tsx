@@ -10,7 +10,6 @@ import IbvTab from './components/IbvTab'
 import DocumentsTab from './components/DocumentsTab'
 import DetailsTab from './components/DetailsTab'
 import TimelineTab from './components/TimelineTab'
-import Select from '@/src/app/[locale]/components/Select'
 import type {
   ApplicationStatus,
   InveriteIbvData,
@@ -18,6 +17,8 @@ import type {
   PaymentFrequency
 } from '@/src/lib/supabase/types'
 import type { ApplicationWithDetails, IbvResults } from './types'
+import { Modal } from '@/src/app/components/Modal'
+import { RejectApplicationModal } from './components/RejectApplicationModal'
 
 export default function ApplicationDetailsPage() {
   const router = useRouter()
@@ -32,18 +33,11 @@ export default function ApplicationDetailsPage() {
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [processing, setProcessing] = useState(false)
-  const [rejectionReason, setRejectionReason] = useState('')
-  const [rejectionComment, setRejectionComment] = useState('')
-  const [rejectionReasons, setRejectionReasons] = useState<
-    { id: string; code: string; label: string; description?: string | null; category?: string | null }[]
-  >([])
-  const [loadingRejectionReasons, setLoadingRejectionReasons] = useState(false)
   const [preApproveAmount, setPreApproveAmount] = useState<number | ''>('')
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [selectedAccountIndex, setSelectedAccountIndex] = useState<
     number | undefined
   >(undefined)
-  const [fetchingInveriteData, setFetchingInveriteData] = useState(false)
   const [activeTab, setActiveTab] = useState<
     'overview' | 'ibv' | 'documents' | 'details' | 'timeline'
   >('overview')
@@ -54,153 +48,12 @@ export default function ApplicationDetailsPage() {
   // Get transactions from Inverite data
   // Transactions are nested inside accounts[].transactions array
   // This is used only for displaying the count in the UI
-  const getTransactions = () => {
-    if (!application?.ibv_provider_data) return []
-    if (application.ibv_provider !== 'inverite') return []
-
-    const inveriteData = application.ibv_provider_data as any
-
-    // Primary path: Check accounts array for transactions
-    if (inveriteData?.accounts && Array.isArray(inveriteData.accounts)) {
-      const allTransactions: any[] = []
-
-      inveriteData.accounts.forEach((account: any, accountIndex: number) => {
-        // Check if this account has transactions
-        if (
-          account?.transactions &&
-          Array.isArray(account.transactions) &&
-          account.transactions.length > 0
-        ) {
-          account.transactions.forEach((tx: any) => {
-            if (!tx) return // Skip null/undefined transactions
-
-            // Map Inverite transaction fields to our expected format
-            allTransactions.push({
-              description: tx.details || tx.description || 'No description',
-              date: tx.date || '',
-              // Convert string amounts to numbers (handle empty strings)
-              credit:
-                tx.credit && tx.credit !== ''
-                  ? parseFloat(String(tx.credit))
-                  : null,
-              debit:
-                tx.debit && tx.debit !== ''
-                  ? parseFloat(String(tx.debit))
-                  : null,
-              balance:
-                tx.balance && tx.balance !== ''
-                  ? parseFloat(String(tx.balance))
-                  : null,
-              // Include additional Inverite fields
-              category: tx.category || null,
-              flags: Array.isArray(tx.flags) ? tx.flags : [],
-              // Include account information for context
-              account_index: accountIndex,
-              account_type: account.type || null,
-              account_description: account.account_description || null,
-              account_number: account.account || null,
-              institution: account.institution || null,
-              // Keep original transaction for reference
-              _original: tx
-            })
-          })
-        }
-      })
-
-      if (allTransactions.length > 0) {
-        // Sort by date (newest first), handle invalid dates
-        const sorted = allTransactions.sort((a, b) => {
-          try {
-            const dateA = a.date ? new Date(a.date).getTime() : 0
-            const dateB = b.date ? new Date(b.date).getTime() : 0
-            if (isNaN(dateA) || isNaN(dateB)) return 0
-            return dateB - dateA
-          } catch {
-            return 0
-          }
-        })
-
-        return sorted
-      }
-    }
-
-    // Fallback 1: Check account_info.transactions (if account_info is a single object)
-    if (
-      inveriteData?.account_info?.transactions &&
-      Array.isArray(inveriteData.account_info.transactions)
-    ) {
-      const transactions = inveriteData.account_info.transactions.map(
-        (tx: any) => ({
-          description: tx.details || tx.description || 'No description',
-          date: tx.date || '',
-          credit:
-            tx.credit && tx.credit !== ''
-              ? parseFloat(String(tx.credit))
-              : null,
-          debit:
-            tx.debit && tx.debit !== '' ? parseFloat(String(tx.debit)) : null,
-          balance:
-            tx.balance && tx.balance !== ''
-              ? parseFloat(String(tx.balance))
-              : null,
-          category: tx.category || null,
-          flags: Array.isArray(tx.flags) ? tx.flags : [],
-          _original: tx
-        })
-      )
-
-      return transactions.sort((a: any, b: any) => {
-        try {
-          const dateA = a.date ? new Date(a.date).getTime() : 0
-          const dateB = b.date ? new Date(b.date).getTime() : 0
-          if (isNaN(dateA) || isNaN(dateB)) return 0
-          return dateB - dateA
-        } catch {
-          return 0
-        }
-      })
-    }
-
-    // Fallback 2: Legacy account_statement format
-    if (
-      inveriteData?.account_statement &&
-      Array.isArray(inveriteData.account_statement) &&
-      inveriteData.account_statement.length > 0
-    ) {
-      return inveriteData.account_statement
-    }
-
-    return []
-  }
 
   useEffect(() => {
     if (applicationId) {
       fetchApplicationDetails()
     }
   }, [applicationId])
-
-  useEffect(() => {
-    const fetchRejectionReasons = async () => {
-      try {
-        setLoadingRejectionReasons(true)
-        const res = await fetch('/api/admin/rejection-reasons')
-        if (!res.ok) {
-          console.error('Failed to fetch rejection reasons')
-          return
-        }
-        const data = await res.json()
-        if (Array.isArray(data.reasons)) {
-          setRejectionReasons(data.reasons)
-        }
-      } catch (err) {
-        console.error('Error fetching rejection reasons:', err)
-      } finally {
-        setLoadingRejectionReasons(false)
-      }
-    }
-
-    fetchRejectionReasons()
-  }, [])
 
   const fetchApplicationDetails = async () => {
     try {
@@ -271,20 +124,8 @@ export default function ApplicationDetailsPage() {
     }
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-CA', {
-      style: 'currency',
-      currency: 'CAD'
-    }).format(amount)
-  }
 
-  const getRiskColor = (level: string) => {
-    return 'text-gray-700 bg-gray-50 border border-gray-200'
-  }
 
-  const getScoreColor = (score: number, maxScore: number = 100) => {
-    return 'text-gray-900'
-  }
 
   const handleApprove = async () => {
     if (!applicationId) return
@@ -333,90 +174,6 @@ export default function ApplicationDetailsPage() {
     }
   }
 
-  const handleReject = async () => {
-    if (!applicationId) return
-    const trimmedReason = rejectionReason.trim()
-    const trimmedComment = rejectionComment.trim()
-
-    if (!trimmedReason) {
-      alert('Please provide a rejection reason.')
-      return
-    }
-
-    if (trimmedReason === 'Other' && !trimmedComment) {
-      alert('Please provide a comment when selecting "Other" as the reason.')
-      return
-    }
-
-    setProcessing(true)
-    try {
-      const response = await fetch(
-        `/api/admin/applications/${applicationId}/reject`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rejectionReason: trimmedReason,
-            rejectionComment: trimmedComment || undefined
-          })
-        }
-      )
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to reject application')
-      }
-
-      await fetchApplicationDetails()
-      setShowRejectModal(false)
-      setRejectionReason('')
-      setRejectionComment('')
-      alert('Application rejected.')
-    } catch (err: any) {
-      console.error('Error rejecting application:', err)
-      alert(`Error: ${err.message || 'Failed to reject application'}`)
-    } finally {
-      setProcessing(false)
-    }
-  }
-
-  const handleFetchInveriteData = async () => {
-    if (!application) return
-
-    const inveriteData = application.ibv_provider_data as InveriteIbvData
-    const requestGuid = inveriteData?.request_guid
-
-    if (!requestGuid) {
-      alert('No request GUID found for this application')
-      return
-    }
-
-    try {
-      setFetchingInveriteData(true)
-
-      // Pass application_id as query parameter for faster lookup
-      const response = await fetch(
-        `/api/inverite/fetch/${requestGuid}?application_id=${applicationId}`
-      )
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to fetch Inverite data')
-      }
-
-      const result = await response.json()
-
-      // Refresh application details
-      await fetchApplicationDetails()
-
-      // Show success message
-    } catch (error: any) {
-      console.error('Error fetching Inverite data:', error)
-      alert(`Error: ${error.message || 'Failed to fetch data from Inverite'}`)
-    } finally {
-      setFetchingInveriteData(false)
-    }
-  }
 
   type ContractGenerationOptions = {
     termMonths?: number
@@ -880,74 +637,12 @@ export default function ApplicationDetailsPage() {
         )}
 
         {/* Reject Modal */}
-        {showRejectModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
-            <div className='mx-4 w-full max-w-md rounded-lg border border-gray-200 bg-white p-6'>
-              <div className='mb-6'>
-                <h3 className='text-lg font-semibold text-gray-900'>
-                  Reject Application
-                </h3>
-                <p className='mt-2 text-sm text-gray-600'>
-                  Please provide a reason for rejection:
-                </p>
-                <div className='mt-4 space-y-3'>
-                  <div>
-                    <label className='mb-1 block text-xs font-medium text-gray-700'>
-                      Select reason
-                    </label>
-                    <Select
-                      value={rejectionReason}
-                      onValueChange={setRejectionReason}
-                      disabled={processing || loadingRejectionReasons}
-                      placeholder={
-                        loadingRejectionReasons ? 'Loading reasons...' : 'Choose a reason'
-                      }
-                      options={[
-                        ...rejectionReasons.map(reason => ({
-                          value: reason.label,
-                          label: reason.label
-                        })),
-                        { value: 'Other', label: 'Other (specify in notes)' }
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className='mb-1 block text-xs font-medium text-gray-700'>
-                      Additional details (optional)
-                    </label>
-                    <textarea
-                      rows={3}
-                      className='w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500'
-                      placeholder={
-                        rejectionReason === 'Other'
-                          ? 'Required: explain why this application is rejected.'
-                          : 'Optional: add more context for this rejection (visible to staff only).'
-                      }
-                      value={rejectionComment}
-                      onChange={e => setRejectionComment(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className='flex gap-3'>
-                <button
-                  onClick={() => setShowRejectModal(false)}
-                  disabled={processing}
-                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50'
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleReject}
-                  disabled={processing}
-                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50'
-                >
-                  {processing ? 'Processing...' : 'Confirm Rejection'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <RejectApplicationModal
+          applicationId={applicationId}
+          open={showRejectModal}
+          onOpenChange={setShowRejectModal}
+          onRejected={fetchApplicationDetails}
+        />
 
         <TransactionsModal
           open={showTransactionsModal}

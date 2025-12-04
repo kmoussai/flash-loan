@@ -2,6 +2,19 @@
 
 import { formatCurrency, formatDate } from '../[id]/utils'
 
+/**
+ * Format payment frequency for display
+ */
+function formatPaymentFrequency(frequency: string): string {
+  const frequencyMap: Record<string, string> = {
+    'weekly': 'Weekly',
+    'bi-weekly': 'Bi-weekly',
+    'twice-monthly': 'Twice Monthly',
+    'monthly': 'Monthly'
+  }
+  return frequencyMap[frequency.toLowerCase()] || frequency
+}
+
 interface LoanSummaryTableProps {
   loan: any
   openGenerator: boolean
@@ -9,6 +22,9 @@ interface LoanSummaryTableProps {
   onViewContract: () => void
   loadingContract: boolean
   onModifyLoan?: () => void
+  totalInterest?: number
+  cumulativeFees?: number
+  onLoanDelete?: () => void
 }
 
 export default function LoanSummaryTable({
@@ -17,8 +33,50 @@ export default function LoanSummaryTable({
   setOpenGenerator,
   onViewContract,
   loadingContract,
-  onModifyLoan
+  onModifyLoan,
+  totalInterest = 0,
+  cumulativeFees = 0,
+  onLoanDelete
 }: LoanSummaryTableProps) {
+  const isDevelopment = process.env.NODE_ENV === 'development'
+
+  const handleDeleteLoan = async () => {
+    if (!isDevelopment) {
+      alert('Delete loan is only available in development mode')
+      return
+    }
+
+    const confirmed = confirm(
+      `⚠️ DEV ONLY: Are you sure you want to delete loan ${loan.loan_number ? `LN-${String(loan.loan_number).padStart(6, '0')}` : loan.id}?\n\nThis action cannot be undone and will delete all related records (payments, contracts, etc.).`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/admin/loans/${loan.id}/delete`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete loan')
+      }
+
+      alert('Loan deleted successfully')
+      
+      // Redirect to loans list or refresh
+      if (onLoanDelete) {
+        onLoanDelete()
+      } else {
+        window.location.href = '/admin/applications'
+      }
+    } catch (error: any) {
+      console.error('Error deleting loan:', error)
+      alert(`Failed to delete loan: ${error.message}`)
+    }
+  }
   const handleGenerateContract = async () => {
     setOpenGenerator(true)
   }
@@ -75,9 +133,11 @@ export default function LoanSummaryTable({
 
   const hasContract = contract !== null || loan.crmContractPath !== null
 
-  // Calculate remaining balance as principal_amount + brokerage fees
-  const calculatedRemainingBalance =
-    Number(loan.principal_amount || 0) + Number(brokerageFee)
+  // Use remaining_balance from database, with fallback calculation if null/0
+  // The database value is the source of truth and reflects actual payments made
+  const remainingBalance = loan.remaining_balance !== null && loan.remaining_balance !== undefined
+    ? Number(loan.remaining_balance)
+    : Number(loan.principal_amount || 0) + Number(brokerageFee)
 
   const handleSendContract = async () => {
     if (!contract || !loan.application_id) return
@@ -226,6 +286,29 @@ export default function LoanSummaryTable({
                     : 'Generate Contract'}
                 </button>
               )}
+            {/* DEV ONLY: Delete Loan */}
+            {isDevelopment && (
+              <button
+                onClick={handleDeleteLoan}
+                className='flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700'
+                title='DEV ONLY: Delete this loan'
+              >
+                <svg
+                  className='h-3 w-3'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16'
+                  />
+                </svg>
+                Delete Loan (DEV)
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -261,13 +344,33 @@ export default function LoanSummaryTable({
               <div className='flex justify-between'>
                 <span className='text-gray-500'>Remaining Balance:</span>
                 <span className='font-medium text-gray-900'>
-                  {formatCurrency(calculatedRemainingBalance)}
+                  {formatCurrency(remainingBalance)}
                 </span>
               </div>
               <div className='flex justify-between'>
                 <span className='text-gray-500'>Interest Rate:</span>
                 <span className='font-medium text-gray-900'>
                   {loan.interest_rate}%
+                </span>
+              </div>
+              {contract?.contract_terms?.payment_frequency && (
+                <div className='flex justify-between'>
+                  <span className='text-gray-500'>Payment Frequency:</span>
+                  <span className='font-medium text-gray-900'>
+                    {formatPaymentFrequency(contract.contract_terms.payment_frequency)}
+                  </span>
+                </div>
+              )}
+              <div className='flex justify-between'>
+                <span className='text-gray-500'>Total Interest Paid:</span>
+                <span className='font-medium text-gray-900'>
+                  {formatCurrency(totalInterest)}
+                </span>
+              </div>
+              <div className='flex justify-between'>
+                <span className='text-gray-500'>Fees:</span>
+                <span className='font-medium text-gray-900'>
+                  {formatCurrency(cumulativeFees)}
                 </span>
               </div>
               {/* Contract sent at */}

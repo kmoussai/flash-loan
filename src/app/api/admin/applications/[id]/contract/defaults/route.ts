@@ -21,9 +21,11 @@ import {
 } from '@/src/lib/supabase/loan-helpers'
 import { BankAccount } from '@/src/types'
 import {
-  calculateNumberOfPayments,
-  calculatePaymentAmount
+  calculateNumberOfPayments
 } from '@/src/lib/utils/loan'
+import {
+  calculatePaymentAmount
+} from '@/src/lib/loan'
 import { addDays, addMonths } from 'date-fns'
 import { frequencyConfig } from '@/src/lib/utils/schedule'
 
@@ -533,12 +535,22 @@ export async function GET(
         ),
         paymentAmount:
           contractData?.contract_terms?.payment_amount ??
-          calculatePaymentAmount(
-            paymentFrequency,
-            loanAmount + 250.61,
-            29,
-            numberOfPayments ?? 6
-          ),
+          (() => {
+            // Use loan library to calculate payment amount with default fees
+            const defaultBrokerageFee = getBrokerageFee(loanAmount)
+            const defaultOriginationFee = 55 // Default origination fee
+            
+            const calculatedAmount = calculatePaymentAmount({
+              principalAmount: loanAmount,
+              interestRate: 29,
+              paymentFrequency: paymentFrequency,
+              numberOfPayments: numberOfPayments ?? 6,
+              brokerageFee: defaultBrokerageFee,
+              originationFee: defaultOriginationFee
+            })
+            
+            return calculatedAmount ?? 0
+          })(),
         employmentPayDates: getAllEmploymentPayDates(
           loanApplicationData?.income_source,
           loanApplicationData?.income_fields,

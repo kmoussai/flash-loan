@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { LoanPaymentInsert } from '@/src/lib/supabase/types'
-import { calculatePaymentAmount, calculatePaymentBreakdown } from '@/src/lib/utils/loan'
-import { buildSchedule } from '@/src/lib/utils/schedule'
-import { PaymentFrequency } from '@/src/types'
-import { addDays, addMonths } from 'date-fns'
+import { LoanPaymentInsert, PaymentFrequency } from '@/src/lib/supabase/types'
+import { 
+  calculatePaymentAmount, 
+  calculatePaymentBreakdown,
+  calculateFailedPaymentFees,
+  calculateModificationBalance,
+  roundCurrency
+} from '@/src/lib/loan'
 
 export const dynamic = 'force-dynamic'
 
@@ -172,24 +175,31 @@ export async function POST(
       })()
     )
 
-    // Calculate failed payment fees: flat fee (origination_fee) + interest from each failed payment
-    const failedPaymentFeesAndInterest = failedPayments.reduce((sum: number, p: any) => {
-      const flatFee = originationFee // 55 from contract terms
-      const paymentInterest = Number(p.interest || 0) // Interest that was supposed to be paid by this payment
-      return sum + flatFee + paymentInterest
-    }, 0)
+    // Calculate failed payment fees using loan library
+    const failedPaymentResult = calculateFailedPaymentFees({
+      failedPayments: failedPayments.map((p: any) => ({
+        amount: Number(p.amount || 0),
+        interest: Number(p.interest || 0),
+        paymentDate: p.payment_date
+      })),
+      originationFee: originationFee
+    })
 
-    // Calculate new remaining balance: remaining_balance + brokerage_fee + failed_payment_fees_and_interest
-    const currentRemainingBalance = Number(typedLoan.remaining_balance || 0)
-    const totalBalance = currentRemainingBalance + brokerageFee + failedPaymentFeesAndInterest
+    // Calculate modification balance
+    // Note: remaining_balance already includes brokerage fee (set during contract generation)
+    // So we should NOT add brokerage fee again - only add failed payment fees
+    const currentRemainingBalance = roundCurrency(Number(typedLoan.remaining_balance || 0))
+    const totalBalance = currentRemainingBalance + failedPaymentResult.totalAmount
 
-    // Validate payment amount calculation
-    const calculatedPaymentAmount = calculatePaymentAmount(
-      payment_frequency as PaymentFrequency,
-      totalBalance,
-      interestRate,
-      number_of_payments
-    )
+    // Validate payment amount calculation using loan library
+    const calculatedPaymentAmount = calculatePaymentAmount({
+      principalAmount: totalBalance,
+      interestRate: interestRate,
+      paymentFrequency: payment_frequency as PaymentFrequency,
+      numberOfPayments: number_of_payments,
+      brokerageFee: 0, // Fees already included in totalBalance
+      originationFee: 0 // Fees already included in totalBalance
+    })
 
     if (!calculatedPaymentAmount) {
       return NextResponse.json(
@@ -199,30 +209,15 @@ export async function POST(
     }
 
     // Validate provided payment amount matches calculated (allow small difference)
-    const paymentAmountDiff = Math.abs(Number(payment_amount) - calculatedPaymentAmount)
-    if (paymentAmountDiff > 0.01) {
-      return NextResponse.json(
-        { 
-          error: `Payment amount mismatch. Calculated: $${calculatedPaymentAmount.toFixed(2)}, provided: $${Number(payment_amount).toFixed(2)}`,
-          calculated_amount: calculatedPaymentAmount
-        },
-        { status: 400 }
-      )
-    }
-
-    // Delete future payments
-    if (futurePayments.length > 0) {
-      const futurePaymentIds = futurePayments.map((p: any) => p.id)
-      const { error: deleteError } = await supabase
-        .from('loan_payments')
-        .delete()
-        .in('id', futurePaymentIds)
-
-      if (deleteError) {
-        console.error('Error deleting future payments:', deleteError)
+    if (calculatedPaymentAmount) {
+      const paymentAmountDiff = Math.abs(Number(payment_amount) - calculatedPaymentAmount)
+      if (paymentAmountDiff > 0.01) {
         return NextResponse.json(
-          { error: 'Failed to delete future payments' },
-          { status: 500 }
+          { 
+            error: `Payment amount mismatch. Calculated: $${calculatedPaymentAmount.toFixed(2)}, provided: $${Number(payment_amount).toFixed(2)}`,
+            calculated_amount: calculatedPaymentAmount
+          },
+          { status: 400 }
         )
       }
     }
@@ -230,44 +225,41 @@ export async function POST(
     // Build new payment schedule (use provided schedule if available, otherwise build from params)
     let schedule: Array<{ due_date: string; amount: number; interest?: number; principal?: number }>
     
-    // Calculate payment breakdown (interest and principal for each payment)
+    // Calculate payment breakdown using loan library
     const paymentBreakdown = calculatePaymentBreakdown(
-      totalBalance,
-      Number(payment_amount),
-      interestRate,
-      payment_frequency as PaymentFrequency,
-      number_of_payments
+      {
+        principalAmount: totalBalance,
+        interestRate: interestRate,
+        paymentFrequency: payment_frequency as PaymentFrequency,
+        numberOfPayments: number_of_payments,
+        brokerageFee: 0, // Fees already included in totalBalance
+        originationFee: 0 // Fees already included in totalBalance
+      },
+      start_date
     )
+
+    if (!paymentBreakdown || paymentBreakdown.length === 0) {
+      return NextResponse.json(
+        { error: 'Failed to calculate payment breakdown' },
+        { status: 400 }
+      )
+    }
     
     if (payment_schedule && Array.isArray(payment_schedule) && payment_schedule.length > 0) {
       // Use provided edited schedule from user, but include calculated breakdown
       schedule = payment_schedule.map((item: any, index: number) => ({
         due_date: item.due_date,
-        amount: Number(item.amount),
-        interest: paymentBreakdown[index]?.interest,
-        principal: paymentBreakdown[index]?.principal
+        amount: roundCurrency(Number(item.amount)),
+        interest: paymentBreakdown[index] ? roundCurrency(paymentBreakdown[index].interest) : undefined,
+        principal: paymentBreakdown[index] ? roundCurrency(paymentBreakdown[index].principal) : undefined
       }))
     } else {
-      // Build schedule from parameters
-      const builtSchedule = buildSchedule({
-        paymentAmount: Number(payment_amount),
-        paymentFrequency: payment_frequency as PaymentFrequency,
-        numberOfPayments: number_of_payments,
-        nextPaymentDate: start_date
-      })
-
-      if (builtSchedule.length === 0) {
-        return NextResponse.json(
-          { error: 'Failed to build payment schedule' },
-          { status: 400 }
-        )
-      }
-
-      // Add interest and principal breakdown to schedule
-      schedule = builtSchedule.map((item, index) => ({
-        ...item,
-        interest: paymentBreakdown[index]?.interest,
-        principal: paymentBreakdown[index]?.principal
+      // Use breakdown from loan library (includes dates and amounts)
+      schedule = paymentBreakdown.map((item) => ({
+        due_date: item.dueDate,
+        amount: roundCurrency(item.amount),
+        interest: roundCurrency(item.interest),
+        principal: roundCurrency(item.principal)
       }))
     }
 
@@ -286,37 +278,115 @@ export async function POST(
       ? Math.max(...existingConfirmedPayments.map((p: any) => p.payment_number || 0))
       : 0
 
-    // Create new payments with calculated interest and principal
-    const newPayments: LoanPaymentInsert[] = schedule.map((item, index) => ({
-      loan_id: loanId,
-      amount: item.amount,
-      payment_date: item.due_date,
-      status: 'pending',
-      method: null,
-      payment_number: maxPaymentNumber + index + 1,
-      interest: item.interest ?? null, // Calculated interest for this payment
-      principal: item.principal ?? null, // Calculated principal for this payment
-      notes: `Payment ${maxPaymentNumber + index + 1} - Modified on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`
-    }))
+    // Get existing future payments and map them by payment_number
+    const existingFuturePaymentsMap = new Map(
+      futurePayments.map((p: any) => [p.payment_number, p])
+    )
 
-    const { error: insertError } = await (supabase
-      .from('loan_payments') as any)
-      .insert(newPayments)
+    const newPayments: LoanPaymentInsert[] = []
+    const paymentsToUpdate: Array<{ id: string; updates: Partial<LoanPaymentInsert> }> = []
+    const paymentNumbersToKeep = new Set<number>()
 
-    if (insertError) {
-      console.error('Error creating new payments:', insertError)
-      return NextResponse.json(
-        { error: 'Failed to create new payment schedule' },
-        { status: 500 }
-      )
+    // Process each payment in the new schedule
+    schedule.forEach((item, index) => {
+      const paymentNumber = maxPaymentNumber + index + 1
+      paymentNumbersToKeep.add(paymentNumber)
+
+      const paymentData: Partial<LoanPaymentInsert> = {
+        payment_date: item.due_date,
+        amount: item.amount,
+        payment_number: paymentNumber,
+        status: 'pending',
+        interest: item.interest ?? null,
+        principal: item.principal ?? null,
+        notes: `Payment ${paymentNumber} - Modified on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`
+      }
+
+      const existingPayment = existingFuturePaymentsMap.get(paymentNumber)
+      if (existingPayment) {
+        // Update existing payment
+        paymentsToUpdate.push({
+          id: existingPayment.id,
+          updates: paymentData
+        })
+      } else {
+        // Insert new payment
+        newPayments.push({
+          loan_id: loanId,
+          ...paymentData
+        } as LoanPaymentInsert)
+      }
+    })
+
+    // Update existing payments
+    const updatePromises = paymentsToUpdate.map(({ id, updates }) =>
+      (supabase.from('loan_payments') as any)
+        .update(updates)
+        .eq('id', id)
+    )
+    const updateResults = await Promise.allSettled(updatePromises)
+    updateResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Error updating payment ${paymentsToUpdate[index]?.id}:`, result.reason)
+      } else if (result.value?.error) {
+        console.error(`Error updating payment ${paymentsToUpdate[index]?.id}:`, result.value.error)
+      }
+    })
+
+    // Insert new payments
+    if (newPayments.length > 0) {
+      const { error: insertError } = await (supabase
+        .from('loan_payments') as any)
+        .insert(newPayments)
+
+      if (insertError) {
+        console.error('Error creating new payments:', insertError)
+        return NextResponse.json(
+          { error: 'Failed to create new payment schedule' },
+          { status: 500 }
+        )
+      }
     }
 
+    // Delete payments that are no longer in the schedule
+    const paymentsToDelete = futurePayments.filter(
+      (p: any) => !paymentNumbersToKeep.has(p.payment_number)
+    )
+
+    if (paymentsToDelete.length > 0) {
+      const paymentIdsToDelete = paymentsToDelete.map((p: any) => p.id)
+      const { error: deleteError } = await supabase
+        .from('loan_payments')
+        .delete()
+        .in('id', paymentIdsToDelete)
+
+      if (deleteError) {
+        console.error('Error deleting extra payments:', deleteError)
+        // Don't fail the request, but log the error
+      }
+    }
+
+    // Update loan's remaining balance to the new total balance
+    // This reflects the balance that will be amortized over the new payment schedule
+    const { error: updateLoanError } = await (supabase
+      .from('loans') as any)
+      .update({
+        remaining_balance: roundCurrency(totalBalance)
+      })
+      .eq('id', loanId)
+
+    if (updateLoanError) {
+      console.error('Error updating loan remaining balance:', updateLoanError)
+      // Don't fail the request, but log the error
+      // The payments were created successfully, so we continue
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Loan payment schedule modified successfully. ${futurePayments.length} payment(s) deleted, ${newPayments.length} new payment(s) created.`,
-      deleted_payments: futurePayments.length,
+      message: `Loan payment schedule modified successfully. ${paymentsToUpdate.length} payment(s) updated, ${newPayments.length} new payment(s) created, ${paymentsToDelete.length} payment(s) deleted.`,
+      updated_payments: paymentsToUpdate.length,
       created_payments: newPayments.length,
+      deleted_payments: paymentsToDelete.length,
       total_balance: totalBalance,
       payment_amount: Number(payment_amount),
       payment_frequency: payment_frequency,

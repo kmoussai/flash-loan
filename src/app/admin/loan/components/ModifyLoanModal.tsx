@@ -4,8 +4,14 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import Select from '@/src/app/[locale]/components/Select'
 import DatePicker from '@/src/app/[locale]/components/DatePicker'
 import { PaymentFrequency } from '@/src/types'
-import { calculatePaymentAmount, calculatePaymentBreakdown } from '@/src/lib/utils/loan'
-import { buildSchedule, frequencyOptions } from '@/src/lib/utils/schedule'
+import { frequencyOptions } from '@/src/lib/utils/schedule'
+import {
+  calculatePaymentAmount,
+  calculatePaymentBreakdown,
+  calculateFailedPaymentFees,
+  calculateModificationBalance,
+  roundCurrency
+} from '@/src/lib/loan'
 import { getCanadianHolidays } from '@/src/lib/utils/date'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/utils'
@@ -50,15 +56,19 @@ export default function ModifyLoanModal({
   }, [open])
   const [action, setAction] = useState<'modify' | 'stop'>('modify')
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('')
-  const [paymentFrequency, setPaymentFrequency] = useState<PaymentFrequency>('monthly')
+  const [paymentFrequency, setPaymentFrequency] =
+    useState<PaymentFrequency>('monthly')
   const [numberOfPayments, setNumberOfPayments] = useState<number>(0)
   const [startDate, setStartDate] = useState('')
-  const [paymentSchedule, setPaymentSchedule] = useState<PayementScheduleItem[]>([])
+  const [paymentSchedule, setPaymentSchedule] = useState<
+    PayementScheduleItem[]
+  >([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewData, setPreviewData] = useState<{
-    cancelledCount: number
-    newCount: number
+    updatedCount: number
+    createdCount: number
+    deletedCount: number
     totalBalance: number
   } | null>(null)
 
@@ -69,7 +79,7 @@ export default function ModifyLoanModal({
   )
 
   const payments = paymentsData || []
-  
+
   // Memoize today to avoid recreating on every render
   const today = useMemo(() => {
     const date = new Date()
@@ -82,7 +92,8 @@ export default function ModifyLoanModal({
       const paymentDate = new Date(p.payment_date)
       paymentDate.setHours(0, 0, 0, 0)
       const isFutureDate = paymentDate >= today
-      const isPendingOrFailed = ['pending', 'failed'].includes(p.status) && paymentDate < today
+      const isPendingOrFailed =
+        ['pending', 'failed'].includes(p.status) && paymentDate < today
       return isFutureDate || isPendingOrFailed
     }).length
   }, [payments, today])
@@ -125,8 +136,14 @@ export default function ModifyLoanModal({
     }
     return 'monthly' as PaymentFrequency
   }, [contractTerms?.payment_frequency])
-  const contractPaymentAmount = useMemo(() => contractTerms.payment_amount || 0, [contractTerms.payment_amount])
-  const contractNumberOfPayments = useMemo(() => contractTerms.number_of_payments || 0, [contractTerms.number_of_payments])
+  const contractPaymentAmount = useMemo(
+    () => contractTerms.payment_amount || 0,
+    [contractTerms.payment_amount]
+  )
+  const contractNumberOfPayments = useMemo(
+    () => contractTerms.number_of_payments || 0,
+    [contractTerms.number_of_payments]
+  )
 
   // Initialize form with current loan data when modal opens
   useEffect(() => {
@@ -134,9 +151,13 @@ export default function ModifyLoanModal({
 
     // Always set frequency from contract, defaulting to monthly if not available
     // Validate that the frequency is a valid option value
-    const validFrequency: PaymentFrequency = (['weekly', 'bi-weekly', 'twice-monthly', 'monthly'].includes(contractPaymentFrequency)
-      ? contractPaymentFrequency
-      : 'monthly') as PaymentFrequency
+    const validFrequency: PaymentFrequency = (
+      ['weekly', 'bi-weekly', 'twice-monthly', 'monthly'].includes(
+        contractPaymentFrequency
+      )
+        ? contractPaymentFrequency
+        : 'monthly'
+    ) as PaymentFrequency
     setPaymentFrequency(validFrequency)
     setPaymentAmount(contractPaymentAmount)
     setNumberOfPayments(contractNumberOfPayments)
@@ -150,91 +171,178 @@ export default function ModifyLoanModal({
     tomorrow.setDate(tomorrow.getDate() + 1)
     tomorrow.setHours(0, 0, 0, 0)
     setStartDate(tomorrow.toISOString().split('T')[0])
-  }, [open, loan?.id, contractPaymentFrequency, contractPaymentAmount, contractNumberOfPayments])
+  }, [
+    open,
+    loan?.id,
+    contractPaymentFrequency,
+    contractPaymentAmount,
+    contractNumberOfPayments
+  ])
 
   // Memoize failed payments calculation to avoid recreating on every render
   const failedPayments = useMemo(() => {
-    return payments.filter((p: any) => 
-      p.status === 'failed' && (() => {
-        const paymentDate = new Date(p.payment_date)
-        paymentDate.setHours(0, 0, 0, 0)
-        return paymentDate < today
-      })()
+    return payments.filter(
+      (p: any) =>
+        p.status === 'failed' &&
+        (() => {
+          const paymentDate = new Date(p.payment_date)
+          paymentDate.setHours(0, 0, 0, 0)
+          return paymentDate < today
+        })()
     )
   }, [payments, today])
 
   // Memoize origination fee
-  const originationFee = useMemo(() => fees.origination_fee || 55, [fees.origination_fee])
+  const originationFee = useMemo(
+    () => fees.origination_fee || 55,
+    [fees.origination_fee]
+  )
 
-  // Auto-calculate payment amount when relevant fields change (for modify action)
+  // Auto-calculate payment amount and breakdown when all 4 parameters change (for modify action)
+  // The 4 parameters are: paymentFrequency, numberOfPayments, startDate, and remaining_balance
   useEffect(() => {
     if (action !== 'modify' || !startDate) return
 
-    // Calculate total balance: remaining_balance + brokerage_fee + failed payment fees
+    // Calculate total balance using loan library
+    // Note: remaining_balance already includes brokerage fee (set during contract generation)
+    // So we should NOT add brokerage fee again - only add failed payment fees
     const remainingBalance = Number(loan?.remaining_balance || 0)
-    
-    // Calculate failed payment fees: flat fee (origination_fee) + interest from each failed payment
-    const failedPaymentFeesAndInterest = failedPayments.reduce((sum: number, p: any) => {
-      const flatFee = originationFee // 55 from contract terms
-      const paymentInterest = Number(p.interest || 0) // Interest that was supposed to be paid by this payment
-      return sum + flatFee + paymentInterest
-    }, 0)
 
-    const totalBalance = remainingBalance + brokerageFee + failedPaymentFeesAndInterest
+    // Calculate failed payment fees using loan library
+    const failedPaymentResult = calculateFailedPaymentFees({
+      failedPayments: failedPayments.map((p: any) => ({
+        amount: Number(p.amount || 0),
+        interest: Number(p.interest || 0),
+        paymentDate: p.payment_date
+      })),
+      originationFee: originationFee
+    })
 
-    if (totalBalance > 0 && paymentFrequency && numberOfPayments > 0 && startDate) {
-      const calculatedAmount = calculatePaymentAmount(
-        paymentFrequency,
-        totalBalance,
-        interestRate,
-        numberOfPayments
-      )
+    // Calculate modification balance
+    // remaining_balance already includes brokerage fee, so only add failed payment fees
+    const totalBalance = remainingBalance + failedPaymentResult.totalAmount
+
+    // Check if all 4 required parameters are present
+    if (
+      totalBalance > 0 &&
+      paymentFrequency &&
+      numberOfPayments > 0 &&
+      startDate
+    ) {
+      // Use loan library to calculate payment amount
+      const calculatedAmount = calculatePaymentAmount({
+        principalAmount: totalBalance, // Use total balance as principal for modification
+        interestRate: interestRate,
+        paymentFrequency: paymentFrequency,
+        numberOfPayments: numberOfPayments,
+        brokerageFee: 0, // Fees already included in totalBalance
+        originationFee: 0 // Fees already included in totalBalance
+      })
 
       if (calculatedAmount) {
         // Only update if the calculated amount is different to prevent infinite loops
-        const currentAmount = typeof paymentAmount === 'number' ? paymentAmount : 0
+        const currentAmount =
+          typeof paymentAmount === 'number' ? paymentAmount : 0
         if (Math.abs(calculatedAmount - currentAmount) > 0.01) {
           setPaymentAmount(calculatedAmount)
         }
-        
-        // Build initial schedule
-        const builtSchedule = buildSchedule({
-          paymentAmount: calculatedAmount,
-          paymentFrequency,
-          numberOfPayments,
-          nextPaymentDate: startDate
-        })
-        
-        // Calculate interest and principal breakdown
+
+        // Use loan library to calculate payment breakdown with interest and principal
         const breakdown = calculatePaymentBreakdown(
-          totalBalance,
-          calculatedAmount,
-          interestRate,
-          paymentFrequency,
-          numberOfPayments
+          {
+            principalAmount: totalBalance, // Use total balance as principal for modification
+            interestRate: interestRate,
+            paymentFrequency: paymentFrequency,
+            numberOfPayments: numberOfPayments,
+            brokerageFee: 0, // Fees already included in totalBalance
+            originationFee: 0 // Fees already included in totalBalance
+          },
+          startDate
         )
-        
-        // Add breakdown to schedule
-        const scheduleWithBreakdown = builtSchedule.map((item, index) => ({
-          ...item,
-          interest: breakdown[index]?.interest,
-          principal: breakdown[index]?.principal
+
+        // Convert breakdown to schedule format
+        const scheduleWithBreakdown = breakdown.map(payment => ({
+          due_date: payment.dueDate,
+          amount: payment.amount,
+          interest: payment.interest,
+          principal: payment.principal
         }))
-        
+
         // Only update schedule if it's different
-        const scheduleChanged = JSON.stringify(scheduleWithBreakdown) !== JSON.stringify(paymentSchedule)
+        const scheduleChanged =
+          JSON.stringify(scheduleWithBreakdown) !==
+          JSON.stringify(paymentSchedule)
         if (scheduleChanged) {
           setPaymentSchedule(scheduleWithBreakdown)
         }
-        
+
+        // Calculate which payments will be updated, created, or deleted
+        // Get existing future payments
+        const existingFuturePayments = payments.filter((p: any) => {
+          const paymentDate = new Date(p.payment_date)
+          paymentDate.setHours(0, 0, 0, 0)
+          const isFutureDate = paymentDate >= today
+          const isPendingOrFailed =
+            ['pending', 'failed'].includes(p.status) && paymentDate < today
+          return isFutureDate || isPendingOrFailed
+        })
+
+        // Get max payment number from confirmed/paid payments
+        const existingConfirmedPayments = payments.filter((p: any) =>
+          ['confirmed', 'paid', 'manual', 'rebate'].includes(p.status)
+        )
+        const maxPaymentNumber = existingConfirmedPayments.length > 0
+          ? Math.max(...existingConfirmedPayments.map((p: any) => p.payment_number || 0))
+          : 0
+
+        // Map existing future payments by payment_number
+        const existingFuturePaymentsMap = new Map(
+          existingFuturePayments.map((p: any) => [p.payment_number, p])
+        )
+
+        // Calculate counts
+        let updatedCount = 0
+        let createdCount = 0
+        const paymentNumbersToKeep = new Set<number>()
+
+        scheduleWithBreakdown.forEach((_, index) => {
+          const paymentNumber = maxPaymentNumber + index + 1
+          paymentNumbersToKeep.add(paymentNumber)
+
+          if (existingFuturePaymentsMap.has(paymentNumber)) {
+            updatedCount++
+          } else {
+            createdCount++
+          }
+        })
+
+        // Count payments that will be deleted (exist but not in new schedule)
+        const deletedCount = existingFuturePayments.filter(
+          (p: any) => !paymentNumbersToKeep.has(p.payment_number)
+        ).length
+
         setPreviewData({
-          cancelledCount: futurePaymentsCount,
-          newCount: numberOfPayments,
+          updatedCount,
+          createdCount,
+          deletedCount,
           totalBalance
         })
       }
     }
-  }, [paymentFrequency, numberOfPayments, startDate, loan?.remaining_balance, brokerageFee, originationFee, failedPayments, interestRate, action, futurePaymentsCount])
+  }, [
+    // The 4 key parameters that trigger recalculation
+    paymentFrequency,
+    numberOfPayments,
+    startDate,
+    loan?.remaining_balance,
+    // Additional dependencies for accurate calculation
+    brokerageFee,
+    originationFee,
+    failedPayments,
+    interestRate,
+    action,
+    futurePaymentsCount
+  ])
 
   // Handle schedule changes from EditablePaymentScheduleList
   const handleScheduleChange = (schedule: PayementScheduleItem[]) => {
@@ -248,7 +356,12 @@ export default function ModifyLoanModal({
     if (action === 'stop') {
       // Stop action doesn't need form validation
     } else if (action === 'modify') {
-      if (!paymentAmount || !paymentFrequency || !numberOfPayments || !startDate) {
+      if (
+        !paymentAmount ||
+        !paymentFrequency ||
+        !numberOfPayments ||
+        !startDate
+      ) {
         setError('Please fill in all required fields')
         return
       }
@@ -276,7 +389,7 @@ export default function ModifyLoanModal({
         payload.payment_frequency = paymentFrequency
         payload.number_of_payments = numberOfPayments
         payload.start_date = startDate
-        
+
         // Include edited payment schedule if available
         if (paymentSchedule && paymentSchedule.length > 0) {
           payload.payment_schedule = paymentSchedule
@@ -323,8 +436,8 @@ export default function ModifyLoanModal({
   if (!open || loan?.status === 'completed') return null
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4 overflow-y-auto'>
-      <div className='w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-xl my-auto'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 px-4 py-4'>
+      <div className='my-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-xl'>
         {/* Header */}
         <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
           <h3 className='text-lg font-semibold text-gray-900'>
@@ -394,10 +507,11 @@ export default function ModifyLoanModal({
 
           {/* Stop Action Info */}
           {action === 'stop' && (
-            <div className='mb-4 rounded-lg bg-yellow-50 border border-yellow-200 p-4'>
+            <div className='mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4'>
               <p className='text-sm text-yellow-800'>
-                <strong>Warning:</strong> This will mark {futurePaymentsCount} future payment(s) as cancelled with a note.
-                Past payments will remain unchanged.
+                <strong>Warning:</strong> This will mark {futurePaymentsCount}{' '}
+                future payment(s) as cancelled with a note. Past payments will
+                remain unchanged.
               </p>
             </div>
           )}
@@ -415,7 +529,9 @@ export default function ModifyLoanModal({
                   </label>
                   <Select
                     value={paymentFrequency}
-                    onValueChange={e => setPaymentFrequency(e as PaymentFrequency)}
+                    onValueChange={e =>
+                      setPaymentFrequency(e as PaymentFrequency)
+                    }
                     options={frequencyOptions}
                     disabled={isSubmitting}
                     className='w-full'
@@ -434,7 +550,9 @@ export default function ModifyLoanModal({
                     type='number'
                     min={1}
                     value={numberOfPayments}
-                    onChange={e => setNumberOfPayments(Number(e.target.value) || 0)}
+                    onChange={e =>
+                      setNumberOfPayments(Number(e.target.value) || 0)
+                    }
                     disabled={isSubmitting}
                     required
                     className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50'
@@ -455,7 +573,11 @@ export default function ModifyLoanModal({
                     type='number'
                     min={0}
                     step='0.01'
-                    value={paymentAmount}
+                    value={
+                      typeof paymentAmount === 'number'
+                        ? roundCurrency(paymentAmount)
+                        : ''
+                    }
                     onChange={e => {
                       const value = e.target.value
                       setPaymentAmount(value === '' ? '' : Number(value))
@@ -497,13 +619,33 @@ export default function ModifyLoanModal({
 
               {/* Preview */}
               {previewData && (
-                <div className='rounded-lg bg-blue-50 border border-blue-200 p-4 mb-4'>
-                  <p className='text-sm font-medium text-blue-900 mb-2'>Summary:</p>
-                  <ul className='text-xs text-blue-800 space-y-1'>
-                    <li>• {previewData.cancelledCount} future payment(s) will be cancelled</li>
-                    <li>• {previewData.newCount} new payment(s) will be created</li>
-                    <li>• Total balance: {formatCurrency(previewData.totalBalance)}</li>
-                    <li>• Payment amount: {formatCurrency(Number(paymentAmount))}</li>
+                <div className='mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4'>
+                  <p className='mb-2 text-sm font-medium text-blue-900'>
+                    Summary:
+                  </p>
+                  <ul className='space-y-1 text-xs text-blue-800'>
+                    {previewData.updatedCount > 0 && (
+                      <li>
+                        • {previewData.updatedCount} payment(s) will be updated
+                      </li>
+                    )}
+                    {previewData.createdCount > 0 && (
+                      <li>
+                        • {previewData.createdCount} new payment(s) will be created
+                      </li>
+                    )}
+                    {previewData.deletedCount > 0 && (
+                      <li>
+                        • {previewData.deletedCount} payment(s) will be deleted
+                      </li>
+                    )}
+                    <li>
+                      • Total balance:{' '}
+                      {formatCurrency(previewData.totalBalance)}
+                    </li>
+                    <li>
+                      • Payment amount: {formatCurrency(Number(paymentAmount))}
+                    </li>
                   </ul>
                 </div>
               )}
@@ -542,7 +684,14 @@ export default function ModifyLoanModal({
             </button>
             <button
               type='submit'
-              disabled={isSubmitting || (action !== 'stop' && (!paymentAmount || !startDate || numberOfPayments <= 0 || paymentSchedule.length === 0))}
+              disabled={
+                isSubmitting ||
+                (action !== 'stop' &&
+                  (!paymentAmount ||
+                    !startDate ||
+                    numberOfPayments <= 0 ||
+                    paymentSchedule.length === 0))
+              }
               className={`rounded-md px-4 py-2 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 action === 'stop'
                   ? 'bg-red-600 hover:bg-red-700'
@@ -552,8 +701,8 @@ export default function ModifyLoanModal({
               {isSubmitting
                 ? 'Processing...'
                 : action === 'stop'
-                ? 'Stop Payments'
-                : 'Modify Loan'}
+                  ? 'Stop Payments'
+                  : 'Modify Loan'}
             </button>
           </div>
         </form>
@@ -561,4 +710,3 @@ export default function ModifyLoanModal({
     </div>
   )
 }
-

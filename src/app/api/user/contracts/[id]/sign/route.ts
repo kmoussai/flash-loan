@@ -277,81 +277,8 @@ export async function POST(
           )
         }
 
-        // Create loan_payments records for each scheduled payment
-        // This creates individual payment records that can be tracked and collected
-        if (schedule.length > 0) {
-          try {
-            // Format dates properly for payment_date (timestamptz)
-            const paymentEntries = schedule.map((item: any, index: number) => {
-              // Extract date part and convert to ISO timestamp for payment_date
-              let paymentDate = item.due_date
-              if (paymentDate && paymentDate.includes('T')) {
-                // Already a timestamp, use as is
-                paymentDate = paymentDate
-              } else if (paymentDate) {
-                // Date only, convert to timestamp at start of day
-                paymentDate = new Date(paymentDate + 'T00:00:00').toISOString()
-              } else {
-                // Fallback to current date
-                paymentDate = new Date().toISOString()
-              }
-
-              return {
-                loan_id: updatedContract.loan.id,
-                amount: Number(item.amount) || 0,
-                payment_date: paymentDate,
-                payment_number: index + 1,
-                interest: item.interest !== undefined ? Number(item.interest) : null,
-                principal: item.principal !== undefined ? Number(item.principal) : null,
-                status: 'pending' as const,
-                method: null
-              }
-            })
-
-            // Delete existing payment entries for this loan (if any) to avoid duplicates
-            const { error: deleteError } = await (adminClient as any)
-              .from('loan_payments')
-              .delete()
-              .eq('loan_id', updatedContract.loan.id)
-              .eq('status', 'pending')
-
-            if (deleteError) {
-              console.warn(
-                '[POST /api/user/contracts/:id/sign] Could not delete existing pending payment entries:',
-                deleteError
-              )
-            }
-
-            // Insert new payment entries
-            const { data: insertedPayments, error: paymentError } = await (adminClient as any)
-              .from('loan_payments')
-              .insert(paymentEntries)
-              .select()
-
-            if (paymentError) {
-              console.error(
-                '[POST /api/user/contracts/:id/sign] Failed to create loan_payments records:',
-                paymentError
-              )
-              // Log but don't fail - contract_terms.payment_schedule is the source of truth
-            } else {
-              console.log(
-                `[POST /api/user/contracts/:id/sign] Successfully created ${insertedPayments?.length || paymentEntries.length} payment records for loan ${updatedContract.loan.id}`
-              )
-            }
-          } catch (paymentSyncError: any) {
-            // Non-critical error - payment schedule is in contract_terms
-            console.error(
-              '[POST /api/user/contracts/:id/sign] Error creating loan_payments records:',
-              paymentSyncError?.message || paymentSyncError
-            )
-          }
-        } else {
-          console.warn(
-            '[POST /api/user/contracts/:id/sign] No payment schedule found in contract_terms for loan',
-            updatedContract.loan.id
-          )
-        }
+        // Note: Loan payments are already created during contract generation
+        // No need to create them again when contract is signed
       }
     } catch (paymentError) {
       console.error('[POST /api/user/contracts/:id/sign] Failed to prepare payment schedule:', paymentError)

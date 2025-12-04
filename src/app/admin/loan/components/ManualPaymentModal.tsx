@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import DatePicker from '@/src/app/[locale]/components/DatePicker'
+import {
+  validatePaymentAmount,
+  calculateNewBalance,
+  roundCurrency
+} from '@/src/lib/loan'
 
 interface ManualPaymentModalProps {
   loanId: string
@@ -27,11 +32,18 @@ export default function ManualPaymentModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Calculate if payment would bring balance to 0
+  // Calculate if payment would bring balance to 0 using loan library
   const wouldBalanceBeZero = remainingBalance !== undefined && 
     amount && 
     !isNaN(Number(amount)) && 
-    Number(amount) >= remainingBalance
+    (() => {
+      const paymentAmt = roundCurrency(Number(amount))
+      const balanceResult = calculateNewBalance({
+        currentBalance: remainingBalance,
+        paymentAmount: paymentAmt
+      })
+      return balanceResult.isPaidOff
+    })()
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -57,14 +69,19 @@ export default function ManualPaymentModal({
       return
     }
 
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    const paymentAmount = roundCurrency(Number(amount))
+    if (isNaN(paymentAmount) || paymentAmount <= 0) {
       setError('Valid payment amount is required')
       return
     }
 
-    if (remainingBalance !== undefined && Number(amount) > remainingBalance) {
-      setError(`Amount cannot exceed remaining balance of $${remainingBalance.toFixed(2)}`)
-      return
+    // Validate payment amount using loan library
+    if (remainingBalance !== undefined) {
+      const validationError = validatePaymentAmount(paymentAmount, remainingBalance)
+      if (validationError) {
+        setError(validationError)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -157,7 +174,7 @@ export default function ManualPaymentModal({
             </div>
           )}
 
-          {remainingBalance !== undefined && (
+          {remainingBalance !== undefined && typeof remainingBalance === 'number' && (
             <div className='mb-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-800'>
               <span className='font-medium'>Remaining Balance:</span>{' '}
               ${remainingBalance.toFixed(2)}
@@ -208,7 +225,7 @@ export default function ManualPaymentModal({
                 placeholder='0.00'
                 className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-primary focus:outline-none focus:ring-2'
               />
-              {remainingBalance !== undefined && (
+              {remainingBalance !== undefined && typeof remainingBalance === 'number' && (
                 <p className='mt-1 text-xs text-gray-500'>
                   Maximum: ${remainingBalance.toFixed(2)}
                 </p>
