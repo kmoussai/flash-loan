@@ -152,7 +152,7 @@ export default function RebatePaymentModal({
             </div>
           )}
 
-          {remainingBalance !== undefined && (
+          {remainingBalance !== undefined && typeof remainingBalance === 'number' && (
             <div className='mb-4 rounded-lg bg-purple-50 p-3 text-sm text-purple-800'>
               <span className='font-medium'>Current Remaining Balance:</span>{' '}
               ${remainingBalance.toFixed(2)}

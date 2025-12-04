@@ -22,6 +22,7 @@ import {
   getNumberOfPayments,
   formatCurrency,
   roundCurrency,
+  calculateBrokerageFee,
   type LoanCalculationParams,
 } from '../index'
 
@@ -48,7 +49,16 @@ describe('Loan Calculation Library', () => {
   // ============================================================================
 
   describe('calculatePaymentAmount', () => {
-      it('Sofloan examples', () => {
+      it('Sofloan examples 2', () => {
+        const payment = calculatePaymentAmount({
+            principalAmount: 250+170.94,
+            interestRate: 29,
+            paymentFrequency: 'bi-weekly',
+            numberOfPayments: 6
+        })
+        expect(payment).toBeCloseTo(72.92, 2)
+      })
+      it('Sofloan examples 1', () => {
         const payment = calculatePaymentAmount({
             principalAmount: 420.94,
             interestRate: 29,
@@ -108,8 +118,8 @@ describe('Loan Calculation Library', () => {
         ...baseLoanParams,
         interestRate: 0,
       })
-      // Should be simple division: 500 / 3 = 166.67
-      expect(result).toBe(166.67)
+      // Should be simple division: 500 / 3 = 166.66666666666666 (precise)
+      expect(result).toBeCloseTo(166.67, 2)
     })
 
     it('should calculate correct payment for weekly frequency', () => {
@@ -624,8 +634,8 @@ describe('Loan Calculation Library', () => {
 
       const newBalance = calculateModificationBalance(325, 50, failedFees)
 
-      // 325 (current) + 50 (brokerage) + 67.09 (failed fees) = 442.09
-      expect(newBalance).toBe(442.09)
+      // 325 (current) + 50 (brokerage) + 67.09 (failed fees) = 442.09 (may have floating point precision)
+      expect(newBalance).toBeCloseTo(442.09, 2)
     })
 
     it('should handle zero fees', () => {
@@ -774,6 +784,32 @@ describe('Loan Calculation Library', () => {
     it('should handle negative amounts', () => {
       const formatted = formatCurrency(-100)
       expect(formatted).toContain('-')
+    })
+  })
+
+  describe('calculateBrokerageFee', () => {
+    it('should calculate brokerage fee as 68% of loan amount', () => {
+      expect(calculateBrokerageFee(500)).toBe(340) // 500 * 0.68
+      expect(calculateBrokerageFee(1000)).toBe(680) // 1000 * 0.68
+      expect(calculateBrokerageFee(250)).toBe(170) // 250 * 0.68
+    })
+
+    it('should handle decimal loan amounts', () => {
+      expect(calculateBrokerageFee(500.50)).toBeCloseTo(340.34, 2) // 500.50 * 0.68
+      expect(calculateBrokerageFee(100.25)).toBeCloseTo(68.17, 2) // 100.25 * 0.68
+    })
+
+    it('should return 0 for invalid inputs', () => {
+      expect(calculateBrokerageFee(0)).toBe(0)
+      expect(calculateBrokerageFee(-100)).toBe(0)
+      expect(calculateBrokerageFee(NaN)).toBe(0)
+      expect(calculateBrokerageFee(Infinity)).toBe(0)
+      expect(calculateBrokerageFee(-Infinity)).toBe(0)
+    })
+
+    it('should handle edge cases', () => {
+      expect(calculateBrokerageFee(1)).toBeCloseTo(0.68, 2)
+      expect(calculateBrokerageFee(1000000)).toBe(680000)
     })
   })
 

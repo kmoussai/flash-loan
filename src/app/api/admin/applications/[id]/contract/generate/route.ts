@@ -20,7 +20,7 @@ import {
   updateLoanAmount
 } from '@/src/lib/supabase/loan-helpers'
 import { GenerateContractPayload } from '@/src/app/types/contract'
-import { PaymentFrequency, ContractTerms } from '@/src/lib/supabase/types'
+import { PaymentFrequency, ContractTerms, LoanPaymentInsert } from '@/src/lib/supabase/types'
 
 export async function POST(
   request: NextRequest,
@@ -166,6 +166,9 @@ export async function POST(
         { status: 400 }
       )
     }
+    // 3) If contract exists but is not signed, allow regeneration (even if status is not contract_pending)
+    // This handles cases where contract was generated but application status might have changed
+    const canRegenerateUnsigned = existing && existing.contract_status !== 'signed'
 
     const sanitizeLoanAmount = (value: unknown): number | null => {
       const parsed = Number(value)
@@ -311,20 +314,64 @@ export async function POST(
           contract_generated_at: new Date().toISOString()
         })
         .eq('id', applicationId)
+      
+      // Calculate total loan amount including fees using loan library
+      // Note: Origination fee is NOT included in initial loan amount - it's only for returned/failed payments
+      const { calculateTotalLoanAmount } = await import('@/src/lib/loan')
+      const brokerageFee = contractTerms.fees?.brokerage_fee ?? 0
+      const totalLoanAmount = calculateTotalLoanAmount({
+        principalAmount: resolvedLoanAmount,
+        interestRate: resolvedInterestRate,
+        paymentFrequency: payload?.paymentFrequency as PaymentFrequency,
+        numberOfPayments: payload?.numberOfPayments as number,
+        originationFee: 0, // Origination fee NOT included in initial loan amount
+        brokerageFee: brokerageFee
+      })
+      
       await updateLoan(
         loanId as string,
         {
           principal_amount: resolvedLoanAmount,
-          remaining_balance: resolvedLoanAmount
+          remaining_balance: totalLoanAmount // Only includes principal + brokerage fee
         },
         { useAdminClient: true }
       )
+
+      // Create loan payments with 'pending' status (waiting for loan to be active/contract signed)
+      if (finalPaymentSchedule && finalPaymentSchedule.length > 0) {
+        const loanPayments: LoanPaymentInsert[] = finalPaymentSchedule.map((schedule, index) => ({
+          loan_id: loanId as string,
+          payment_date: schedule.due_date,
+          amount: schedule.amount,
+          payment_number: index + 1,
+          status: 'pending' as const, // Status indicates payment is waiting for loan to be active (contract signed)
+          interest: schedule.interest ?? null,
+          principal: schedule.principal ?? null
+        }))
+
+        // For new contracts, just insert all payments
+        // Delete existing pending payments for this loan first (in case of any orphaned records)
+        await (supabase.from('loan_payments') as any)
+          .delete()
+          .eq('loan_id', loanId)
+          .eq('status', 'pending')
+
+        // Insert new loan payments
+        const { error: paymentError } = await (supabase.from('loan_payments') as any)
+          .insert(loanPayments)
+
+        if (paymentError) {
+          console.error('Error creating loan payments:', paymentError)
+          // Don't fail the request, but log the error
+        }
+      }
+
       return NextResponse.json({
         success: true,
         contract: contractResult.data
       })
-    } else if (canRegenerate) {
-      // Regenerate (update existing, bump version)
+    } else if (canRegenerateUnsigned) {
+      // Regenerate (update existing, bump version) - allowed if contract is not signed
       const nextVersion = (existing.contract_version ?? 1) + 1
       const { updateLoanContract } = await import(
         '@/src/lib/supabase/contract-helpers'
@@ -350,22 +397,154 @@ export async function POST(
         )
       }
 
+      // Calculate total loan amount including fees using loan library
+      // Note: Origination fee is NOT included in initial loan amount - it's only for returned/failed payments
+      const { calculateTotalLoanAmount } = await import('@/src/lib/loan')
+      const newBrokerageFee = contractTerms.fees?.brokerage_fee ?? 0
+      
+      // Get old brokerage fee and principal from existing contract for comparison
+      const oldBrokerageFee = existing.contract_terms?.fees?.brokerage_fee ?? 0
+      const oldPrincipalAmount = existing.contract_terms?.principal_amount ?? loan?.principal_amount ?? resolvedLoanAmount
+      
+      // Calculate new total loan amount (principal + brokerage fee only)
+      const newTotalLoanAmount = calculateTotalLoanAmount({
+        principalAmount: resolvedLoanAmount,
+        interestRate: resolvedInterestRate,
+        paymentFrequency: payload?.paymentFrequency as PaymentFrequency,
+        numberOfPayments: payload?.numberOfPayments as number,
+        originationFee: 0, // Origination fee NOT included in initial loan amount
+        brokerageFee: newBrokerageFee
+      })
+      
+      // Calculate remaining balance adjustment
+      // If loan hasn't been disbursed or no payments made, use new total
+      // Otherwise, adjust for brokerage fee and principal amount changes
+      const currentRemainingBalance = Number(loan?.remaining_balance || 0)
+      const oldTotalLoanAmount = (oldPrincipalAmount || 0) + oldBrokerageFee
+      
+      // Calculate differences for adjustment
+      const principalDifference = resolvedLoanAmount - oldPrincipalAmount
+      const brokerageFeeDifference = newBrokerageFee - oldBrokerageFee
+      
+      let newRemainingBalance: number
+      if (currentRemainingBalance === oldTotalLoanAmount || loan?.status === 'pending_disbursement') {
+        // No payments made yet, use new total (principal + new brokerage fee)
+        newRemainingBalance = newTotalLoanAmount
+      } else {
+        // Payments have been made, adjust for principal and brokerage fee changes
+        // Formula: newRemaining = currentRemaining + (newPrincipal - oldPrincipal) + (newBrokerageFee - oldBrokerageFee)
+        newRemainingBalance = Math.max(0, currentRemainingBalance + principalDifference + brokerageFeeDifference)
+      }
+      
+      // Update loan with new principal amount, brokerage fee (via remaining balance), and adjusted remaining balance
       await updateLoan(
         loanId as string,
         {
-          principal_amount: resolvedLoanAmount,
-          remaining_balance: resolvedLoanAmount,
-          
+          principal_amount: resolvedLoanAmount, // Update principal amount if changed by admin
+          remaining_balance: newRemainingBalance // Updated with new fees and principal changes
         },
         { useAdminClient: true }
       )
+
+      // Update/create/delete loan payments with 'pending' status (waiting for loan to be active/contract signed)
+      if (finalPaymentSchedule && finalPaymentSchedule.length > 0) {
+        // Get existing pending payments for this loan
+        const { data: existingPayments, error: fetchError } = await (supabase.from('loan_payments') as any)
+          .select('id, payment_number, status')
+          .eq('loan_id', loanId)
+          .eq('status', 'pending')
+          .order('payment_number', { ascending: true })
+
+        if (fetchError) {
+          console.error('Error fetching existing payments:', fetchError)
+        }
+
+        const existingPaymentsArray = (existingPayments || []) as Array<{ id: string; payment_number: number; status: string }>
+        const existingPaymentsMap = new Map(
+          existingPaymentsArray.map((p) => [p.payment_number, p])
+        )
+
+        const newPayments: LoanPaymentInsert[] = []
+        const paymentsToUpdate: Array<{ id: string; updates: any }> = []
+        const paymentNumbersToKeep = new Set<number>()
+
+        // Process each payment in the new schedule
+        finalPaymentSchedule.forEach((schedule, index) => {
+          const paymentNumber = index + 1
+          paymentNumbersToKeep.add(paymentNumber)
+
+          const paymentData = {
+            payment_date: schedule.due_date,
+            amount: schedule.amount,
+            payment_number: paymentNumber,
+            status: 'pending' as const,
+            interest: schedule.interest ?? null,
+            principal: schedule.principal ?? null
+          }
+
+          const existingPayment = existingPaymentsMap.get(paymentNumber)
+          if (existingPayment) {
+            // Update existing payment
+            paymentsToUpdate.push({
+              id: existingPayment.id,
+              updates: paymentData
+            })
+          } else {
+            // Insert new payment
+            newPayments.push({
+              loan_id: loanId as string,
+              ...paymentData
+            })
+          }
+        })
+
+        // Update existing payments
+        for (const { id, updates } of paymentsToUpdate) {
+          const { error: updateError } = await (supabase.from('loan_payments') as any)
+            .update(updates)
+            .eq('id', id)
+
+          if (updateError) {
+            console.error(`Error updating payment ${id}:`, updateError)
+          }
+        }
+
+        // Insert new payments
+        if (newPayments.length > 0) {
+          const { error: insertError } = await (supabase.from('loan_payments') as any)
+            .insert(newPayments)
+
+          if (insertError) {
+            console.error('Error inserting new payments:', insertError)
+          }
+        }
+
+        // Delete payments that are no longer in the schedule
+        const paymentsToDelete = existingPaymentsArray.filter(
+          (p) => !paymentNumbersToKeep.has(p.payment_number)
+        )
+
+        if (paymentsToDelete.length > 0) {
+          const paymentIdsToDelete = paymentsToDelete.map((p: any) => p.id)
+          const { error: deleteError } = await (supabase.from('loan_payments') as any)
+            .delete()
+            .in('id', paymentIdsToDelete)
+
+          if (deleteError) {
+            console.error('Error deleting extra payments:', deleteError)
+          }
+        }
+      }
+
       return NextResponse.json({
         success: true,
         contract: updateResult.data
       })
-    } else if (canRegenerate) {
+    } else {
+      // If we reach here, there's an existing contract but we can't regenerate it
+      // This should have been caught by the guard rails, but handle it anyway
       return NextResponse.json(
-        { error: 'Contract already signed; regeneration is not allowed' },
+        { error: 'Contract already exists and cannot be regenerated' },
         { status: 400 }
       )
     }

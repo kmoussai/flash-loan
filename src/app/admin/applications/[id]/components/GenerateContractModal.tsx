@@ -12,9 +12,14 @@ import {
 import useSWR from 'swr'
 import { fetcher } from '@/lib/utils'
 import { ContractDefaultsResponse } from '@/src/types'
-import { calculatePaymentAmount } from '@/src/lib/utils/loan'
 import { getCanadianHolidays } from '@/src/lib/utils/date'
-import { buildSchedule, frequencyOptions } from '@/src/lib/utils/schedule'
+import { frequencyOptions } from '@/src/lib/utils/schedule'
+import {
+  calculatePaymentAmount,
+  calculatePaymentBreakdown,
+  calculateBrokerageFee,
+  roundCurrency
+} from '@/src/lib/loan'
 
 interface GenerateContractModalProps {
   applicationId: string
@@ -35,8 +40,9 @@ export const GenerateContractModal = ({
     fetcher
   )
   const [loanAmount, setLoanAmount] = useState<number | ''>('')
+  // Initialize paymentFrequency from API data if available, otherwise empty
   const [paymentFrequency, setPaymentFrequency] =
-    useState<PaymentFrequency>('monthly')
+    useState<PaymentFrequency>(data?.defaults?.paymentFrequency || 'monthly')
   const [numberOfPayments, setNumberOfPayments] = useState<number>(0)
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('')
   const [nextPaymentDate, setNextPaymentDate] = useState('')
@@ -45,7 +51,9 @@ export const GenerateContractModal = ({
   const [brokerageFee, setBrokerageFee] = useState<number>(200)
   const [formError, setFormError] = useState<string | null>(null)
   const [loadingContract, setLoadingContract] = useState(false)
-  const [paymentSchedule, setPaymentSchedule] = useState<PayementScheduleItem[]>([])
+  const [paymentSchedule, setPaymentSchedule] = useState<
+    PayementScheduleItem[]
+  >([])
   const scheduleManuallyEdited = useRef(false)
 
   // Accounts
@@ -56,7 +64,10 @@ export const GenerateContractModal = ({
     if (!data?.defaults) return
     const defaults = data.defaults
     setLoanAmount(defaults.loanAmount ?? 0)
-    setPaymentFrequency(defaults.paymentFrequency)
+    // Always set payment frequency from API defaults
+    if (defaults.paymentFrequency) {
+      setPaymentFrequency(defaults.paymentFrequency as PaymentFrequency)
+    }
     setNumberOfPayments(defaults.numberOfPayments ?? 0)
     setNextPaymentDate(defaults.nextPaymentDate ?? '')
     setPaymentAmount(defaults.paymentAmount ?? 0)
@@ -67,7 +78,24 @@ export const GenerateContractModal = ({
     scheduleManuallyEdited.current = false
   }, [data])
 
-  // Auto-calculate payment amount when relevant fields change
+  // Reset manual edit flag when number of payments or frequency changes (major change)
+  useEffect(() => {
+    scheduleManuallyEdited.current = false
+  }, [numberOfPayments, paymentFrequency])
+
+  // Auto-calculate brokerage fee when loan amount changes
+  useEffect(() => {
+    if (loanAmount && typeof loanAmount === 'number' && loanAmount > 0) {
+      const calculatedBrokerageFee = calculateBrokerageFee(loanAmount)
+      setBrokerageFee(calculatedBrokerageFee)
+    } else if (loanAmount === '' || loanAmount === 0) {
+      // Reset brokerage fee when loan amount is cleared
+      setBrokerageFee(0)
+    }
+  }, [loanAmount]) // Only depend on loanAmount to auto-calculate brokerage fee
+
+  // Recalculate loan breakdown when all 4 parameters change
+  // The 4 parameters are: loanAmount, paymentFrequency, numberOfPayments, nextPaymentDate
   useEffect(() => {
     if (
       !loanAmount ||
@@ -75,57 +103,81 @@ export const GenerateContractModal = ({
       !paymentFrequency ||
       !numberOfPayments ||
       numberOfPayments <= 0 ||
-      !nextPaymentDate
+      !nextPaymentDate ||
+      scheduleManuallyEdited.current
     ) {
       // Clear payment amount if required fields are missing
       if (loanAmount === '' || numberOfPayments === 0) {
         setPaymentAmount('')
+        setPaymentSchedule([])
       }
       return
     }
 
-    const totalAmount = Number(loanAmount) + Number(brokerageFee)
-    const calculatedAmount = calculatePaymentAmount(
-      paymentFrequency,
-      totalAmount,
-      interestRate,
-      numberOfPayments
-    )
+    // Use loan library to calculate payment amount
+    // Note: The library automatically adds fees to principal internally
+    // We pass principalAmount (without fees) and fees separately
+    // Origination fee is NOT included in payment calculation - it's only charged for returned payments
+    const calculatedAmount = calculatePaymentAmount({
+      principalAmount: Number(loanAmount), // Base loan amount without fees
+      interestRate: interestRate,
+      paymentFrequency: paymentFrequency,
+      numberOfPayments: numberOfPayments,
+      brokerageFee: Number(brokerageFee), // Only brokerage fee is included in loan amount
+      originationFee: 0 // Origination fee is NOT part of initial loan amount (only for returned payments)
+    })
 
     if (calculatedAmount !== undefined) {
-      setPaymentAmount(calculatedAmount)
+      // Update payment amount
+      const currentAmount =
+        typeof paymentAmount === 'number' ? paymentAmount : 0
+      if (Math.abs(calculatedAmount - currentAmount) > 0.01) {
+        setPaymentAmount(calculatedAmount)
+      }
+
+      // Use loan library to generate payment schedule with breakdown
+      // The library calculates: totalLoanAmount = principalAmount + brokerageFee
+      // Origination fee is NOT included as it's only charged for returned payments
+      const breakdown = calculatePaymentBreakdown(
+        {
+          principalAmount: Number(loanAmount), // Base loan amount without fees
+          interestRate: interestRate,
+          paymentFrequency: paymentFrequency,
+          numberOfPayments: numberOfPayments,
+          brokerageFee: Number(brokerageFee), // Only brokerage fee is included in loan amount
+          originationFee: 0 // Origination fee is NOT part of initial loan amount (only for returned payments)
+        },
+        nextPaymentDate
+      )
+
+      // Convert breakdown to schedule format
+      const newSchedule = breakdown.map(payment => ({
+        due_date: payment.dueDate,
+        amount: payment.amount,
+        principal: payment.principal,
+        interest: payment.interest
+      }))
+
+      // Only update schedule if it's different to prevent unnecessary re-renders
+      const scheduleChanged =
+        JSON.stringify(newSchedule) !== JSON.stringify(paymentSchedule)
+      if (scheduleChanged) {
+        setPaymentSchedule(newSchedule)
+      }
     } else {
       setPaymentAmount('')
+      setPaymentSchedule([])
     }
-  }, [loanAmount, paymentFrequency, numberOfPayments, nextPaymentDate, brokerageFee, interestRate])
-
-  // Reset manual edit flag when number of payments changes (major change)
-  useEffect(() => {
-    scheduleManuallyEdited.current = false
-  }, [numberOfPayments, paymentFrequency])
-
-  // Rebuild payment schedule when base parameters change (only if not manually edited)
-  useEffect(() => {
-    if (
-      !paymentAmount ||
-      paymentAmount <= 0 ||
-      !paymentFrequency ||
-      !numberOfPayments ||
-      numberOfPayments <= 0 ||
-      !nextPaymentDate ||
-      scheduleManuallyEdited.current
-    ) {
-      return
-    }
-
-    const newSchedule = buildSchedule({
-      paymentAmount: Number(paymentAmount),
-      paymentFrequency,
-      numberOfPayments,
-      nextPaymentDate
-    })
-    setPaymentSchedule(newSchedule)
-  }, [paymentAmount, paymentFrequency, numberOfPayments, nextPaymentDate])
+  }, [
+    // The 4 key parameters that trigger recalculation
+    loanAmount,
+    paymentFrequency,
+    numberOfPayments,
+    nextPaymentDate,
+    // Additional dependencies for accurate calculation
+    brokerageFee,
+    interestRate
+  ])
 
   // Handle manual schedule edits
   const handleScheduleChange = (updatedSchedule: PayementScheduleItem[]) => {
@@ -145,7 +197,9 @@ export const GenerateContractModal = ({
     }
 
     if (!paymentAmount || paymentAmount <= 0) {
-      setFormError('Payment amount is required. Please ensure all fields are filled correctly.')
+      setFormError(
+        'Payment amount is required. Please ensure all fields are filled correctly.'
+      )
       return
     }
 
@@ -168,7 +222,9 @@ export const GenerateContractModal = ({
     selectedDate.setHours(0, 0, 0, 0)
 
     if (selectedDate < tomorrow) {
-      setFormError('Next payment date must be at least tomorrow (today + 1 day).')
+      setFormError(
+        'Next payment date must be at least tomorrow (today + 1 day).'
+      )
       return
     }
 
@@ -187,26 +243,43 @@ export const GenerateContractModal = ({
       interestRate: Number(interestRate),
       paymentAmount: Number(paymentAmount),
       brokerageFee: brokerageFee,
-      paymentSchedule: paymentSchedule.length > 0 
-        ? paymentSchedule 
-        : buildSchedule({
-            paymentAmount: Number(paymentAmount),
-            paymentFrequency,
-            numberOfPayments,
-            nextPaymentDate
-          })
+      paymentSchedule:
+        paymentSchedule.length > 0
+          ? paymentSchedule
+          : (() => {
+              // Generate schedule using loan library if not manually edited
+              // Origination fee is NOT included - it's only charged for returned payments
+              const breakdown = calculatePaymentBreakdown(
+                {
+                  principalAmount: Number(loanAmount),
+                  interestRate: interestRate,
+                  paymentFrequency: paymentFrequency,
+                  numberOfPayments: numberOfPayments,
+                  brokerageFee: Number(brokerageFee),
+                  originationFee: 0 // Origination fee is NOT part of initial loan amount
+                },
+                nextPaymentDate
+              )
+              return breakdown.map(payment => ({
+                due_date: payment.dueDate,
+                amount: payment.amount,
+                principal: payment.principal,
+                interest: payment.interest
+              }))
+            })()
     }
-    
+
     Promise.resolve(onSubmit(payload))
       .then(() => {
         setLoadingContract(false)
       })
-      .catch((err) => {
+      .catch(err => {
         setLoadingContract(false)
-        setFormError(err?.message || 'Failed to generate contract. Please try again.')
+        setFormError(
+          err?.message || 'Failed to generate contract. Please try again.'
+        )
       })
   }
-
 
   if (!open) return null
 
@@ -246,14 +319,17 @@ export const GenerateContractModal = ({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className='flex flex-1 flex-col overflow-hidden'>
+        <form
+          onSubmit={handleSubmit}
+          className='flex flex-1 flex-col overflow-hidden'
+        >
           {/* Body */}
           <div className='flex-1 overflow-y-auto px-6 py-5'>
             <div className='space-y-4'>
               {/* Loan amount + Frequency */}
               <div className='grid grid-cols-2 gap-4'>
                 <div>
-                  <label 
+                  <label
                     htmlFor='loanAmount'
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
@@ -277,7 +353,7 @@ export const GenerateContractModal = ({
                 </div>
 
                 <div>
-                  <label 
+                  <label
                     htmlFor='paymentFrequency'
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
@@ -298,7 +374,7 @@ export const GenerateContractModal = ({
               {/* Payments + amount */}
               <div className='grid grid-cols-2 gap-4'>
                 <div>
-                  <label 
+                  <label
                     htmlFor='numberOfPayments'
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
@@ -320,7 +396,7 @@ export const GenerateContractModal = ({
                 </div>
 
                 <div>
-                  <label 
+                  <label
                     htmlFor='paymentAmount'
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
@@ -332,7 +408,11 @@ export const GenerateContractModal = ({
                     type='number'
                     min={0}
                     step='0.01'
-                    value={paymentAmount}
+                    value={
+                      typeof paymentAmount === 'number'
+                        ? roundCurrency(paymentAmount)
+                        : ''
+                    }
                     onChange={e => {
                       const value = e.target.value
                       setPaymentAmount(value === '' ? '' : Number(value))
@@ -352,7 +432,7 @@ export const GenerateContractModal = ({
               {/* Interest + next payment */}
               <div className='grid grid-cols-2 gap-4'>
                 <div className='hidden'>
-                  <label 
+                  <label
                     htmlFor='interestRate'
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
@@ -371,7 +451,7 @@ export const GenerateContractModal = ({
                 </div>
 
                 <div>
-                  <label 
+                  <label
                     htmlFor='nextPaymentDate'
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
@@ -381,7 +461,7 @@ export const GenerateContractModal = ({
                     id='nextPaymentDate'
                     name='nextPaymentDate'
                     value={nextPaymentDate}
-                    onChange={(date) => setNextPaymentDate(date || '')}
+                    onChange={date => setNextPaymentDate(date || '')}
                     minDate={(() => {
                       const tomorrow = new Date()
                       tomorrow.setDate(tomorrow.getDate() + 1)
@@ -396,14 +476,15 @@ export const GenerateContractModal = ({
                     className='w-full'
                   />
                   <p className='mt-1 text-xs text-gray-500'>
-                    Must be at least tomorrow (today + 1 day). Holidays are highlighted.
+                    Must be at least tomorrow (today + 1 day). Holidays are
+                    highlighted.
                   </p>
                 </div>
               </div>
 
               {/* Brokerage Fee */}
               <div>
-                <label 
+                <label
                   htmlFor='brokerageFee'
                   className='mb-1 block text-sm font-medium text-gray-700'
                 >
@@ -415,7 +496,11 @@ export const GenerateContractModal = ({
                   type='number'
                   min={0}
                   step='0.01'
-                  value={brokerageFee}
+                  value={
+                    typeof brokerageFee === 'number'
+                      ? roundCurrency(brokerageFee)
+                      : ''
+                  }
                   onChange={e => {
                     const value = e.target.value
                     setBrokerageFee(value === '' ? 0 : Number(value))
@@ -431,7 +516,7 @@ export const GenerateContractModal = ({
 
               {/* Account select */}
               <div>
-                <label 
+                <label
                   htmlFor='bankAccount'
                   className='mb-1 block text-sm font-medium text-gray-700'
                 >
@@ -473,14 +558,38 @@ export const GenerateContractModal = ({
                 Payment Schedule
               </h3>
               <EditablePaymentScheduleList
-                schedule={paymentSchedule.length > 0 
-                  ? paymentSchedule 
-                  : buildSchedule({
-                      paymentAmount,
-                      paymentFrequency,
-                      numberOfPayments,
-                      nextPaymentDate
-                    })}
+                schedule={
+                  paymentSchedule.length > 0
+                    ? paymentSchedule
+                    : (() => {
+                        if (
+                          !loanAmount ||
+                          loanAmount <= 0 ||
+                          !nextPaymentDate
+                        ) {
+                          return []
+                        }
+                        // Generate schedule using loan library
+                        // Origination fee is NOT included - it's only charged for returned payments
+                        const breakdown = calculatePaymentBreakdown(
+                          {
+                            principalAmount: Number(loanAmount),
+                            interestRate: interestRate,
+                            paymentFrequency: paymentFrequency,
+                            numberOfPayments: numberOfPayments,
+                            brokerageFee: Number(brokerageFee),
+                            originationFee: 0 // Origination fee is NOT part of initial loan amount
+                          },
+                          nextPaymentDate
+                        )
+                        return breakdown.map(payment => ({
+                          due_date: payment.dueDate,
+                          amount: payment.amount,
+                          principal: payment.principal,
+                          interest: payment.interest
+                        }))
+                      })()
+                }
                 onScheduleChange={handleScheduleChange}
                 holidays={getCanadianHolidays()}
                 minDate={(() => {

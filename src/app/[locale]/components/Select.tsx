@@ -75,7 +75,7 @@ export default function Select({
 
   return (
     <SelectPrimitive.Root
-      defaultValue={validValue}
+      value={validValue}
       onValueChange={onValueChange}
       disabled={disabled}
     >

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { LoanPaymentInsert } from '@/src/lib/supabase/types'
+import {
+  validatePaymentAmount,
+  calculateNewBalance,
+  roundCurrency
+} from '@/src/lib/loan'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +38,7 @@ export async function POST(
       )
     }
 
-    const rebateAmount = Number(amount)
+    const rebateAmount = roundCurrency(Number(amount))
     if (isNaN(rebateAmount) || rebateAmount <= 0) {
       return NextResponse.json(
         { error: 'Valid rebate amount is required' },
@@ -67,7 +72,16 @@ export async function POST(
     }
 
     const typedLoan = loan as { id: string; remaining_balance: number | null; status: string }
-    const currentRemainingBalance = Number(typedLoan.remaining_balance || 0)
+    const currentRemainingBalance = roundCurrency(Number(typedLoan.remaining_balance || 0))
+
+    // Validate rebate amount using loan library
+    const validationError = validatePaymentAmount(rebateAmount, currentRemainingBalance)
+    if (validationError) {
+      return NextResponse.json(
+        { error: validationError },
+        { status: 400 }
+      )
+    }
 
     // Get the max payment number for this loan
     const { data: existingPayments } = await supabase
@@ -81,11 +95,15 @@ export async function POST(
       ? ((existingPayments[0] as { payment_number: number | null })?.payment_number || 0)
       : 0
 
-    // Calculate new remaining balance (reduce by rebate amount)
-    const newRemainingBalance = Math.max(0, currentRemainingBalance - rebateAmount)
+    // Calculate new remaining balance using loan library
+    const balanceResult = calculateNewBalance({
+      currentBalance: currentRemainingBalance,
+      paymentAmount: rebateAmount
+    })
+    const newRemainingBalance = balanceResult.newBalance
 
     // Determine if loan should be marked as completed
-    const shouldMarkAsCompleted = mark_loan_as_paid === true && newRemainingBalance === 0
+    const shouldMarkAsCompleted = mark_loan_as_paid === true && balanceResult.isPaidOff
 
     // Create the rebate payment
     const paymentInsert: LoanPaymentInsert = {

@@ -39,8 +39,10 @@ export async function GET(
         due_date,
         remaining_balance,
         status,
+        crmStatus: crm_original_data->>status,
         created_at,
         updated_at,
+        crmContractPath: crm_original_data->>pdfFile,
         loan_applications (
           id,
           loan_amount,
@@ -57,6 +59,17 @@ export async function GET(
           email,
           phone,
           preferred_language
+        ),
+        loan_contracts (
+          id,
+          contract_number,
+          contract_status,
+          contract_version,
+          contract_document_path,
+          sent_at,
+          sent_method,
+          client_signed_at,
+          contract_terms
         )
       `)
       .eq('id', loanId)

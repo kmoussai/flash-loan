@@ -215,7 +215,7 @@ export function calculatePaymentAmount(
 
   // Handle zero interest rate case
   if (periodicRate === 0) {
-    return Number((totalLoanAmount / numberOfPayments).toFixed(2))
+    return totalLoanAmount / numberOfPayments
   }
 
   // Standard amortized payment formula
@@ -230,7 +230,7 @@ export function calculatePaymentAmount(
   }
 
   const payment = numerator / denominator
-  return Number(payment.toFixed(2))
+  return payment
 }
 
 /**
@@ -242,7 +242,7 @@ export function calculatePaymentAmount(
 export function calculateTotalFees(params: LoanCalculationParams): number {
   const { brokerageFee = 0, originationFee = 0, otherFees = 0 } = params
 
-  return Number((brokerageFee + originationFee + otherFees).toFixed(2))
+  return brokerageFee + originationFee + otherFees
 }
 
 /**
@@ -255,7 +255,7 @@ export function calculateTotalLoanAmount(
   params: LoanCalculationParams
 ): number {
   const totalFees = calculateTotalFees(params)
-  return Number((params.principalAmount + totalFees).toFixed(2))
+  return params.principalAmount + totalFees
 }
 
 /**
@@ -345,11 +345,11 @@ export function calculatePaymentBreakdown(
       dueDate: formatDate(dueDate),
       amount:
         i === numberOfPayments - 1
-          ? Number((principal + interest).toFixed(2))
+          ? principal + interest
           : paymentAmount,
-      interest: Number(interest.toFixed(2)),
-      principal: Number(principal.toFixed(2)),
-      remainingBalance: Number(remaining.toFixed(2))
+      interest: interest,
+      principal: principal,
+      remainingBalance: remaining
     })
   }
 
@@ -365,11 +365,10 @@ export function calculatePaymentBreakdown(
 export function calculateTotalInterest(
   paymentSchedule: PaymentBreakdown[]
 ): number {
-  const totalInterest = paymentSchedule.reduce(
+  return paymentSchedule.reduce(
     (sum, payment) => sum + payment.interest,
     0
   )
-  return Number(totalInterest.toFixed(2))
 }
 
 /**
@@ -385,7 +384,7 @@ export function calculateTotalRepaymentAmount(
 ): number {
   const totalLoanAmount = calculateTotalLoanAmount(params)
   const totalInterest = calculateTotalInterest(paymentSchedule)
-  return Number((totalLoanAmount + totalInterest).toFixed(2))
+  return totalLoanAmount + totalInterest
 }
 
 // ============================================================================
@@ -477,8 +476,8 @@ export function calculateNewBalance(
   const newBalance = Math.max(0, balanceWithFees - paymentAmount)
 
   return {
-    newBalance: Number(newBalance.toFixed(2)),
-    amountPaid: Number(paymentAmount.toFixed(2)),
+    newBalance: newBalance,
+    amountPaid: paymentAmount,
     isPaidOff: newBalance === 0
   }
 }
@@ -495,8 +494,7 @@ export function calculateBalanceFromPayments(
   payments: number[]
 ): number {
   const totalPaid = payments.reduce((sum, amount) => sum + amount, 0)
-  const remaining = Math.max(0, initialBalance - totalPaid)
-  return Number(remaining.toFixed(2))
+  return Math.max(0, initialBalance - totalPaid)
 }
 
 // ============================================================================
@@ -522,9 +520,9 @@ export function calculateFailedPaymentFees(
   const totalAmount = totalFees + totalInterest
 
   return {
-    totalFees: Number(totalFees.toFixed(2)),
-    totalInterest: Number(totalInterest.toFixed(2)),
-    totalAmount: Number(totalAmount.toFixed(2)),
+    totalFees: totalFees,
+    totalInterest: totalInterest,
+    totalAmount: totalAmount,
     failedPaymentCount: failedPayments.length
   }
 }
@@ -547,8 +545,7 @@ export function calculateModificationBalance(
   brokerageFee: number,
   failedPaymentResult: FailedPaymentCalculationResult
 ): number {
-  const total = currentBalance + brokerageFee + failedPaymentResult.totalAmount
-  return Number(total.toFixed(2))
+  return currentBalance + brokerageFee + failedPaymentResult.totalAmount
 }
 
 // ============================================================================
@@ -622,6 +619,26 @@ export function validatePaymentAmount(
 // ============================================================================
 
 /**
+ * Calculate brokerage fee based on loan amount
+ * Formula: loan amount × 68%
+ *
+ * @param loanAmount - Principal loan amount
+ * @returns Brokerage fee amount
+ *
+ * @example
+ * ```typescript
+ * const fee = calculateBrokerageFee(500)
+ * // Returns: 340 (500 × 0.68)
+ * ```
+ */
+export function calculateBrokerageFee(loanAmount: number): number {
+  if (typeof loanAmount !== 'number' || !Number.isFinite(loanAmount) || loanAmount < 0) {
+    return 0
+  }
+  return loanAmount * 0.68
+}
+
+/**
  * Get number of payments for a given frequency (max 3 months)
  *
  * @param paymentFrequency - Payment frequency
@@ -662,5 +679,9 @@ export function formatCurrency(
  * @returns Rounded amount
  */
 export function roundCurrency(amount: number): number {
+  // Ensure amount is a valid number before calling toFixed
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    return 0
+  }
   return Number(amount.toFixed(2))
 }

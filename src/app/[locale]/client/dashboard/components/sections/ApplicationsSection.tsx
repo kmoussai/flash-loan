@@ -44,7 +44,8 @@ export default function ApplicationsSection({
           application.application_status
         ),
         incomeSourceLabel:
-          application.income_source && incomeSourceKeys[application.income_source]
+          application.income_source &&
+          incomeSourceKeys[application.income_source]
             ? t(incomeSourceKeys[application.income_source])
             : t('Income_Source_Unknown')
       })),
@@ -60,12 +61,6 @@ export default function ApplicationsSection({
           </h2>
           <p className='text-sm text-gray-600'>{t('Applications_Subtitle')}</p>
         </div>
-        <Link
-          href='/quick-apply'
-          className='inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90'
-        >
-          {t('Start_New_Application')}
-        </Link>
       </div>
 
       <div className='space-y-4'>
@@ -74,7 +69,7 @@ export default function ApplicationsSection({
             <p className='text-sm text-gray-600'>{t('No_Applications_Long')}</p>
             <Link
               href='/quick-apply'
-              className='mt-4 inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80'
+              className='hover:text-primary/80 mt-4 inline-flex items-center text-sm font-semibold text-primary'
             >
               {t('Start_Your_First_Application')}
               <span aria-hidden className='ml-2'>
@@ -133,26 +128,6 @@ export default function ApplicationsSection({
               <div className='text-sm text-gray-600'>
                 {application.incomeSourceLabel}
               </div>
-              <div className='flex flex-wrap gap-3'>
-                <Link
-                  href={{
-                    pathname: '/upload-documents',
-                    query: { application: application.id }
-                  }}
-                  className='inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100'
-                >
-                  {t('Manage_Documents')}
-                </Link>
-                <Link
-                  href={{
-                    pathname: '/quick-apply',
-                    query: { draft: application.id }
-                  }}
-                  className='inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10'
-                >
-                  {t('Continue_Application')}
-                </Link>
-              </div>
             </div>
           </article>
         ))}
@@ -160,5 +135,3 @@ export default function ApplicationsSection({
     </section>
   )
 }
-
-
