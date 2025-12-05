@@ -39,19 +39,17 @@ interface ClientContract {
     status: ApplicationStatus
     loanAmount: number | null
   } | null
-  loan:
-    | {
-        id: string
-        loan_number: number
-        principal_amount: number
-        interest_rate: number
-        term_months: number
-        disbursement_date: string | null
-        due_date: string | null
-        remaining_balance: number | null
-        status: string
-      }
-    | null
+  loan: {
+    id: string
+    loan_number: number
+    principal_amount: number
+    interest_rate: number
+    term_months: number
+    disbursement_date: string | null
+    due_date: string | null
+    remaining_balance: number | null
+    status: string
+  } | null
   payments: LoanPayment[]
 }
 
@@ -88,10 +86,16 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     }
   )
 
-  const [expandedContractId, setExpandedContractId] = useState<string | null>(null)
-  const [viewerContract, setViewerContract] = useState<LoanContract | null>(null)
+  const [expandedContractId, setExpandedContractId] = useState<string | null>(
+    null
+  )
+  const [viewerContract, setViewerContract] = useState<LoanContract | null>(
+    null
+  )
   const [signingId, setSigningId] = useState<string | null>(null)
-  const [signingContract, setSigningContract] = useState<LoanContract | null>(null)
+  const [signingContract, setSigningContract] = useState<LoanContract | null>(
+    null
+  )
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const contracts = data?.contracts ?? []
@@ -102,58 +106,6 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
 
   const handleCloseViewer = () => {
     setViewerContract(null)
-  }
-
-  const renderPaymentSchedule = (contract: LoanContract) => {
-    const schedule = contract.contract_terms?.payment_schedule
-    if (!schedule || schedule.length === 0) {
-      return (
-        <p className='text-sm text-gray-500'>
-          {t('Contract_Payment_Schedule_Empty')}
-        </p>
-      )
-    }
-
-    return (
-      <div className='overflow-hidden rounded-lg border border-gray-200'>
-        <table className='min-w-full divide-y divide-gray-200'>
-          <thead className='bg-gray-50'>
-            <tr>
-              <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                {t('Contract_Payment_Schedule_Date')}
-              </th>
-              <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                {t('Contract_Payment_Schedule_Amount')}
-              </th>
-              <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                {t('Contract_Payment_Schedule_Principal')}
-              </th>
-              <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                {t('Contract_Payment_Schedule_Interest')}
-              </th>
-            </tr>
-          </thead>
-          <tbody className='divide-y divide-gray-100 bg-white'>
-            {schedule.map(item => (
-              <tr key={`${contract.id}-${item.due_date}`}>
-                <td className='px-4 py-2 text-sm text-gray-700'>
-                  {formatDate(locale, item.due_date)}
-                </td>
-                <td className='px-4 py-2 text-sm text-gray-700'>
-                  {formatCurrency(locale, item.amount)}
-                </td>
-                <td className='px-4 py-2 text-sm text-gray-700'>
-                  {formatCurrency(locale, item.principal, t('Contracts_Not_Available'))}
-                </td>
-                <td className='px-4 py-2 text-sm text-gray-700'>
-                  {formatCurrency(locale, item.interest, t('Contracts_Not_Available'))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )
   }
 
   const handleSignClick = (contract: LoanContract) => {
@@ -178,7 +130,10 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
       }
     } catch (error) {
       console.error('Error downloading contract:', error)
-      alert(t('Contract_Download_Error') || 'Failed to download contract. Please try again.')
+      alert(
+        t('Contract_Download_Error') ||
+          'Failed to download contract. Please try again.'
+      )
     } finally {
       setDownloadingId(null)
     }
@@ -189,16 +144,19 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
 
     setSigningId(signingContract.id)
     try {
-      const response = await fetch(`/api/user/contracts/${signingContract.id}/sign`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          signatureMethod: 'click_to_sign',
-          signatureName: signatureName
-        })
-      })
+      const response = await fetch(
+        `/api/user/contracts/${signingContract.id}/sign`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            signatureMethod: 'click_to_sign',
+            signatureName: signatureName
+          })
+        }
+      )
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
@@ -223,7 +181,12 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     }
   }
 
-  const renderContractCard = ({ contract, application, loan, payments }: ClientContract) => {
+  const renderContractCard = ({
+    contract,
+    application,
+    loan,
+    payments
+  }: ClientContract) => {
     const isExpanded = expandedContractId === contract.id
     const terms = contract.contract_terms as ContractTerms | null
     const frequencyLabel = getFrequencyLabel(t, terms?.payment_frequency)
@@ -236,20 +199,29 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     const totalPaid = payments
       .filter(p => p.status === 'confirmed' || p.status === 'paid')
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
-    
+
     const totalPending = payments
       .filter(p => p.status === 'pending')
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
-    
+
     const nextPayment = payments
       .filter(p => p.status === 'pending')
-      .sort((a, b) => new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime())[0]
-    
-    const confirmedPayments = payments.filter(p => p.status === 'confirmed' || p.status === 'paid').length
+      .sort(
+        (a, b) =>
+          new Date(a.payment_date).getTime() -
+          new Date(b.payment_date).getTime()
+      )[0]
+
+    const confirmedPayments = payments.filter(
+      p => p.status === 'confirmed' || p.status === 'paid'
+    ).length
     const pendingPayments = payments.filter(p => p.status === 'pending').length
 
     return (
-      <li key={contract.id} className='rounded-2xl border border-gray-200 bg-white p-6 shadow-sm'>
+      <li
+        key={contract.id}
+        className='rounded-2xl border border-gray-200 bg-white p-6 shadow-sm'
+      >
         <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
           <div className='space-y-2'>
             <div className='flex items-center gap-2'>
@@ -258,7 +230,11 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                   ? t('Contract_Number', { number: contract.contract_number })
                   : t('Contract_Number_Generic')}
               </span>
-              <span className={getContractStatusBadgeClass(contract.contract_status)}>
+              <span
+                className={getContractStatusBadgeClass(
+                  contract.contract_status
+                )}
+              >
                 {getContractStatusLabel(t, contract.contract_status)}
               </span>
             </div>
@@ -269,7 +245,9 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                     id: application.id.slice(0, 8).toUpperCase()
                   })}
                 </span>
-                <span className={getApplicationStatusBadgeClass(application.status)}>
+                <span
+                  className={getApplicationStatusBadgeClass(application.status)}
+                >
                   {t(`Status_${application.status}` as const)}
                 </span>
               </div>
@@ -279,12 +257,16 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
             <div className='flex flex-col items-start gap-1 text-sm text-gray-600 sm:items-end'>
               <span>
                 {contract.sent_at
-                  ? t('Contract_Sent_On', { date: formatDate(locale, contract.sent_at) })
+                  ? t('Contract_Sent_On', {
+                      date: formatDate(locale, contract.sent_at)
+                    })
                   : t('Contract_No_Sent_Date')}
               </span>
               <span>
                 {contract.client_signed_at
-                  ? t('Contract_Signed_On', { date: formatDate(locale, contract.client_signed_at) })
+                  ? t('Contract_Signed_On', {
+                      date: formatDate(locale, contract.client_signed_at)
+                    })
                   : t('Contract_Not_Signed')}
               </span>
             </div>
@@ -313,7 +295,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                   type='button'
                   onClick={() => handleSignClick(contract)}
                   disabled={signingId === contract.id}
-                  className='rounded-lg border border-primary/30 px-3 py-1 text-xs font-semibold text-primary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50'
+                  className='border-primary/30 rounded-lg border px-3 py-1 text-xs font-semibold text-primary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50'
                 >
                   {signingId === contract.id
                     ? t('Contract_Signing_In_Progress')
@@ -325,7 +307,9 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                 onClick={() => handleToggle(contract.id)}
                 className='rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:text-gray-900'
               >
-                {isExpanded ? t('Contract_Hide_Terms') : t('Contract_View_Terms')}
+                {isExpanded
+                  ? t('Contract_Hide_Terms')
+                  : t('Contract_View_Terms')}
               </button>
             </div>
           </div>
@@ -333,15 +317,21 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
 
         <div className='mt-4 grid gap-4 border-t border-gray-100 pt-4 text-sm text-gray-600 sm:grid-cols-2'>
           <div className='space-y-1'>
-            <p className='font-medium text-gray-800'>{t('Contract_Loan_Amount')}</p>
+            <p className='font-medium text-gray-800'>
+              {t('Contract_Loan_Amount')}
+            </p>
             <p>{formatCurrency(locale, application?.loanAmount)}</p>
           </div>
           <div className='space-y-1'>
-            <p className='font-medium text-gray-800'>{t('Contract_Total_Amount')}</p>
+            <p className='font-medium text-gray-800'>
+              {t('Contract_Total_Amount')}
+            </p>
             <p>{formatCurrency(locale, terms?.total_amount)}</p>
           </div>
           <div className='space-y-1'>
-            <p className='font-medium text-gray-800'>{t('Contract_Payment_Amount')}</p>
+            <p className='font-medium text-gray-800'>
+              {t('Contract_Payment_Amount')}
+            </p>
             <p>{formatCurrency(locale, terms?.payment_amount)}</p>
           </div>
           <div className='space-y-1'>
@@ -384,19 +374,25 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
               </div>
               <div className='space-y-1'>
                 <p className='font-medium text-gray-800'>Pending Payments</p>
-                <p>{formatCurrency(locale, totalPending)} ({pendingPayments} {pendingPayments === 1 ? 'payment' : 'payments'})</p>
+                <p>
+                  {formatCurrency(locale, totalPending)} ({pendingPayments}{' '}
+                  {pendingPayments === 1 ? 'payment' : 'payments'})
+                </p>
               </div>
               {nextPayment && (
                 <div className='space-y-1'>
                   <p className='font-medium text-gray-800'>Next Payment Due</p>
                   <p>
-                    {formatCurrency(locale, nextPayment.amount)} on {formatDate(locale, nextPayment.payment_date)}
+                    {formatCurrency(locale, nextPayment.amount)} on{' '}
+                    {formatDate(locale, nextPayment.payment_date)}
                   </p>
                 </div>
               )}
               <div className='space-y-1'>
                 <p className='font-medium text-gray-800'>Payment Progress</p>
-                <p>{confirmedPayments} of {payments.length} payments completed</p>
+                <p>
+                  {confirmedPayments} of {payments.length} payments completed
+                </p>
               </div>
             </>
           )}
@@ -413,12 +409,6 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                   ? terms.terms_and_conditions
                   : t('Contract_Terms_Empty')}
               </div>
-            </div>
-            <div className='space-y-2'>
-              <h3 className='text-sm font-semibold text-gray-900'>
-                {t('Contract_Payment_Schedule_Title')}
-              </h3>
-              {renderPaymentSchedule(contract)}
             </div>
             {payments.length > 0 && (
               <div className='space-y-2'>
@@ -465,15 +455,18 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                             {formatCurrency(locale, payment.interest, '-')}
                           </td>
                           <td className='px-4 py-2 text-sm'>
-                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                              payment.status === 'confirmed' || payment.status === 'paid'
-                                ? 'bg-green-100 text-green-800'
-                                : payment.status === 'pending'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : payment.status === 'failed'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
+                            <span
+                              className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                                payment.status === 'confirmed' ||
+                                payment.status === 'paid'
+                                  ? 'bg-green-100 text-green-800'
+                                  : payment.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : payment.status === 'failed'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-800'
+                              }`}
+                            >
                               {payment.status}
                             </span>
                           </td>
@@ -497,7 +490,9 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     <Fragment>
       <section className='space-y-6'>
         <div className='space-y-2'>
-          <h2 className='text-xl font-semibold text-gray-900'>{t('Contracts_Title')}</h2>
+          <h2 className='text-xl font-semibold text-gray-900'>
+            {t('Contracts_Title')}
+          </h2>
           <p className='text-sm text-gray-600'>{t('Contracts_Subtitle')}</p>
         </div>
 
@@ -508,7 +503,9 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
         ) : error ? (
           <div className='space-y-4 rounded-2xl border border-red-300 bg-red-50 p-6 text-sm text-red-700 shadow-sm'>
             <div>
-              <p className='font-semibold text-red-800'>{t('Contracts_Error')}</p>
+              <p className='font-semibold text-red-800'>
+                {t('Contracts_Error')}
+              </p>
             </div>
             <button
               type='button'
@@ -544,9 +541,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
             </p>
           </div>
         ) : (
-          <ul className='space-y-4'>
-            {contracts.map(renderContractCard)}
-          </ul>
+          <ul className='space-y-4'>{contracts.map(renderContractCard)}</ul>
         )}
       </section>
 
@@ -567,7 +562,11 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                 strokeWidth='1.5'
                 className='h-5 w-5'
               >
-                <path strokeLinecap='round' strokeLinejoin='round' d='M6 18L18 6M6 6l12 12' />
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  d='M6 18L18 6M6 6l12 12'
+                />
               </svg>
             </button>
             <ContractViewer
@@ -591,4 +590,3 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     </Fragment>
   )
 }
-
