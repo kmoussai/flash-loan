@@ -61,6 +61,33 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Get all loan IDs from the contracts to fetch payments
+    const loanIds = (data || [])
+      .map((row: any) => row.loan?.id)
+      .filter((id: string | null | undefined): id is string => Boolean(id))
+
+    // Fetch payments for all loans in parallel
+    let paymentsMap: Record<string, any[]> = {}
+    if (loanIds.length > 0) {
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('loan_payments')
+        .select('*')
+        .in('loan_id', loanIds)
+        .order('payment_date', { ascending: true })
+
+      if (!paymentsError && paymentsData) {
+        // Group payments by loan_id
+        paymentsMap = paymentsData.reduce((acc: Record<string, any[]>, payment: any) => {
+          const loanId = payment.loan_id
+          if (!acc[loanId]) {
+            acc[loanId] = []
+          }
+          acc[loanId].push(payment)
+          return acc
+        }, {})
+      }
+    }
+
     const contracts =
       (data as (LoanContract & {
         loan_applications?: {
@@ -97,6 +124,9 @@ export async function GET(request: NextRequest) {
           loan: loan ?? null
         }
 
+        // Get payments for this loan
+        const payments = loan?.id ? (paymentsMap[loan.id] || []) : []
+
         return {
           contract,
           application: application
@@ -106,7 +136,8 @@ export async function GET(request: NextRequest) {
                 loanAmount: application.loan_amount
               }
             : null,
-          loan
+          loan,
+          payments
         }
       }) ?? []
 

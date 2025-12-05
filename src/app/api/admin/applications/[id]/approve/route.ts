@@ -130,17 +130,17 @@ export async function POST(
     const interestRate = Number.isFinite(app.interest_rate ?? NaN) ? (app.interest_rate as number) : 29
     const termMonths = 3
 
-    // Calculate total loan amount including fees
-    // Default fees: origination_fee = 55, brokerage_fee = 0 (will be set when contract is generated)
-    // For pre-approval, we use default fees since contract doesn't exist yet
-    const defaultOriginationFee = 55
+    // Calculate total loan amount for remaining balance
+    // Note: Origination fee is NOT included in remaining balance - it's only charged for returned/failed payments
+    // Remaining balance should only include: principal + brokerage fee
+    // Brokerage fee will be set when contract is generated, so for now it's 0
     const defaultBrokerageFee = 0 // Brokerage fee is typically set during contract generation
     const totalLoanAmount = calculateTotalLoanAmount({
       principalAmount: principalAmount,
       interestRate: interestRate,
       paymentFrequency: 'monthly', // Default, will be updated when contract is generated
       numberOfPayments: 3, // Default, will be updated when contract is generated
-      originationFee: defaultOriginationFee,
+      originationFee: 0, // Origination fee NOT included in remaining balance
       brokerageFee: defaultBrokerageFee
     })
 

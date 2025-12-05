@@ -19,6 +19,19 @@ import {
 import ContractViewer from '@/src/app/admin/components/ContractViewer'
 import ContractSigningModal from '../ContractSigningModal'
 
+interface LoanPayment {
+  id: string
+  loan_id: string
+  amount: number
+  payment_date: string
+  status: string
+  interest: number | null
+  principal: number | null
+  payment_number: number | null
+  method: string | null
+  created_at: string
+}
+
 interface ClientContract {
   contract: LoanContract
   application: {
@@ -39,6 +52,7 @@ interface ClientContract {
         status: string
       }
     | null
+  payments: LoanPayment[]
 }
 
 interface ContractsResponse {
@@ -209,7 +223,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     }
   }
 
-  const renderContractCard = ({ contract, application }: ClientContract) => {
+  const renderContractCard = ({ contract, application, loan, payments }: ClientContract) => {
     const isExpanded = expandedContractId === contract.id
     const terms = contract.contract_terms as ContractTerms | null
     const frequencyLabel = getFrequencyLabel(t, terms?.payment_frequency)
@@ -217,6 +231,22 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
       contract.contract_status === 'sent' ||
       contract.contract_status === 'pending_signature'
     const isSigned = Boolean(contract.client_signed_at)
+
+    // Calculate payment statistics
+    const totalPaid = payments
+      .filter(p => p.status === 'confirmed' || p.status === 'paid')
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    
+    const totalPending = payments
+      .filter(p => p.status === 'pending')
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    
+    const nextPayment = payments
+      .filter(p => p.status === 'pending')
+      .sort((a, b) => new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime())[0]
+    
+    const confirmedPayments = payments.filter(p => p.status === 'confirmed' || p.status === 'paid').length
+    const pendingPayments = payments.filter(p => p.status === 'pending').length
 
     return (
       <li key={contract.id} className='rounded-2xl border border-gray-200 bg-white p-6 shadow-sm'>
@@ -326,6 +356,50 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
               {frequencyLabel ? ` · ${frequencyLabel}` : ''}
             </p>
           </div>
+          {loan && (
+            <>
+              <div className='space-y-1'>
+                <p className='font-medium text-gray-800'>Loan Number</p>
+                <p>#{loan.loan_number}</p>
+              </div>
+              <div className='space-y-1'>
+                <p className='font-medium text-gray-800'>Remaining Balance</p>
+                <p>{formatCurrency(locale, loan.remaining_balance)}</p>
+              </div>
+              <div className='space-y-1'>
+                <p className='font-medium text-gray-800'>Principal Amount</p>
+                <p>{formatCurrency(locale, loan.principal_amount)}</p>
+              </div>
+              <div className='space-y-1'>
+                <p className='font-medium text-gray-800'>Interest Rate</p>
+                <p>{loan.interest_rate}%</p>
+              </div>
+            </>
+          )}
+          {payments.length > 0 && (
+            <>
+              <div className='space-y-1'>
+                <p className='font-medium text-gray-800'>Total Paid</p>
+                <p>{formatCurrency(locale, totalPaid)}</p>
+              </div>
+              <div className='space-y-1'>
+                <p className='font-medium text-gray-800'>Pending Payments</p>
+                <p>{formatCurrency(locale, totalPending)} ({pendingPayments} {pendingPayments === 1 ? 'payment' : 'payments'})</p>
+              </div>
+              {nextPayment && (
+                <div className='space-y-1'>
+                  <p className='font-medium text-gray-800'>Next Payment Due</p>
+                  <p>
+                    {formatCurrency(locale, nextPayment.amount)} on {formatDate(locale, nextPayment.payment_date)}
+                  </p>
+                </div>
+              )}
+              <div className='space-y-1'>
+                <p className='font-medium text-gray-800'>Payment Progress</p>
+                <p>{confirmedPayments} of {payments.length} payments completed</p>
+              </div>
+            </>
+          )}
         </div>
 
         {isExpanded && (
@@ -346,6 +420,73 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
               </h3>
               {renderPaymentSchedule(contract)}
             </div>
+            {payments.length > 0 && (
+              <div className='space-y-2'>
+                <h3 className='text-sm font-semibold text-gray-900'>
+                  Payment History
+                </h3>
+                <div className='overflow-hidden rounded-lg border border-gray-200'>
+                  <table className='min-w-full divide-y divide-gray-200'>
+                    <thead className='bg-gray-50'>
+                      <tr>
+                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                          Date
+                        </th>
+                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                          Amount
+                        </th>
+                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                          Principal
+                        </th>
+                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                          Interest
+                        </th>
+                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                          Status
+                        </th>
+                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                          Method
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className='divide-y divide-gray-100 bg-white'>
+                      {payments.map(payment => (
+                        <tr key={payment.id}>
+                          <td className='px-4 py-2 text-sm text-gray-700'>
+                            {formatDate(locale, payment.payment_date)}
+                          </td>
+                          <td className='px-4 py-2 text-sm text-gray-700'>
+                            {formatCurrency(locale, payment.amount)}
+                          </td>
+                          <td className='px-4 py-2 text-sm text-gray-700'>
+                            {formatCurrency(locale, payment.principal, '-')}
+                          </td>
+                          <td className='px-4 py-2 text-sm text-gray-700'>
+                            {formatCurrency(locale, payment.interest, '-')}
+                          </td>
+                          <td className='px-4 py-2 text-sm'>
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                              payment.status === 'confirmed' || payment.status === 'paid'
+                                ? 'bg-green-100 text-green-800'
+                                : payment.status === 'pending'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : payment.status === 'failed'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {payment.status}
+                            </span>
+                          </td>
+                          <td className='px-4 py-2 text-sm text-gray-700'>
+                            {payment.method || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </li>

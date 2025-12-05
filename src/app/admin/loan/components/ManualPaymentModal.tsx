@@ -217,7 +217,6 @@ export default function ManualPaymentModal({
                 type='number'
                 step='0.01'
                 min='0.01'
-                max={remainingBalance}
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
                 disabled={isSubmitting}
@@ -225,11 +224,6 @@ export default function ManualPaymentModal({
                 placeholder='0.00'
                 className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-primary focus:outline-none focus:ring-2'
               />
-              {remainingBalance !== undefined && typeof remainingBalance === 'number' && (
-                <p className='mt-1 text-xs text-gray-500'>
-                  Maximum: ${remainingBalance.toFixed(2)}
-                </p>
-              )}
             </div>
 
             <div>

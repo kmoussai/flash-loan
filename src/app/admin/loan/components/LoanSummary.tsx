@@ -19,21 +19,27 @@ interface LoanSummaryProps {
   onLoanUpdate?: () => Promise<void> | void
 }
 
-export default function LoanSummary({ loan: initialLoan, loanId: propLoanId, onLoanUpdate }: LoanSummaryProps) {
+export default function LoanSummary({
+  loan: initialLoan,
+  loanId: propLoanId,
+  onLoanUpdate
+}: LoanSummaryProps) {
   // Get loanId from prop or initial loan data
   const loanId = propLoanId || initialLoan?.id
-  
+
   // Fetch loan data using useSWR
-  const { data: loanResponse, error: loanError, isLoading: isLoadingLoan, mutate: mutateLoan } = useSWR(
-    loanId ? `/api/admin/loans/${loanId}` : null,
-    fetcher
-  )
-  
+  const {
+    data: loanResponse,
+    error: loanError,
+    isLoading: isLoadingLoan,
+    mutate: mutateLoan
+  } = useSWR(loanId ? `/api/admin/loans/${loanId}` : null, fetcher)
+
   // Extract loan from API response (response has { loan, payments, ... } structure)
   // or use initial loan prop if API hasn't loaded yet
   const loan = loanResponse?.loan || initialLoan
   const applicationId = loan?.application_id
-  
+
   const [openGenerator, setOpenGenerator] = useState(false)
   const [submittingContract, setSubmittingContract] = useState(false)
   const [showContractViewer, setShowContractViewer] = useState(false)
@@ -46,7 +52,7 @@ export default function LoanSummary({ loan: initialLoan, loanId: propLoanId, onL
     loanId ? `/api/admin/loans/${loanId}/payments` : null,
     fetcher
   )
-  
+
   // Revalidate both loan and payments when actions are performed
   const revalidateAll = async () => {
     await Promise.all([mutateLoan(), mutate()])
@@ -109,7 +115,7 @@ export default function LoanSummary({ loan: initialLoan, loanId: propLoanId, onL
       setLoadingContract(false)
     }
   }
-  
+
   // Show loading if loan or payments are loading
   if (isLoadingLoan || isLoading) {
     return (
@@ -120,12 +126,17 @@ export default function LoanSummary({ loan: initialLoan, loanId: propLoanId, onL
       </div>
     )
   }
-  
+
   // Show error if loan or payments failed to load
   if (loanError || error) {
-    return <div>Error: {loanError?.message || error?.message || 'Failed to load loan data'}</div>
+    return (
+      <div>
+        Error:{' '}
+        {loanError?.message || error?.message || 'Failed to load loan data'}
+      </div>
+    )
   }
-  
+
   // Don't render if loan data is not available
   if (!loan || !loanId) {
     return <div>Loan not found</div>
@@ -138,73 +149,36 @@ export default function LoanSummary({ loan: initialLoan, loanId: propLoanId, onL
       : null
 
   // Get brokerage fee from contract terms
-  const brokerageFee =
-    loanContract?.contract_terms?.fees?.brokerage_fee ?? 0
+  const brokerageFee = loanContract?.contract_terms?.fees?.brokerage_fee ?? 0
 
   // Use remaining_balance from database, with fallback calculation if null/0
   // The database value is the source of truth and reflects actual payments made
-  const remainingBalance = loan.remaining_balance !== null && loan.remaining_balance !== undefined
-    ? Number(loan.remaining_balance)
-    : Number(loan.principal_amount || 0) + Number(brokerageFee)
+  const remainingBalance =
+    loan.remaining_balance !== null && loan.remaining_balance !== undefined
+      ? Number(loan.remaining_balance)
+      : Number(loan.principal_amount || 0) + Number(brokerageFee)
 
   // Calculate total interest and cumulative fees from payments
   const payments = data ?? []
   const totalInterest = payments.reduce((sum, payment) => {
-    return sum + (payment.interest !== null && payment.interest !== undefined ? Number(payment.interest) : 0)
+    return (
+      sum +
+      (payment.interest !== null && payment.interest !== undefined
+        ? Number(payment.interest)
+        : 0)
+    )
   }, 0)
 
   // Calculate cumulative fees from payments
   // Fees can be:
   // 1. Processing fees (if contract has processing_fee > 0, charged per payment)
-  // 2. Deferral fees (stored in notes or as part of payment amount)
+  // 2. Deferral fees (stored in notes - always counted when mentioned, even if not in payment amount)
   // 3. Failed payment fees (origination fee + interest from failed payments)
-  const processingFee = loanContract?.contract_terms?.fees?.processing_fee ?? 0
+  const deferralFee = loanContract?.contract_terms?.fees?.other_fees ?? 0
   const cumulativeFees = payments.reduce((sum, payment) => {
-    let paymentFees = 0
-    
-    // 1. Add processing fees for paid/confirmed payments
-    if (processingFee > 0 && (payment.status === 'paid' || payment.status === 'confirmed')) {
-      paymentFees += processingFee
-    }
-    
-    // 2. Check notes for explicit fee mentions (deferral fees, etc.)
-    if (payment.notes) {
-      // Look for patterns like "fee: $50", "fee 50", "deferral fee: 50", etc.
-      const feePatterns = [
-        /fee[:\s]+[\$]?([\d.]+)/i,
-        /deferral[^.]*fee[:\s]+[\$]?([\d.]+)/i,
-        /additional[^.]*fee[:\s]+[\$]?([\d.]+)/i
-      ]
-      
-      for (const pattern of feePatterns) {
-        const match = payment.notes.match(pattern)
-        if (match) {
-          const notedFee = parseFloat(match[1])
-          if (!isNaN(notedFee) && notedFee > 0) {
-            paymentFees += notedFee
-            break // Only count once per payment
-          }
-        }
-      }
-    }
-    
-    // 3. If no fees found in notes, check if payment amount exceeds principal + interest
-    // This catches fees that were added to payment amount but not explicitly noted
-    if (paymentFees === 0) {
-      const principal = payment.principal !== null && payment.principal !== undefined ? Number(payment.principal) : 0
-      const interest = payment.interest !== null && payment.interest !== undefined ? Number(payment.interest) : 0
-      const paymentAmount = Number(payment.amount) || 0
-      const expectedAmount = principal + interest
-      
-      // If payment amount is greater than expected, the difference might be fees
-      if (paymentAmount > expectedAmount && expectedAmount > 0) {
-        paymentFees += paymentAmount - expectedAmount
-      }
-    }
-    
-    return sum + paymentFees
+    return payment.status === 'deferred' ? sum + Number(deferralFee) : sum
   }, 0)
-  
+
   return (
     <div className='space-y-3 p-2'>
       <LoanSummaryTable
@@ -218,9 +192,9 @@ export default function LoanSummary({ loan: initialLoan, loanId: propLoanId, onL
         cumulativeFees={cumulativeFees}
         onLoanDelete={onLoanUpdate}
       />
-      <PaymentTable 
-        payments={data ?? []} 
-        loanId={loanId} 
+      <PaymentTable
+        payments={data ?? []}
+        loanId={loanId}
         applicationId={applicationId}
         loan={loan}
         onPaymentUpdate={mutate}

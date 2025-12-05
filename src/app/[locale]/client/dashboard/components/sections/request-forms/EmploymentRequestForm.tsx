@@ -150,7 +150,6 @@ export default function EmploymentRequestForm({
       'companyName',
       'supervisorName',
       'workPhone',
-      'post',
       'payrollFrequency',
       'dateHired',
       'nextPayDate'

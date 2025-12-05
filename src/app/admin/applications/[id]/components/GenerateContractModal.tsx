@@ -12,7 +12,7 @@ import {
 import useSWR from 'swr'
 import { fetcher } from '@/lib/utils'
 import { ContractDefaultsResponse } from '@/src/types'
-import { getCanadianHolidays } from '@/src/lib/utils/date'
+import { getCanadianHolidays, getCanadianHolidaysWithNames } from '@/src/lib/utils/date'
 import { frequencyOptions } from '@/src/lib/utils/schedule'
 import {
   calculatePaymentAmount,
@@ -55,6 +55,48 @@ export const GenerateContractModal = ({
     PayementScheduleItem[]
   >([])
   const scheduleManuallyEdited = useRef(false)
+
+  // Get holidays with names for validation
+  const holidays = useMemo(() => getCanadianHolidays(), [])
+  const holidaysWithNames = useMemo(() => getCanadianHolidaysWithNames(), [])
+
+  // Helper function to check if a date is a holiday
+  const isHoliday = (dateString: string): boolean => {
+    if (!holidays || holidays.length === 0) return false
+    
+    const date = new Date(dateString)
+    date.setHours(0, 0, 0, 0)
+    
+    return holidays.some(holiday => {
+      const holidayDate = new Date(holiday)
+      holidayDate.setHours(0, 0, 0, 0)
+      return (
+        date.getDate() === holidayDate.getDate() &&
+        date.getMonth() === holidayDate.getMonth() &&
+        date.getFullYear() === holidayDate.getFullYear()
+      )
+    })
+  }
+
+  // Helper function to get holiday name for a date
+  const getHolidayName = (dateString: string): string | null => {
+    if (!isHoliday(dateString)) return null
+    
+    const date = new Date(dateString)
+    date.setHours(0, 0, 0, 0)
+    
+    const match = holidaysWithNames.find(h => {
+      const hDate = new Date(h.date)
+      hDate.setHours(0, 0, 0, 0)
+      return (
+        date.getDate() === hDate.getDate() &&
+        date.getMonth() === hDate.getMonth() &&
+        date.getFullYear() === hDate.getFullYear()
+      )
+    })
+    
+    return match ? match.name : 'Holiday'
+  }
 
   // Accounts
   const accounts = useMemo(() => data?.defaults.accountOptions ?? [], [data])
@@ -233,6 +275,65 @@ export const GenerateContractModal = ({
       return
     }
 
+    // Build the final payment schedule that will be submitted (same logic as payload)
+    // This ensures we validate exactly what will be sent to the API
+    const finalPaymentSchedule =
+      paymentSchedule.length > 0
+        ? paymentSchedule
+        : (() => {
+            // Generate schedule using loan library if not manually edited
+            // Origination fee is NOT included - it's only charged for returned payments
+            const breakdown = calculatePaymentBreakdown(
+              {
+                principalAmount: Number(loanAmount),
+                interestRate: interestRate,
+                paymentFrequency: paymentFrequency,
+                numberOfPayments: numberOfPayments,
+                brokerageFee: Number(brokerageFee),
+                originationFee: 0 // Origination fee is NOT part of initial loan amount
+              },
+              nextPaymentDate
+            )
+            return breakdown.map(payment => ({
+              due_date: payment.dueDate,
+              amount: payment.amount,
+              principal: payment.principal,
+              interest: payment.interest
+            }))
+          })()
+
+    // Validate that no payment dates fall on holidays
+    // Check the final schedule that will actually be submitted
+    const paymentsOnHolidays = finalPaymentSchedule
+      .map(payment => {
+        if (isHoliday(payment.due_date)) {
+          const holidayName = getHolidayName(payment.due_date)
+          const paymentDate = new Date(payment.due_date)
+          const formattedDate = paymentDate.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+          return {
+            date: formattedDate,
+            holidayName: holidayName || 'Holiday',
+            dueDate: payment.due_date
+          }
+        }
+        return null
+      })
+      .filter((item): item is { date: string; holidayName: string; dueDate: string } => item !== null)
+
+    if (paymentsOnHolidays.length > 0) {
+      const holidayList = paymentsOnHolidays
+        .map(p => `${p.date} (${p.holidayName})`)
+        .join(', ')
+      setFormError(
+        `Cannot generate contract: The following payment dates fall on holidays: ${holidayList}. Please adjust the payment schedule to avoid holidays.`
+      )
+      return
+    }
+
     setLoadingContract(true)
     const payload: GenerateContractPayload = {
       loanAmount: Number(loanAmount),
@@ -243,30 +344,7 @@ export const GenerateContractModal = ({
       interestRate: Number(interestRate),
       paymentAmount: Number(paymentAmount),
       brokerageFee: brokerageFee,
-      paymentSchedule:
-        paymentSchedule.length > 0
-          ? paymentSchedule
-          : (() => {
-              // Generate schedule using loan library if not manually edited
-              // Origination fee is NOT included - it's only charged for returned payments
-              const breakdown = calculatePaymentBreakdown(
-                {
-                  principalAmount: Number(loanAmount),
-                  interestRate: interestRate,
-                  paymentFrequency: paymentFrequency,
-                  numberOfPayments: numberOfPayments,
-                  brokerageFee: Number(brokerageFee),
-                  originationFee: 0 // Origination fee is NOT part of initial loan amount
-                },
-                nextPaymentDate
-              )
-              return breakdown.map(payment => ({
-                due_date: payment.dueDate,
-                amount: payment.amount,
-                principal: payment.principal,
-                interest: payment.interest
-              }))
-            })()
+      paymentSchedule: finalPaymentSchedule
     }
 
     Promise.resolve(onSubmit(payload))

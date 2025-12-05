@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { LoanPaymentUpdate, LoanPayment, LoanPaymentInsert } from '@/src/lib/supabase/types'
+import { Loan } from '@/src/types';
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,22 @@ export async function POST(
     }
 
     const supabase = await createServerSupabaseAdminClient()
+
+    // Get current loan to access remaining_balance
+    const { data: loan, error: loanError } = await supabase
+      .from('loans')
+      .select('remaining_balance')
+      .eq('id', loanId)
+      .single()
+
+    if (loanError || !loan) {
+      return NextResponse.json(
+        { error: 'Loan not found' },
+        { status: 404 }
+      )
+    }
+
+    const currentRemainingBalance = Number((loan as Loan).remaining_balance || 0)
 
     // Verify payment belongs to loan and get current payment data
     const { data: payment, error: fetchError } = await supabase
@@ -133,8 +150,9 @@ export async function POST(
       status: 'deferred'
     }
 
-    // Add deferral note
-    const noteText = `Payment deferred. Original amount: ${originalAmount.toFixed(2)}${feeAmount > 0 && add_fee_to_payment ? `, fee: ${feeAmount.toFixed(2)}` : ''}.`
+    // Add deferral note - always include fee amount if there's a fee for cumulative fees calculation
+    const feeNote = feeAmount > 0 ? `, deferral fee: ${feeAmount.toFixed(2)}` : ''
+    const noteText = `Payment deferred. Original amount: ${originalAmount.toFixed(2)}${feeNote}.`
     const existingNotes = paymentData.notes || ''
     updates.notes = existingNotes
       ? `${existingNotes}\n${noteText}`
@@ -154,8 +172,42 @@ export async function POST(
       )
     }
 
-    // Step 2: Create new payment at the end with original amount (+ fee if applicable)
+    // Step 2: Update loan remaining balance if there's a fee
+    // The fee should always be added to remaining balance, regardless of add_fee_to_payment
+    if (feeAmount > 0) {
+      const newRemainingBalance = currentRemainingBalance + feeAmount
+      const { error: updateLoanError } = await (supabase
+        .from('loans') as any)
+        .update({ remaining_balance: newRemainingBalance })
+        .eq('id', loanId)
+
+      if (updateLoanError) {
+        console.error('Error updating loan remaining balance:', updateLoanError)
+        // Try to revert the payment update
+        await (supabase
+          .from('loan_payments') as any)
+          .update({
+            amount: originalAmount,
+            interest: originalInterest,
+            principal: originalPrincipal,
+            status: 'pending'
+          })
+          .eq('id', paymentId)
+        
+        return NextResponse.json(
+          { error: 'Failed to update loan remaining balance' },
+          { status: 500 }
+        )
+      }
+    }
+
+    // Step 3: Create new payment at the end with original amount (+ fee if add_fee_to_payment is true)
     const newPaymentAmount = originalAmount + (add_fee_to_payment && feeAmount > 0 ? feeAmount : 0)
+    
+    // Always include fee in notes for cumulative fees calculation, even if not added to payment amount
+    const newPaymentNote = feeAmount > 0
+      ? `Deferred payment from #${paymentData.payment_number || 'N/A'}${add_fee_to_payment ? ` (includes deferral fee of ${feeAmount.toFixed(2)} in amount)` : ` (deferral fee of ${feeAmount.toFixed(2)} added to loan balance)`}.`
+      : `Deferred payment from #${paymentData.payment_number || 'N/A'}.`
     
     const newPaymentInsert: LoanPaymentInsert = {
       loan_id: loanId,
@@ -166,7 +218,7 @@ export async function POST(
       status: 'pending',
       method: null,
       payment_number: maxPaymentNumber + 1,
-      notes: `Deferred payment from #${paymentData.payment_number || 'N/A'}${feeAmount > 0 && add_fee_to_payment ? ` (includes deferral fee of ${feeAmount.toFixed(2)})` : ''}.`
+      notes: newPaymentNote
     }
 
     const { data: newPayment, error: insertError } = await (supabase
@@ -177,15 +229,24 @@ export async function POST(
 
     if (insertError) {
       console.error('Error creating new payment:', insertError)
-      // Try to revert the update
+      // Try to revert the updates
       await (supabase
         .from('loan_payments') as any)
         .update({
           amount: originalAmount,
           interest: originalInterest,
-          principal: originalPrincipal
+          principal: originalPrincipal,
+          status: 'pending'
         })
         .eq('id', paymentId)
+      
+      // Revert remaining balance if fee was added
+      if (feeAmount > 0) {
+        await (supabase
+          .from('loans') as any)
+          .update({ remaining_balance: currentRemainingBalance })
+          .eq('id', loanId)
+      }
       
       return NextResponse.json(
         { error: 'Failed to create deferred payment' },
@@ -193,12 +254,16 @@ export async function POST(
       )
     }
 
+    const feeMessage = feeAmount > 0
+      ? add_fee_to_payment
+        ? ` Payment deferred to end. New payment amount: $${newPaymentAmount.toFixed(2)} (original + fee). Fee added to remaining balance.`
+        : ` Payment deferred to end. New payment amount: $${newPaymentAmount.toFixed(2)}. Deferral fee of $${feeAmount.toFixed(2)} added to remaining balance.`
+      : ` Payment deferred to end. New payment amount: $${newPaymentAmount.toFixed(2)}.`
+
     return NextResponse.json({
       success: true,
       payment: newPayment,
-      message: feeAmount > 0 && add_fee_to_payment
-        ? `Payment deferred to end. New payment amount: $${newPaymentAmount.toFixed(2)} (original + fee).`
-        : `Payment deferred to end. New payment amount: $${newPaymentAmount.toFixed(2)}.`
+      message: feeMessage
     })
   } catch (error: any) {
     console.error('Error deferring payment:', error)

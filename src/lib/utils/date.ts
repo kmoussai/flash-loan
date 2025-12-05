@@ -42,8 +42,45 @@ export function getCanadianHolidays(): Date[] {
 }
 
 /**
+ * Get all weekends (Saturdays and Sundays) for a given year
+ * @param year - The year to get weekends for
+ * @returns Array of Holiday objects with date and name
+ */
+function getWeekendsForYear(year: number): Holiday[] {
+  const weekends: Holiday[] = []
+  const startDate = new Date(year, 0, 1) // January 1
+  const endDate = new Date(year, 11, 31) // December 31
+
+  // Start from the first day of the year
+  const currentDate = new Date(startDate)
+
+  // Find the first Saturday or Sunday
+  while (currentDate <= endDate) {
+    const dayOfWeek = currentDate.getDay()
+    
+    // 0 = Sunday, 6 = Saturday
+    if (dayOfWeek === 0) {
+      weekends.push({
+        date: new Date(currentDate),
+        name: 'Sunday'
+      })
+    } else if (dayOfWeek === 6) {
+      weekends.push({
+        date: new Date(currentDate),
+        name: 'Saturday'
+      })
+    }
+
+    // Move to next day
+    currentDate.setDate(currentDate.getDate() + 1)
+  }
+
+  return weekends
+}
+
+/**
  * Get Canadian holidays with names for the current and next year
- * Includes statutory holidays and common observances
+ * Includes statutory holidays, common observances, and weekends
  * @returns Array of Holiday objects with date and name
  */
 export function getCanadianHolidaysWithNames(): Holiday[] {
@@ -105,14 +142,37 @@ export function getCanadianHolidaysWithNames(): Holiday[] {
     return yearHolidays
   }
 
+  // Add statutory holidays
   holidays.push(...getHolidaysForYear(currentYear))
   holidays.push(...getHolidaysForYear(nextYear))
+
+  // Add weekends (Saturdays and Sundays)
+  holidays.push(...getWeekendsForYear(currentYear))
+  holidays.push(...getWeekendsForYear(nextYear))
 
   // Set all holidays to midnight for consistent comparison
   holidays.forEach(holiday => {
     holiday.date.setHours(0, 0, 0, 0)
   })
 
-  return holidays
+  // Deduplicate holidays (in case a statutory holiday falls on a weekend)
+  // Keep the first occurrence, prioritizing statutory holiday names over "Saturday"/"Sunday"
+  const uniqueHolidays = new Map<string, Holiday>()
+  holidays.forEach(holiday => {
+    const dateKey = `${holiday.date.getFullYear()}-${holiday.date.getMonth()}-${holiday.date.getDate()}`
+    if (!uniqueHolidays.has(dateKey)) {
+      uniqueHolidays.set(dateKey, holiday)
+    } else {
+      // If we already have this date, prefer the statutory holiday name over "Saturday"/"Sunday"
+      const existing = uniqueHolidays.get(dateKey)!
+      if (existing.name === 'Saturday' || existing.name === 'Sunday') {
+        if (holiday.name !== 'Saturday' && holiday.name !== 'Sunday') {
+          uniqueHolidays.set(dateKey, holiday)
+        }
+      }
+    }
+  })
+
+  return Array.from(uniqueHolidays.values())
 }
 
