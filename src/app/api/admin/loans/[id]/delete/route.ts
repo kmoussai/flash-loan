@@ -46,8 +46,22 @@ export async function DELETE(
       )
     }
 
-    // Delete loan (this should cascade to related records based on database constraints)
-    // If cascade is not set up, we may need to delete related records manually
+    // Delete associated contracts first
+    // Note: The foreign key is ON DELETE SET NULL, so we need to explicitly delete contracts
+    const { error: deleteContractsError } = await supabase
+      .from('loan_contracts')
+      .delete()
+      .eq('loan_id', loanId)
+
+    if (deleteContractsError) {
+      console.error('Error deleting contracts:', deleteContractsError)
+      return NextResponse.json(
+        { error: 'Failed to delete associated contracts', details: deleteContractsError.message },
+        { status: 500 }
+      )
+    }
+
+    // Delete loan (this should cascade to related records like payments based on database constraints)
     const { error: deleteError } = await supabase
       .from('loans')
       .delete()

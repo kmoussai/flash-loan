@@ -2,6 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import type { LoanContract, ContractTerms } from '@/src/lib/supabase/types'
+import type { PaymentFrequency } from '@/src/types'
+import {
+  calculateTotalLoanAmount,
+  calculateTotalRepaymentAmount,
+  calculateTotalInterest,
+  calculateTotalFees,
+  formatCurrency as formatCurrencyLib,
+  roundCurrency
+} from '@/src/lib/loan'
 // import { getLogoDataURI } from '@/src/lib/contracts/html-to-pdf'
 
 async function imageToBase64(path: string): Promise<string> {
@@ -116,11 +125,14 @@ export default function ContractViewer({
     const terms = (contractData.contract_terms || {}) as ContractTerms &
       Record<string, any>
 
+    // Use loan library for currency formatting and rounding
     const formatCurrency = (amount?: number | null) => {
-      if (typeof amount !== 'number' || Number.isNaN(amount)) {
+      if (typeof amount !== 'number' || !Number.isFinite(amount)) {
         return ''
       }
-      return `${amount.toFixed(2)}$`
+      // Use loan library to round, then format as "$XX.XX" for contract display
+      const rounded = roundCurrency(amount)
+      return `${rounded.toFixed(2)}$`
     }
 
     const formatDate = (value?: string | null) => {
@@ -141,33 +153,15 @@ export default function ContractViewer({
       return `${day}/${month}/${year}`
     }
 
-    const parseJson = (value?: string | null) => {
-      if (!value) {
-        return {}
-      }
-
-      try {
-        const parsed = JSON.parse(value)
-        return parsed && typeof parsed === 'object' ? parsed : {}
-      } catch {
-        return {}
-      }
-    }
 
     const flashLoanLogo = await imageToBase64('/images/FlashLoanLogo.png')
     const signatureImage = await imageToBase64('/signature.jpeg')
 
     // Borrower basics from terms only
-    const borrowerFirst = terms.first_name ?? ''
     const borrowerLast = terms.last_name ?? ''
     const borrowerPhone = terms.phone ?? ''
-    const borrowerEmail = terms.email ?? ''
     const streetNumber = terms.street_number ?? ''
     const streetName = terms.street_name ?? ''
-    const apartmentNumber = terms.apartment_number ?? ''
-    const city = terms.city ?? ''
-    const province = terms.province ?? ''
-    const postal = terms.postal_code ?? ''
 
     const streetLineComputed = [streetNumber, streetName]
       .filter(Boolean)
@@ -181,26 +175,79 @@ export default function ContractViewer({
       ? terms.payment_schedule
       : []
     const numberOfPayments = terms.number_of_payments ?? schedule.length ?? 0
+    
+    // Principal amount is the base loan amount (without fees)
     const principalAmount =
       typeof terms.principal_amount === 'number'
-        ? terms.principal_amount + (terms.fees?.brokerage_fee ?? 0)
+        ? terms.principal_amount
         : 0
-    const totalAmount =
-      typeof terms.total_amount === 'number'
-        ? terms.total_amount
-        : principalAmount
+    
     const interestRate =
       typeof terms.interest_rate === 'number' ? terms.interest_rate : 0
+    const paymentFrequency = (terms.payment_frequency || 'monthly') as PaymentFrequency
     const paymentAmount = contractData.contract_terms.payment_amount
+    
+    // Use loan library to calculate total amounts
+    const brokerageFee = terms.fees?.brokerage_fee ?? 0
+    const originationFee = terms.fees?.origination_fee ?? 0
+    const otherFees = terms.fees?.other_fees ?? 0
+    
+    // Contract principal amount includes brokerage fee since it's lent to the client
+    const contractPrincipalAmount = roundCurrency(principalAmount + brokerageFee)
+    
+    // Calculate total loan amount (principal + fees) using loan library
+    const totalLoanAmount = calculateTotalLoanAmount({
+      principalAmount,
+      interestRate,
+      paymentFrequency,
+      numberOfPayments,
+      brokerageFee,
+      originationFee: 0, // Origination fee not included in loan amount
+      otherFees: 0 // Other fees not included in loan amount
+    })
+    
+    // Calculate total repayment amount (principal + fees + interest) using loan library
+    let totalAmount = terms.total_amount
+    if (typeof totalAmount !== 'number' && schedule.length > 0) {
+      // Convert schedule to PaymentBreakdown format for loan library
+      const paymentBreakdown = schedule.map((item, index) => ({
+        paymentNumber: index + 1,
+        dueDate: item.due_date,
+        amount: item.amount || 0,
+        interest: item.interest || 0,
+        principal: item.principal || 0,
+        remainingBalance: 0 // Not needed for this calculation
+      }))
+      
+      // Use loan library to calculate total repayment amount
+      totalAmount = calculateTotalRepaymentAmount(
+        {
+          principalAmount,
+          interestRate,
+          paymentFrequency,
+          numberOfPayments,
+          brokerageFee,
+          originationFee: 0,
+          otherFees: 0
+        },
+        paymentBreakdown
+      )
+    } else if (typeof totalAmount !== 'number') {
+      // Fallback: use payment amount * number of payments
+      totalAmount = typeof paymentAmount === 'number' && paymentAmount > 0
+        ? roundCurrency(paymentAmount * numberOfPayments)
+        : totalLoanAmount
+    }
+    
     const firstPaymentDue =
       schedule[0]?.due_date ?? terms.effective_date ?? null
     const lastPaymentDue =
       schedule[schedule.length - 1]?.due_date ?? terms.maturity_date ?? null
 
-    // Fees
-    const returnedPaymentFee = terms.fees?.origination_fee ?? 55
+    // Fees - use values from contract terms
+    const returnedPaymentFee = originationFee || 55
     const debitFee = terms.fees?.processing_fee ?? 0
-    const postponeFee = terms.fees?.other_fees ?? 35
+    const postponeFee = otherFees || 35
 
     // Contract meta
     const loanNumber =
@@ -209,8 +256,6 @@ export default function ContractViewer({
       contractData.id
     const signatureDateClient = formatDate(contractData.client_signed_at)
     const signatureDateStaff = formatDate(contractData.staff_signed_at)
-    const signatureMethod = contractData.client_signature_data?.signature_method
-    const signatureIp = contractData.client_signature_data?.ip_address
     const personalService = true
     const businessService = false
     const payeeName = 'Accept Pay Global (Payee)'
@@ -227,14 +272,10 @@ export default function ContractViewer({
 
     // Banking information from contract terms
     const bankAccount = terms.bank_account
-    const bankingInstitution = bankAccount?.bank_name ?? ''
     const bankingAddress = '' // Not stored in contract terms
     const bankingCity = '' // Not stored in contract terms
     const bankingProvince = '' // Not stored in contract terms
     const bankingPostal = '' // Not stored in contract terms
-    const bankingInstitutionNumber = bankAccount?.institution_number ?? ''
-    const bankingTransit = bankAccount?.transit_number ?? ''
-    const bankingAccountNumber = bankAccount?.account_number ?? ''
     const withFallback = (
       value: string | number | null | undefined,
       fallback = '___________________________'
@@ -536,7 +577,7 @@ export default function ContractViewer({
 
       <p class="emphasis">Object</p>
       <p>
-        The creditor loans the debtor, who acknowledges this reception, the amount in capital of (${withFallback(formatCurrency(principalAmount))}).
+        The creditor loans the debtor, who acknowledges this reception, the amount in capital of (${withFallback(formatCurrency(contractPrincipalAmount))}).
         This amount bears interest of (${withFallback(interestRate ? `${interestRate.toFixed(2)}%` : '', '_____%')}) annually starting on this contract date,
         calculated monthly until complete payment.
       </p>
