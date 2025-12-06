@@ -446,92 +446,43 @@ export async function POST(
         { useAdminClient: true }
       )
 
-      // Update/create/delete loan payments with 'pending' status (waiting for loan to be active/contract signed)
+      // When regenerating, clear all payments and create new ones
       if (finalPaymentSchedule && finalPaymentSchedule.length > 0) {
-        // Get existing pending payments for this loan
-        const { data: existingPayments, error: fetchError } = await (supabase.from('loan_payments') as any)
-          .select('id, payment_number, status')
+        // Delete all existing payments for this loan (clear everything on regeneration)
+        const { error: deleteAllError } = await (supabase.from('loan_payments') as any)
+          .delete()
           .eq('loan_id', loanId)
-          .eq('status', 'pending')
-          .order('payment_number', { ascending: true })
 
-        if (fetchError) {
-          console.error('Error fetching existing payments:', fetchError)
+        if (deleteAllError) {
+          console.error('Error deleting existing payments:', deleteAllError)
+          return NextResponse.json(
+            { error: 'Failed to clear existing payments' },
+            { status: 500 }
+          )
         }
 
-        const existingPaymentsArray = (existingPayments || []) as Array<{ id: string; payment_number: number; status: string }>
-        const existingPaymentsMap = new Map(
-          existingPaymentsArray.map((p) => [p.payment_number, p])
-        )
+        // Create new payments from the schedule
+        const newPayments: LoanPaymentInsert[] = finalPaymentSchedule.map((schedule, index) => ({
+          loan_id: loanId as string,
+          payment_date: schedule.due_date,
+          amount: schedule.amount,
+          payment_number: index + 1,
+          status: 'pending' as const,
+          interest: schedule.interest ?? null,
+          principal: schedule.principal ?? null
+        }))
 
-        const newPayments: LoanPaymentInsert[] = []
-        const paymentsToUpdate: Array<{ id: string; updates: any }> = []
-        const paymentNumbersToKeep = new Set<number>()
-
-        // Process each payment in the new schedule
-        finalPaymentSchedule.forEach((schedule, index) => {
-          const paymentNumber = index + 1
-          paymentNumbersToKeep.add(paymentNumber)
-
-          const paymentData = {
-            payment_date: schedule.due_date,
-            amount: schedule.amount,
-            payment_number: paymentNumber,
-            status: 'pending' as const,
-            interest: schedule.interest ?? null,
-            principal: schedule.principal ?? null
-          }
-
-          const existingPayment = existingPaymentsMap.get(paymentNumber)
-          if (existingPayment) {
-            // Update existing payment
-            paymentsToUpdate.push({
-              id: existingPayment.id,
-              updates: paymentData
-            })
-          } else {
-            // Insert new payment
-            newPayments.push({
-              loan_id: loanId as string,
-              ...paymentData
-            })
-          }
-        })
-
-        // Update existing payments
-        for (const { id, updates } of paymentsToUpdate) {
-          const { error: updateError } = await (supabase.from('loan_payments') as any)
-            .update(updates)
-            .eq('id', id)
-
-          if (updateError) {
-            console.error(`Error updating payment ${id}:`, updateError)
-          }
-        }
-
-        // Insert new payments
+        // Insert all new payments
         if (newPayments.length > 0) {
           const { error: insertError } = await (supabase.from('loan_payments') as any)
             .insert(newPayments)
 
           if (insertError) {
             console.error('Error inserting new payments:', insertError)
-          }
-        }
-
-        // Delete payments that are no longer in the schedule
-        const paymentsToDelete = existingPaymentsArray.filter(
-          (p) => !paymentNumbersToKeep.has(p.payment_number)
-        )
-
-        if (paymentsToDelete.length > 0) {
-          const paymentIdsToDelete = paymentsToDelete.map((p: any) => p.id)
-          const { error: deleteError } = await (supabase.from('loan_payments') as any)
-            .delete()
-            .in('id', paymentIdsToDelete)
-
-          if (deleteError) {
-            console.error('Error deleting extra payments:', deleteError)
+            return NextResponse.json(
+              { error: 'Failed to create new payments' },
+              { status: 500 }
+            )
           }
         }
       }

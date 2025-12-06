@@ -292,3 +292,21 @@ export function getNextBusinessDay(date: Date, maxDays: number = 30): Date {
   return currentDate
 }
 
+export function getPreviousBusinessDay(date: Date, maxDays: number = 30): Date {
+  let currentDate = new Date(date)
+  currentDate.setHours(0, 0, 0, 0)
+  
+  let daysChecked = 0
+  while (isHolidayOrWeekend(currentDate) && daysChecked < maxDays) {
+    currentDate.setDate(currentDate.getDate() - 1)
+    daysChecked++
+  }
+
+  // If we couldn't find a business day within maxDays, return the original date
+  if (daysChecked >= maxDays) {
+    return date
+  }
+  
+  return currentDate
+}
+

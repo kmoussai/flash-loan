@@ -7,7 +7,7 @@
 
 import { PaymentFrequency } from '@/src/types'
 import { addDays, addMonths, startOfMonth, endOfMonth, setDate, getDate } from 'date-fns'
-import { getNextBusinessDay } from '@/src/lib/utils/date'
+import { getPreviousBusinessDay } from '@/src/lib/utils/date'
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -413,7 +413,7 @@ export function calculatePaymentBreakdown(
     }
     
     // Adjust date to next business day if it falls on a holiday or weekend
-    dueDate = getNextBusinessDay(dueDate)
+    dueDate = getPreviousBusinessDay(dueDate)
 
     breakdown.push({
       paymentNumber,

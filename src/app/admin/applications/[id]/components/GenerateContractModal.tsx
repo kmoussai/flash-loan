@@ -12,7 +12,7 @@ import {
 import useSWR from 'swr'
 import { fetcher } from '@/lib/utils'
 import { ContractDefaultsResponse } from '@/src/types'
-import { getCanadianHolidays, getCanadianHolidaysWithNames, parseLocalDate, getNextBusinessDay, isHoliday } from '@/src/lib/utils/date'
+import { getCanadianHolidays, getCanadianHolidaysWithNames, parseLocalDate, isHoliday, getPreviousBusinessDay } from '@/src/lib/utils/date'
 import { frequencyOptions } from '@/src/lib/utils/schedule'
 import {
   calculatePaymentAmount,
@@ -285,7 +285,7 @@ export const GenerateContractModal = ({
     // Adjust any manually edited dates that fall on holidays/weekends to next business day
     finalPaymentSchedule = finalPaymentSchedule.map(payment => {
       const paymentDate = parseLocalDate(payment.due_date)
-      const adjustedDate = getNextBusinessDay(paymentDate)
+      const adjustedDate = getPreviousBusinessDay(paymentDate)
       
       // Only update if the date was actually adjusted
       if (adjustedDate.getTime() !== paymentDate.getTime()) {
