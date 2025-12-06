@@ -447,6 +447,7 @@ export interface LoanPayment {
   // Payment breakdown
   interest: number | null
   principal: number | null
+  remaining_balance: number | null
   // Accept Pay fields
   accept_pay_customer_id: number | null
   accept_pay_transaction_id: number | null
@@ -855,6 +856,7 @@ export interface LoanPaymentInsert {
   payment_number?: number | null
   interest?: number | null
   principal?: number | null
+  remaining_balance?: number | null
   accept_pay_customer_id?: number | null
   accept_pay_transaction_id?: number | null
   process_date?: string | null
@@ -900,6 +902,7 @@ export interface LoanPaymentUpdate {
   payment_number?: number | null
   interest?: number | null
   principal?: number | null
+  remaining_balance?: number | null
   accept_pay_customer_id?: number | null
   accept_pay_transaction_id?: number | null
   process_date?: string | null
