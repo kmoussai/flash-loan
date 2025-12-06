@@ -310,6 +310,25 @@ export async function getLoanApplicationById(
 
   return { success: true, data: data as LoanApplication, error: null }
 }
+
+export async function getLoanPaymentById(paymentId: string, isServer = false) {
+  const supabase: any = isServer
+    ? await (await import('./server')).createServerSupabaseClient()
+    : createClient()
+
+  const { data, error } = await supabase
+    .from('loan_payments')
+    .select('*')
+    .eq('id', paymentId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error fetching loan payment by ID:', error)
+    return { success: false, error: error.message, data: null }
+  }
+
+  return { success: true, data: data as LoanPayment, error: null }
+}
 export async function getLoanById(loanId: string, isServer = false) {
   const supabase: any = isServer
     ? await (await import('./server')).createServerSupabaseClient()
