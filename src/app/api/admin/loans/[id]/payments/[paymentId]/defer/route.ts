@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { LoanPaymentUpdate, LoanPayment, LoanPaymentInsert } from '@/src/lib/supabase/types'
-import { Loan } from '@/src/types';
+import { Loan } from '@/src/types'
+import { parseLocalDate } from '@/src/lib/utils/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,7 +119,7 @@ export async function POST(
 
     // Find the last payment date (excluding the current payment being deferred)
     const lastPayment = paymentsList.find(p => p.id !== paymentId) || paymentsList[0]
-    const lastPaymentDate = new Date(lastPayment.payment_date)
+    const lastPaymentDate = parseLocalDate(lastPayment.payment_date)
     
     // Calculate new payment date (day after last payment)
     const newPaymentDate = new Date(lastPaymentDate)

@@ -11,6 +11,7 @@ import {
   formatCurrency as formatCurrencyLib,
   roundCurrency
 } from '@/src/lib/loan'
+import { parseLocalDate } from '@/src/lib/utils/date'
 // import { getLogoDataURI } from '@/src/lib/contracts/html-to-pdf'
 
 async function imageToBase64(path: string): Promise<string> {
@@ -140,7 +141,7 @@ export default function ContractViewer({
         return ''
       }
 
-      const date = new Date(value)
+      const date = parseLocalDate(value)
 
       if (Number.isNaN(date.getTime())) {
         return ''

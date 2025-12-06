@@ -16,6 +16,7 @@ import {
   getApplicationStatusBadgeClass,
   getContractStatusBadgeClass
 } from '../../utils/formatters'
+import { parseLocalDate } from '@/src/lib/utils/date'
 import ContractViewer from '@/src/app/admin/components/ContractViewer'
 import ContractSigningModal from '../ContractSigningModal'
 
@@ -207,9 +208,11 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     const nextPayment = payments
       .filter(p => p.status === 'pending')
       .sort(
-        (a, b) =>
-          new Date(a.payment_date).getTime() -
-          new Date(b.payment_date).getTime()
+        (a, b) => {
+          const { parseLocalDate } = require('@/src/lib/utils/date')
+          return parseLocalDate(a.payment_date).getTime() -
+            parseLocalDate(b.payment_date).getTime()
+        }
       )[0]
 
     const confirmedPayments = payments.filter(

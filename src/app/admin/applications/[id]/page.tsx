@@ -19,6 +19,7 @@ import type {
 import type { ApplicationWithDetails, IbvResults } from './types'
 import { Modal } from '@/src/app/components/Modal'
 import { RejectApplicationModal } from './components/RejectApplicationModal'
+import { parseLocalDate } from '@/src/lib/utils/date'
 
 export default function ApplicationDetailsPage() {
   const router = useRouter()
@@ -221,9 +222,12 @@ export default function ApplicationDetailsPage() {
         )
       }
       if (options?.nextPaymentDate) {
-        const parsedDate = new Date(options.nextPaymentDate)
+        const parsedDate = parseLocalDate(options.nextPaymentDate)
         if (!Number.isNaN(parsedDate.getTime())) {
-          payload.firstPaymentDate = parsedDate.toISOString().split('T')[0]
+          const year = parsedDate.getFullYear()
+          const month = String(parsedDate.getMonth() + 1).padStart(2, '0')
+          const day = String(parsedDate.getDate()).padStart(2, '0')
+          payload.firstPaymentDate = `${year}-${month}-${day}`
         }
       }
 

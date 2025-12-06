@@ -1,5 +1,6 @@
 import type { LoanStatus } from '@/src/lib/supabase/types'
 import type { LoanStatusUI, LoanFromAPI, LoanDetail, LoanDetailsResponse } from './types'
+import { parseLocalDate } from '@/src/lib/utils/date'
 
 /**
  * Map database loan status to UI status
@@ -30,7 +31,7 @@ export function formatCurrency(amount: number): string {
  */
 export function formatDate(dateString: string | null): string {
   if (!dateString) return 'N/A'
-  return new Date(dateString).toLocaleDateString('en-CA', {
+  return parseLocalDate(dateString).toLocaleDateString('en-CA', {
     year: 'numeric',
     month: 'short',
     day: 'numeric'
@@ -42,7 +43,7 @@ export function formatDate(dateString: string | null): string {
  */
 export function formatDateTime(dateString: string | null): string {
   if (!dateString) return 'N/A'
-  return new Date(dateString).toLocaleString('en-CA', {
+  return parseLocalDate(dateString).toLocaleString('en-CA', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -84,13 +85,13 @@ export function transformLoanDetails(apiData: LoanDetailsResponse): LoanDetail {
     confirmedPayments.length > 0
       ? confirmedPayments.sort(
           (a, b) =>
-            new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
+            parseLocalDate(b.payment_date).getTime() - parseLocalDate(a.payment_date).getTime()
         )[0]
       : null
 
   const nextScheduledPayment = schedule
     .filter(s => s.status === 'pending' || s.status === 'scheduled')
-    .sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())[0]
+    .sort((a, b) => parseLocalDate(a.scheduled_date).getTime() - parseLocalDate(b.scheduled_date).getTime())[0]
 
   return {
     id: loan.id,

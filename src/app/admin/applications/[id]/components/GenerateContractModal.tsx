@@ -12,7 +12,7 @@ import {
 import useSWR from 'swr'
 import { fetcher } from '@/lib/utils'
 import { ContractDefaultsResponse } from '@/src/types'
-import { getCanadianHolidays, getCanadianHolidaysWithNames } from '@/src/lib/utils/date'
+import { getCanadianHolidays, getCanadianHolidaysWithNames, parseLocalDate, getNextBusinessDay, isHoliday } from '@/src/lib/utils/date'
 import { frequencyOptions } from '@/src/lib/utils/schedule'
 import {
   calculatePaymentAmount,
@@ -60,34 +60,14 @@ export const GenerateContractModal = ({
   const holidays = useMemo(() => getCanadianHolidays(), [])
   const holidaysWithNames = useMemo(() => getCanadianHolidaysWithNames(), [])
 
-  // Helper function to check if a date is a holiday
-  const isHoliday = (dateString: string): boolean => {
-    if (!holidays || holidays.length === 0) return false
-    
-    const date = new Date(dateString)
-    date.setHours(0, 0, 0, 0)
-    
-    return holidays.some(holiday => {
-      const holidayDate = new Date(holiday)
-      holidayDate.setHours(0, 0, 0, 0)
-      return (
-        date.getDate() === holidayDate.getDate() &&
-        date.getMonth() === holidayDate.getMonth() &&
-        date.getFullYear() === holidayDate.getFullYear()
-      )
-    })
-  }
-
   // Helper function to get holiday name for a date
   const getHolidayName = (dateString: string): string | null => {
     if (!isHoliday(dateString)) return null
     
-    const date = new Date(dateString)
-    date.setHours(0, 0, 0, 0)
+    const date = parseLocalDate(dateString)
     
     const match = holidaysWithNames.find(h => {
-      const hDate = new Date(h.date)
-      hDate.setHours(0, 0, 0, 0)
+      const hDate = parseLocalDate(h.date)
       return (
         date.getDate() === hDate.getDate() &&
         date.getMonth() === hDate.getMonth() &&
@@ -260,7 +240,7 @@ export const GenerateContractModal = ({
     today.setHours(0, 0, 0, 0)
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const selectedDate = new Date(nextPaymentDate)
+    const selectedDate = parseLocalDate(nextPaymentDate)
     selectedDate.setHours(0, 0, 0, 0)
 
     if (selectedDate < tomorrow) {
@@ -277,7 +257,7 @@ export const GenerateContractModal = ({
 
     // Build the final payment schedule that will be submitted (same logic as payload)
     // This ensures we validate exactly what will be sent to the API
-    const finalPaymentSchedule =
+    let finalPaymentSchedule =
       paymentSchedule.length > 0
         ? paymentSchedule
         : (() => {
@@ -302,37 +282,23 @@ export const GenerateContractModal = ({
             }))
           })()
 
-    // Validate that no payment dates fall on holidays
-    // Check the final schedule that will actually be submitted
-    const paymentsOnHolidays = finalPaymentSchedule
-      .map(payment => {
-        if (isHoliday(payment.due_date)) {
-          const holidayName = getHolidayName(payment.due_date)
-          const paymentDate = new Date(payment.due_date)
-          const formattedDate = paymentDate.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          })
-          return {
-            date: formattedDate,
-            holidayName: holidayName || 'Holiday',
-            dueDate: payment.due_date
-          }
+    // Adjust any manually edited dates that fall on holidays/weekends to next business day
+    finalPaymentSchedule = finalPaymentSchedule.map(payment => {
+      const paymentDate = parseLocalDate(payment.due_date)
+      const adjustedDate = getNextBusinessDay(paymentDate)
+      
+      // Only update if the date was actually adjusted
+      if (adjustedDate.getTime() !== paymentDate.getTime()) {
+        const year = adjustedDate.getFullYear()
+        const month = String(adjustedDate.getMonth() + 1).padStart(2, '0')
+        const day = String(adjustedDate.getDate()).padStart(2, '0')
+        return {
+          ...payment,
+          due_date: `${year}-${month}-${day}`
         }
-        return null
-      })
-      .filter((item): item is { date: string; holidayName: string; dueDate: string } => item !== null)
-
-    if (paymentsOnHolidays.length > 0) {
-      const holidayList = paymentsOnHolidays
-        .map(p => `${p.date} (${p.holidayName})`)
-        .join(', ')
-      setFormError(
-        `Cannot generate contract: The following payment dates fall on holidays: ${holidayList}. Please adjust the payment schedule to avoid holidays.`
-      )
-      return
-    }
+      }
+      return payment
+    })
 
     setLoadingContract(true)
     const payload: GenerateContractPayload = {
