@@ -8,6 +8,41 @@ export interface Holiday {
 }
 
 /**
+ * Parse a date string in local timezone to avoid timezone shifts
+ * 
+ * When parsing date strings like "2025-12-15", using `new Date("2025-12-15")` 
+ * interprets the string as UTC midnight, which can shift to the previous day 
+ * in timezones behind UTC. This function parses the date in local timezone instead.
+ * 
+ * @param dateString - Date string in YYYY-MM-DD format or a Date object
+ * @returns Date object created in local timezone
+ * 
+ * @example
+ * ```typescript
+ * // This will correctly parse as December 15 in local timezone
+ * const date = parseLocalDate("2025-12-15")
+ * ```
+ */
+export function parseLocalDate(dateString: string | Date): Date {
+  if (dateString instanceof Date) {
+    return dateString
+  }
+  
+  // If it's in YYYY-MM-DD format, parse it manually in local timezone
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [year, month, day] = dateString.split('-').map(Number)
+    return new Date(year, month - 1, day) // month is 0-indexed, creates date in local timezone
+  }
+  if (dateString.includes('T')) {
+    const [year, month, day] = dateString.split('T')[0].split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+  
+  // For other formats, fall back to Date.parse
+  return new Date(dateString)
+}
+
+/**
  * Calculate Easter date for a given year using the Computus algorithm
  * @param year - The year to calculate Easter for
  * @returns Date object representing Easter Sunday
@@ -174,5 +209,86 @@ export function getCanadianHolidaysWithNames(): Holiday[] {
   })
 
   return Array.from(uniqueHolidays.values())
+}
+
+/**
+ * Check if a date is a holiday
+ * @param date - Date to check (can be Date object or date string in YYYY-MM-DD format)
+ * @returns true if the date is a holiday
+ */
+export function isHoliday(date: Date | string): boolean {
+  const holidays = getCanadianHolidays()
+  
+  // Parse date to Date object if it's a string
+  const dateToCheck = typeof date === 'string' ? parseLocalDate(date) : date
+  
+  // Normalize date to midnight for comparison
+  const normalizedDate = new Date(dateToCheck)
+  normalizedDate.setHours(0, 0, 0, 0)
+  
+  // Check if it's a holiday
+  return holidays.some(holiday => {
+    const holidayDate = new Date(holiday)
+    holidayDate.setHours(0, 0, 0, 0)
+    return (
+      normalizedDate.getDate() === holidayDate.getDate() &&
+      normalizedDate.getMonth() === holidayDate.getMonth() &&
+      normalizedDate.getFullYear() === holidayDate.getFullYear()
+    )
+  })
+}
+
+/**
+ * Check if a date is a holiday or weekend
+ * @param date - Date to check
+ * @returns true if the date is a holiday or weekend
+ */
+export function isHolidayOrWeekend(date: Date): boolean {
+  const holidays = getCanadianHolidays()
+  const dayOfWeek = date.getDay() // 0 = Sunday, 6 = Saturday
+  
+  // Check if it's a weekend
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return true
+  }
+  
+  // Normalize date to midnight for comparison
+  const normalizedDate = new Date(date)
+  normalizedDate.setHours(0, 0, 0, 0)
+  
+  // Check if it's a holiday
+  return holidays.some(holiday => {
+    const holidayDate = new Date(holiday)
+    holidayDate.setHours(0, 0, 0, 0)
+    return (
+      normalizedDate.getDate() === holidayDate.getDate() &&
+      normalizedDate.getMonth() === holidayDate.getMonth() &&
+      normalizedDate.getFullYear() === holidayDate.getFullYear()
+    )
+  })
+}
+
+/**
+ * Find the next business day (skipping holidays and weekends)
+ * @param date - Starting date
+ * @param maxDays - Maximum number of days to look ahead (default: 30)
+ * @returns Next business day as Date object
+ */
+export function getNextBusinessDay(date: Date, maxDays: number = 30): Date {
+  let currentDate = new Date(date)
+  currentDate.setHours(0, 0, 0, 0)
+  
+  let daysChecked = 0
+  while (isHolidayOrWeekend(currentDate) && daysChecked < maxDays) {
+    currentDate.setDate(currentDate.getDate() + 1)
+    daysChecked++
+  }
+  
+  // If we couldn't find a business day within maxDays, return the original date
+  if (daysChecked >= maxDays) {
+    return date
+  }
+  
+  return currentDate
 }
 

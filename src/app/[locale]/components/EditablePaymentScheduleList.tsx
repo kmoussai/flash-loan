@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { PayementScheduleItem } from '@/src/types'
 import DatePicker from './DatePicker'
 import { format } from 'date-fns'
-import { getCanadianHolidaysWithNames, type Holiday } from '@/src/lib/utils/date'
+import { getCanadianHolidaysWithNames, parseLocalDate, isHoliday, type Holiday } from '@/src/lib/utils/date'
 
 export interface EditablePaymentScheduleListProps {
   schedule: PayementScheduleItem[]
@@ -34,11 +34,10 @@ const EditablePaymentScheduleList: React.FC<EditablePaymentScheduleListProps> = 
       // If holidays are provided as Date[], try to match with named holidays
       const namedHolidays = getCanadianHolidaysWithNames()
       return holidays.map(holidayDate => {
-        const holiday = new Date(holidayDate)
-        holiday.setHours(0, 0, 0, 0)
+        // holidayDate is already a Date object from the holidays prop
+        const holiday = holidayDate instanceof Date ? holidayDate : parseLocalDate(holidayDate)
         const match = namedHolidays.find(h => {
-          const hDate = new Date(h.date)
-          hDate.setHours(0, 0, 0, 0)
+          const hDate = parseLocalDate(h.date)
           return (
             holiday.getDate() === hDate.getDate() &&
             holiday.getMonth() === hDate.getMonth() &&
@@ -73,12 +72,7 @@ const EditablePaymentScheduleList: React.FC<EditablePaymentScheduleListProps> = 
   }
 
   const formatDate = (value: string | Date): string => {
-    const date =
-      typeof value === 'string'
-        ? Number.isNaN(Date.parse(value))
-          ? null
-          : new Date(value)
-        : value
+    const date = typeof value === 'string' ? parseLocalDate(value) : value
 
     if (!date) {
       return '—'
@@ -91,34 +85,14 @@ const EditablePaymentScheduleList: React.FC<EditablePaymentScheduleListProps> = 
     }
   }
 
-  // Check if a date is a holiday
-  const isHoliday = (dateString: string): boolean => {
-    if (!holidays || holidays.length === 0) return false
-    
-    const date = new Date(dateString)
-    date.setHours(0, 0, 0, 0)
-    
-    return holidays.some(holiday => {
-      const holidayDate = new Date(holiday)
-      holidayDate.setHours(0, 0, 0, 0)
-      return (
-        date.getDate() === holidayDate.getDate() &&
-        date.getMonth() === holidayDate.getMonth() &&
-        date.getFullYear() === holidayDate.getFullYear()
-      )
-    })
-  }
-
   // Get holiday name for a date
   const getHolidayName = (dateString: string): string | null => {
     if (!isHoliday(dateString)) return null
     
-    const date = new Date(dateString)
-    date.setHours(0, 0, 0, 0)
+    const date = parseLocalDate(dateString)
     
     const match = holidaysWithNames.find(h => {
-      const hDate = new Date(h.date)
-      hDate.setHours(0, 0, 0, 0)
+      const hDate = parseLocalDate(h.date)
       return (
         date.getDate() === hDate.getDate() &&
         date.getMonth() === hDate.getMonth() &&
@@ -190,7 +164,8 @@ const EditablePaymentScheduleList: React.FC<EditablePaymentScheduleListProps> = 
         </div>
         <div className='divide-border/30 relative max-h-[300px] divide-y overflow-y-auto'>
           {schedule.map((item, index) => {
-            const key = new Date(item.due_date).toISOString() + index.toString()
+            // Use the date string directly as key to avoid timezone issues
+            const key = item.due_date + index.toString()
             const isEditing = editingIndex === index
 
             return (

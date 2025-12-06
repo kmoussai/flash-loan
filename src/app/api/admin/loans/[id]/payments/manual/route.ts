@@ -8,6 +8,7 @@ import {
   PAYMENT_FREQUENCY_CONFIG
 } from '@/src/lib/loan'
 import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
+import { parseLocalDate } from '@/src/lib/utils/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +50,7 @@ export async function POST(
     }
 
     // Validate date format
-    const paymentDate = new Date(payment_date)
+    const paymentDate = parseLocalDate(payment_date)
     if (isNaN(paymentDate.getTime())) {
       return NextResponse.json(
         { error: 'Invalid payment date format' },

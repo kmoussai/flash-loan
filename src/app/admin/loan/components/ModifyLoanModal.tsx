@@ -12,7 +12,7 @@ import {
   calculateModificationBalance,
   roundCurrency
 } from '@/src/lib/loan'
-import { getCanadianHolidays } from '@/src/lib/utils/date'
+import { getCanadianHolidays, parseLocalDate } from '@/src/lib/utils/date'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/utils'
 import { formatCurrency, formatDate } from '../[id]/utils'
@@ -89,7 +89,7 @@ export default function ModifyLoanModal({
 
   const futurePaymentsCount = useMemo(() => {
     return payments.filter((p: any) => {
-      const paymentDate = new Date(p.payment_date)
+      const paymentDate = parseLocalDate(p.payment_date)
       paymentDate.setHours(0, 0, 0, 0)
       const isFutureDate = paymentDate >= today
       const isPendingOrFailed =
@@ -185,7 +185,7 @@ export default function ModifyLoanModal({
       (p: any) =>
         p.status === 'failed' &&
         (() => {
-          const paymentDate = new Date(p.payment_date)
+          const paymentDate = parseLocalDate(p.payment_date)
           paymentDate.setHours(0, 0, 0, 0)
           return paymentDate < today
         })()
@@ -279,7 +279,7 @@ export default function ModifyLoanModal({
         // Calculate which payments will be updated, created, or deleted
         // Get existing future payments
         const existingFuturePayments = payments.filter((p: any) => {
-          const paymentDate = new Date(p.payment_date)
+          const paymentDate = parseLocalDate(p.payment_date)
           paymentDate.setHours(0, 0, 0, 0)
           const isFutureDate = paymentDate >= today
           const isPendingOrFailed =

@@ -6,7 +6,7 @@ import useSWR from 'swr'
 import { LoanPayment } from '@/src/lib/supabase/types'
 import { formatCurrency, formatDate } from '../[id]/utils'
 import DatePicker from '@/src/app/[locale]/components/DatePicker'
-import { getCanadianHolidays } from '@/src/lib/utils/date'
+import { getCanadianHolidays, parseLocalDate } from '@/src/lib/utils/date'
 import { ContractDefaultsResponse } from '@/src/types'
 import { IconEdit, IconClock } from '@/src/app/components/icons'
 
@@ -36,8 +36,12 @@ export default function PaymentTable({
   const [editDate, setEditDate] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [deferringPayment, setDeferringPayment] = useState<LoanPayment | null>(null)
-  const [deferFeeOption, setDeferFeeOption] = useState<'none' | 'end' | null>(null)
+  const [deferringPayment, setDeferringPayment] = useState<LoanPayment | null>(
+    null
+  )
+  const [deferFeeOption, setDeferFeeOption] = useState<'none' | 'end' | null>(
+    null
+  )
   const [deferFeeAmount, setDeferFeeAmount] = useState<string>('50')
   const [isDeferring, setIsDeferring] = useState(false)
   const [deferError, setDeferError] = useState<string | null>(null)
@@ -58,13 +62,19 @@ export default function PaymentTable({
 
   // Fetch employment pay dates if applicationId is available
   const { data: defaultsData } = useSWR<ContractDefaultsResponse>(
-    applicationId ? `/api/admin/applications/${applicationId}/contract/defaults` : null,
+    applicationId
+      ? `/api/admin/applications/${applicationId}/contract/defaults`
+      : null,
     fetcher
   )
 
   // Get contract fees from loan data (already fetched with loan)
   const contractFees = React.useMemo(() => {
-    if (loan?.loan_contracts && Array.isArray(loan.loan_contracts) && loan.loan_contracts.length > 0) {
+    if (
+      loan?.loan_contracts &&
+      Array.isArray(loan.loan_contracts) &&
+      loan.loan_contracts.length > 0
+    ) {
       const contract = loan.loan_contracts[0]
       return contract?.contract_terms?.fees
     }
@@ -74,9 +84,7 @@ export default function PaymentTable({
   // Update defer fee amount when contract fees are available
   React.useEffect(() => {
     if (contractFees) {
-      const fee = contractFees.deferral_fee ??
-                  contractFees.other_fees ??
-                  50
+      const fee = contractFees.deferral_fee ?? contractFees.other_fees ?? 50
       setDeferFeeAmount(fee.toString())
     }
   }, [contractFees])
@@ -89,8 +97,11 @@ export default function PaymentTable({
     setEditingPayment(payment)
     setEditAmount(payment.amount.toString())
     // Convert payment_date to YYYY-MM-DD format for date input
-    const date = new Date(payment.payment_date)
-    setEditDate(date.toISOString().split('T')[0])
+    const date = parseLocalDate(payment.payment_date)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    setEditDate(`${year}-${month}-${day}`)
     setError(null)
   }
 
@@ -101,7 +112,11 @@ export default function PaymentTable({
     setIsSaving(true)
 
     try {
-      const updates: { amount?: number; payment_date?: string; notes?: string } = {}
+      const updates: {
+        amount?: number
+        payment_date?: string
+        notes?: string
+      } = {}
       const noteChanges: string[] = []
       const now = new Date().toLocaleString('en-US', {
         year: 'numeric',
@@ -121,12 +136,14 @@ export default function PaymentTable({
         const oldAmount = formatCurrency(Number(editingPayment.amount))
         const newAmount = formatCurrency(amount)
         updates.amount = amount
-        noteChanges.push(`Payment amount changed from ${oldAmount} to ${newAmount}`)
+        noteChanges.push(
+          `Payment amount changed from ${oldAmount} to ${newAmount}`
+        )
       }
 
       if (editDate) {
-        const newDate = new Date(editDate)
-        const oldDate = new Date(editingPayment.payment_date)
+        const newDate = parseLocalDate(editDate)
+        const oldDate = parseLocalDate(editingPayment.payment_date)
         // Compare dates (ignoring time)
         if (
           newDate.toISOString().split('T')[0] !==
@@ -135,7 +152,9 @@ export default function PaymentTable({
           updates.payment_date = newDate.toISOString()
           const oldDateStr = formatDate(editingPayment.payment_date)
           const newDateStr = formatDate(newDate.toISOString())
-          noteChanges.push(`Payment date changed from ${oldDateStr} to ${newDateStr}`)
+          noteChanges.push(
+            `Payment date changed from ${oldDateStr} to ${newDateStr}`
+          )
         }
       }
 
@@ -190,10 +209,8 @@ export default function PaymentTable({
   const handleDeferClick = (payment: LoanPayment) => {
     setDeferringPayment(payment)
     setDeferFeeOption(null)
-    // Use deferral fee from contract, or default to 50
-    const fee = contractFees?.deferral_fee ??
-                contractFees?.other_fees ??
-                50
+    // Use deferral fee from contract, or default to
+    const fee = contractFees?.deferral_fee ?? contractFees?.other_fees ?? 50
     setDeferFeeAmount(fee.toString())
     setDeferError(null)
   }
@@ -257,7 +274,7 @@ export default function PaymentTable({
     setDeferFeeAmount('50')
     setDeferError(null)
   }
-  
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'confirmed':
@@ -286,7 +303,7 @@ export default function PaymentTable({
   return (
     <div className='space-y-3 p-2'>
       <div className='rounded-lg border border-gray-200 bg-white shadow-sm'>
-        <div className='border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2 flex items-center justify-between'>
+        <div className='flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2'>
           <h3 className='text-base font-semibold text-gray-900'>
             Payment History
           </h3>
@@ -385,12 +402,14 @@ export default function PaymentTable({
                       {formatCurrency(parseFloat(payment.amount.toString()))}
                     </td>
                     <td className='whitespace-nowrap px-3 py-1.5 text-xs text-gray-700'>
-                      {payment.principal !== null && payment.principal !== undefined
+                      {payment.principal !== null &&
+                      payment.principal !== undefined
                         ? formatCurrency(Number(payment.principal))
                         : '-'}
                     </td>
                     <td className='whitespace-nowrap px-3 py-1.5 text-xs text-gray-700'>
-                      {payment.interest !== null && payment.interest !== undefined
+                      {payment.interest !== null &&
+                      payment.interest !== undefined
                         ? formatCurrency(Number(payment.interest))
                         : '-'}
                     </td>
@@ -406,7 +425,7 @@ export default function PaymentTable({
                         {payment.status.toUpperCase()}
                       </span>
                     </td>
-                    <td className='px-3 py-1.5 text-xs text-gray-500 whitespace-pre-line max-w-xs'>
+                    <td className='max-w-xs whitespace-pre-line px-3 py-1.5 text-xs text-gray-500'>
                       {payment.notes || '-'}
                     </td>
                     <td className='whitespace-nowrap px-3 py-1.5'>
@@ -441,8 +460,8 @@ export default function PaymentTable({
 
       {/* Edit Payment Modal */}
       {editingPayment && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4 overflow-y-auto'>
-          <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl my-auto'>
+        <div className='fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 px-4 py-4'>
+          <div className='my-auto w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl'>
             {/* Header */}
             <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
               <h3 className='text-lg font-semibold text-gray-900'>
@@ -546,8 +565,8 @@ export default function PaymentTable({
 
       {/* Defer Payment Modal */}
       {deferringPayment && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-4 overflow-y-auto'>
-          <div className='w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl my-auto'>
+        <div className='fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 px-4 py-4'>
+          <div className='my-auto w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-xl'>
             {/* Header */}
             <div className='flex items-center justify-between border-b border-gray-200 px-6 py-4'>
               <h3 className='text-lg font-semibold text-gray-900'>
@@ -590,10 +609,12 @@ export default function PaymentTable({
                   </label>
                   <div className='space-y-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600'>
                     <div>
-                      <span className='font-medium'>Date:</span> {formatDate(deferringPayment.payment_date)}
+                      <span className='font-medium'>Date:</span>{' '}
+                      {formatDate(deferringPayment.payment_date)}
                     </div>
                     <div>
-                      <span className='font-medium'>Amount:</span> {formatCurrency(Number(deferringPayment.amount))}
+                      <span className='font-medium'>Amount:</span>{' '}
+                      {formatCurrency(Number(deferringPayment.amount))}
                     </div>
                   </div>
                 </div>
@@ -618,7 +639,8 @@ export default function PaymentTable({
                           No Deferral Fee
                         </div>
                         <div className='text-xs text-gray-500'>
-                          Payment will be moved to the end without any additional fees
+                          Payment will be moved to the end without any
+                          additional fees
                         </div>
                       </div>
                     </label>
@@ -637,7 +659,8 @@ export default function PaymentTable({
                           Add Fee to Payment at End
                         </div>
                         <div className='text-xs text-gray-500'>
-                          Fee of {formatCurrency(Number(deferFeeAmount))} will be added to the payment amount when moved to the end
+                          Fee of {formatCurrency(Number(deferFeeAmount))} will
+                          be added to the payment amount when moved to the end
                         </div>
                       </div>
                     </label>
@@ -661,13 +684,27 @@ export default function PaymentTable({
                 <div className='rounded-lg bg-blue-50 p-3 text-sm text-blue-800'>
                   <p className='font-medium'>What will happen:</p>
                   <ul className='mt-1 list-inside list-disc space-y-1 text-xs'>
-                    <li>Current payment amount, interest, and principal will be set to $0</li>
+                    <li>
+                      Current payment amount, interest, and principal will be
+                      set to $0
+                    </li>
                     <li>Payment will be moved to the end of the schedule</li>
                     {deferFeeOption === 'end' && (
-                      <li>New payment amount will be {formatCurrency(Number(deferringPayment.amount) + Number(deferFeeAmount))} (original + fee)</li>
+                      <li>
+                        New payment amount will be{' '}
+                        {formatCurrency(
+                          Number(deferringPayment.amount) +
+                            Number(deferFeeAmount)
+                        )}{' '}
+                        (original + fee)
+                      </li>
                     )}
                     {deferFeeOption === 'none' && (
-                      <li>New payment amount will be {formatCurrency(Number(deferringPayment.amount))} (original amount)</li>
+                      <li>
+                        New payment amount will be{' '}
+                        {formatCurrency(Number(deferringPayment.amount))}{' '}
+                        (original amount)
+                      </li>
                     )}
                   </ul>
                 </div>
@@ -699,4 +736,3 @@ export default function PaymentTable({
     </div>
   )
 }
-

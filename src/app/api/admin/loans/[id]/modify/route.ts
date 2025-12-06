@@ -8,6 +8,7 @@ import {
   calculateModificationBalance,
   roundCurrency
 } from '@/src/lib/loan'
+import { parseLocalDate } from '@/src/lib/utils/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,7 +102,7 @@ export async function POST(
 
     // Identify future payments: payment_date >= today OR (past date with pending/failed status)
     const futurePayments = payments.filter((p: any) => {
-      const paymentDate = new Date(p.payment_date)
+      const paymentDate = parseLocalDate(p.payment_date)
       paymentDate.setHours(0, 0, 0, 0)
       const isFutureDate = paymentDate >= today
       const isPendingOrFailed = ['pending', 'failed'].includes(p.status) && paymentDate < today
@@ -169,7 +170,7 @@ export async function POST(
     )
     const failedPayments = payments.filter((p: any) => 
       p.status === 'failed' && (() => {
-        const paymentDate = new Date(p.payment_date)
+        const paymentDate = parseLocalDate(p.payment_date)
         paymentDate.setHours(0, 0, 0, 0)
         return paymentDate < today
       })()

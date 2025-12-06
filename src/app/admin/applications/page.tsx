@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
+import { parseLocalDate } from '@/src/lib/utils/date'
 import type {
   LoanApplication,
   ApplicationStatus
@@ -188,7 +189,8 @@ export default function ApplicationsPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const { parseLocalDate } = require('@/src/lib/utils/date')
+    return parseLocalDate(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

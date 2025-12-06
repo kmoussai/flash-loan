@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { parseLocalDate } from '@/src/lib/utils/date'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { LoanPaymentInsert } from '@/src/lib/supabase/types'
 import {
@@ -47,7 +48,7 @@ export async function POST(
     }
 
     // Validate date format
-    const paymentDate = new Date(payment_date)
+    const paymentDate = parseLocalDate(payment_date)
     if (isNaN(paymentDate.getTime())) {
       return NextResponse.json(
         { error: 'Invalid payment date format' },

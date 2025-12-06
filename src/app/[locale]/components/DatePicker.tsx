@@ -4,6 +4,7 @@ import * as React from 'react'
 import { format } from 'date-fns'
 import { DayPicker, DateRange } from 'react-day-picker'
 import * as Popover from '@radix-ui/react-popover'
+import { parseLocalDate, isHoliday } from '@/src/lib/utils/date'
 import 'react-day-picker/dist/style.css'
 
 export interface DatePickerProps {
@@ -36,7 +37,7 @@ export default function DatePicker({
   name
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
-  const selectedDate = value ? new Date(value) : undefined
+  const selectedDate = value ? parseLocalDate(value) : undefined
 
   const handleSelect = (date: Date | undefined) => {
     if (date) {
@@ -48,27 +49,17 @@ export default function DatePicker({
     }
   }
 
-  // Check if a date is a holiday
-  const isHoliday = (date: Date): boolean => {
-    return holidays.some(holiday => {
-      return (
-        holiday.getDate() === date.getDate() &&
-        holiday.getMonth() === date.getMonth() &&
-        holiday.getFullYear() === date.getFullYear()
-      )
-    })
-  }
 
   // Convert holidays to Date objects and create modifiers
   const holidayDates = holidays.map(h => {
-    const date = new Date(h)
+    const date = h instanceof Date ? h : parseLocalDate(h)
     date.setHours(0, 0, 0, 0)
     return date
   })
 
   // Convert employment pay dates to Date objects
   const employmentPayDateObjects = employmentPayDates.map(dateString => {
-    const date = new Date(dateString)
+    const date = parseLocalDate(dateString)
     date.setHours(0, 0, 0, 0)
     return date
   })

@@ -7,6 +7,7 @@
 
 import { PaymentFrequency } from '@/src/types'
 import { addDays, addMonths, startOfMonth, endOfMonth, setDate, getDate } from 'date-fns'
+import { getNextBusinessDay } from '@/src/lib/utils/date'
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -322,23 +323,97 @@ export function calculatePaymentBreakdown(
       const [year, month, day] = firstPaymentDate.split('-').map(Number)
       const firstDate = new Date(year, month - 1, day) // month is 0-indexed
       const firstMonth = startOfMonth(firstDate)
+      const firstMonthEnd = endOfMonth(firstDate)
+      const firstDay = firstDate.getDate()
+      const lastDayOfMonth = firstMonthEnd.getDate()
       
-      // Determine which month and which payment in that month
-      const monthOffset = Math.floor(i / 2)
-      const paymentInMonth = i % 2 // 0 = first payment (15th), 1 = second payment (last day)
-      const targetMonth = addMonths(firstMonth, monthOffset)
+      // Check if first payment date is on 15th or last day of month
+      const isOn15th = firstDay === 15
+      const isOnLastDay = firstDay === lastDayOfMonth
       
-      if (paymentInMonth === 0) {
-        // First payment of the month: always use 15th
-        dueDate = setDate(targetMonth, 15)
+      // Determine which payment this is (0 = first payment of pair, 1 = second payment of pair)
+      const paymentInPair = i % 2
+      // Determine which month pair we're in (0 = first month, 1 = second month, etc.)
+      const monthPairIndex = Math.floor(i / 2)
+      
+      if (i === 0) {
+        // First payment: use the start date if it's on 15th or last day, otherwise adjust
+        if (isOn15th || isOnLastDay) {
+          dueDate = firstDate
+        } else if (firstDay < 15) {
+          // Before 15th: use 15th of the same month
+          dueDate = setDate(firstMonth, 15)
+        } else {
+          // After 15th but not last day: use last day of the same month
+          dueDate = endOfMonth(firstMonth)
+        }
       } else {
-        // Second payment of the month: last day of month
-        dueDate = endOfMonth(targetMonth)
+        // Subsequent payments: determine based on what the first payment was
+        let targetMonth: Date
+        let targetDay: number
+        
+        if (isOn15th) {
+          // First payment was on 15th, so pattern is: 15th, last day, 15th, last day...
+          targetMonth = addMonths(firstMonth, monthPairIndex)
+          if (paymentInPair === 0) {
+            // First payment of pair: 15th
+            targetDay = 15
+          } else {
+            // Second payment of pair: last day
+            targetDay = -1 // Use -1 to indicate last day
+          }
+        } else if (isOnLastDay) {
+          // First payment was on last day, so pattern is: last day, 15th (next month), last day, 15th...
+          if (paymentInPair === 0) {
+            // First payment of pair: last day
+            targetMonth = addMonths(firstMonth, monthPairIndex)
+            targetDay = -1 // Use -1 to indicate last day
+          } else {
+            // Second payment of pair: 15th of next month
+            targetMonth = addMonths(firstMonth, monthPairIndex + 1)
+            targetDay = 15
+          }
+        } else {
+          // First payment was adjusted, determine pattern based on adjusted date
+          const adjustedFirstDate = firstDay < 15 
+            ? setDate(firstMonth, 15) 
+            : endOfMonth(firstMonth)
+          const adjustedIsOn15th = adjustedFirstDate.getDate() === 15
+          
+          if (adjustedIsOn15th) {
+            // Adjusted to 15th, so pattern is: 15th, last day, 15th, last day...
+            targetMonth = addMonths(firstMonth, monthPairIndex)
+            if (paymentInPair === 0) {
+              targetDay = 15
+            } else {
+              targetDay = -1
+            }
+          } else {
+            // Adjusted to last day, so pattern is: last day, 15th (next month), last day, 15th...
+            if (paymentInPair === 0) {
+              targetMonth = addMonths(firstMonth, monthPairIndex)
+              targetDay = -1
+            } else {
+              targetMonth = addMonths(firstMonth, monthPairIndex + 1)
+              targetDay = 15
+            }
+          }
+        }
+        
+        // Set the date
+        if (targetDay === -1) {
+          dueDate = endOfMonth(targetMonth)
+        } else {
+          dueDate = setDate(targetMonth, targetDay)
+        }
       }
     } else {
       // Weekly or bi-weekly: use days between
       dueDate = addDays(new Date(firstPaymentDate), i * config.daysBetween)
     }
+    
+    // Adjust date to next business day if it falls on a holiday or weekend
+    dueDate = getNextBusinessDay(dueDate)
 
     breakdown.push({
       paymentNumber,
