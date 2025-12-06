@@ -21,6 +21,7 @@ import {
 } from '@/src/lib/supabase/loan-helpers'
 import { GenerateContractPayload } from '@/src/app/types/contract'
 import { PaymentFrequency, ContractTerms, LoanPaymentInsert } from '@/src/lib/supabase/types'
+import { calculatePaymentBreakdown } from '@/src/lib/loan'
 
 export async function POST(
   request: NextRequest,
@@ -339,15 +340,20 @@ export async function POST(
 
       // Create loan payments with 'pending' status (waiting for loan to be active/contract signed)
       if (finalPaymentSchedule && finalPaymentSchedule.length > 0) {
-        const loanPayments: LoanPaymentInsert[] = finalPaymentSchedule.map((schedule, index) => ({
-          loan_id: loanId as string,
-          payment_date: schedule.due_date,
-          amount: schedule.amount,
-          payment_number: index + 1,
-          status: 'pending' as const, // Status indicates payment is waiting for loan to be active (contract signed)
-          interest: schedule.interest ?? null,
-          principal: schedule.principal ?? null
-        }))
+        const loanPayments: LoanPaymentInsert[] = finalPaymentSchedule.map((schedule, index) => {
+          // Handle both camelCase (from payload) and snake_case (from buildPaymentSchedule)
+          const remainingBalance = (schedule as any).remaining_balance ?? (schedule as any).remainingBalance ?? null
+          return {
+            loan_id: loanId as string,
+            payment_date: schedule.due_date,
+            amount: schedule.amount,
+            payment_number: index + 1,
+            status: 'pending' as const, // Status indicates payment is waiting for loan to be active (contract signed)
+            interest: schedule.interest ?? null,
+            principal: schedule.principal ?? null,
+            remaining_balance: remainingBalance
+          }
+        })
 
         // For new contracts, just insert all payments
         // Delete existing pending payments for this loan first (in case of any orphaned records)
@@ -462,15 +468,20 @@ export async function POST(
         }
 
         // Create new payments from the schedule
-        const newPayments: LoanPaymentInsert[] = finalPaymentSchedule.map((schedule, index) => ({
-          loan_id: loanId as string,
-          payment_date: schedule.due_date,
-          amount: schedule.amount,
-          payment_number: index + 1,
-          status: 'pending' as const,
-          interest: schedule.interest ?? null,
-          principal: schedule.principal ?? null
-        }))
+        const newPayments: LoanPaymentInsert[] = finalPaymentSchedule.map((schedule, index) => {
+          // Handle both camelCase (from payload) and snake_case (from buildPaymentSchedule)
+          const remainingBalance = (schedule as any).remaining_balance ?? (schedule as any).remainingBalance ?? null
+          return {
+            loan_id: loanId as string,
+            payment_date: schedule.due_date,
+            amount: schedule.amount,
+            payment_number: index + 1,
+            status: 'pending' as const,
+            interest: schedule.interest ?? null,
+            principal: schedule.principal ?? null,
+            remaining_balance: remainingBalance
+          }
+        })
 
         // Insert all new payments
         if (newPayments.length > 0) {
@@ -507,14 +518,18 @@ export async function POST(
     )
   }
 }
+/**
+ * Build payment schedule using the loan library's calculatePaymentBreakdown
+ * This ensures consistency across the application and reuses the tested calculation logic
+ */
 function buildPaymentSchedule(args: {
   payment_frequency: PaymentFrequency | undefined
   loan_amount: number
   interest_rate: number // as percent (e.g. 24)
-  num_payments: number // <<-- you pass this directly now
+  num_payments: number
   start_date?: string
 }):
-  | { due_date: string; amount: number; principal: number; interest: number }[]
+  | { due_date: string; amount: number; principal: number; interest: number; remaining_balance: number }[]
   | undefined {
   const {
     payment_frequency,
@@ -523,6 +538,8 @@ function buildPaymentSchedule(args: {
     num_payments,
     start_date
   } = args
+
+  // Validate inputs
   if (
     !payment_frequency ||
     loan_amount <= 0 ||
@@ -532,68 +549,29 @@ function buildPaymentSchedule(args: {
     return undefined
   }
 
-  // Frequency mapping
-  const frequencyConfig: Record<
-    PaymentFrequency,
-    { paymentsPerYear: number; daysBetween: number; monthsBetween: number }
-  > = {
-    weekly: { paymentsPerYear: 52, daysBetween: 7, monthsBetween: 0 },
-    'bi-weekly': { paymentsPerYear: 26, daysBetween: 14, monthsBetween: 0 },
-    'twice-monthly': { paymentsPerYear: 24, daysBetween: 15, monthsBetween: 0 }, // use 15 days instead of 0.5 month
-    monthly: { paymentsPerYear: 12, daysBetween: 0, monthsBetween: 1 }
+  // Use loan library's calculatePaymentBreakdown
+  const breakdown = calculatePaymentBreakdown(
+    {
+      principalAmount: loan_amount,
+      interestRate: interest_rate,
+      paymentFrequency: payment_frequency,
+      numberOfPayments: num_payments,
+      brokerageFee: 0, // No fees in this calculation - loan_amount is already the total
+      originationFee: 0
+    },
+    start_date || new Date().toISOString().split('T')[0]
+  )
+
+  if (!breakdown || breakdown.length === 0) {
+    return undefined
   }
 
-  const freq = frequencyConfig[payment_frequency]
-  if (!freq) return undefined
-
-  const { paymentsPerYear, daysBetween, monthsBetween } = freq
-  const periodicRate = interest_rate / 100 / paymentsPerYear
-
-  // Payment per period
-  const payment =
-    periodicRate === 0
-      ? loan_amount / num_payments
-      : (loan_amount *
-          (periodicRate * Math.pow(1 + periodicRate, num_payments))) /
-        (Math.pow(1 + periodicRate, num_payments) - 1)
-
-  // Initialize schedule
-  let balance = loan_amount
-  const schedule: {
-    due_date: string
-    amount: number
-    principal: number
-    interest: number
-  }[] = []
-
-  const baseDate = start_date ? new Date(start_date) : new Date()
-
-  for (let i = 0; i < num_payments; i++) {
-    const interestPayment = balance * periodicRate
-    let principalPayment = payment - interestPayment
-
-    // Fix rounding issue on last payment
-    if (i === num_payments - 1) {
-      principalPayment = balance
-    }
-
-    balance -= principalPayment
-
-    // Calculate due date
-    const dueDate = new Date(baseDate)
-    if (monthsBetween > 0) {
-      dueDate.setMonth(baseDate.getMonth() + monthsBetween * (i + 1))
-    } else {
-      dueDate.setDate(baseDate.getDate() + daysBetween * (i + 1))
-    }
-
-    schedule.push({
-      due_date: dueDate.toISOString().split('T')[0],
-      amount: Number(payment.toFixed(2)),
-      principal: Number(principalPayment.toFixed(2)),
-      interest: Number(interestPayment.toFixed(2))
-    })
-  }
-
-  return schedule
+  // Transform PaymentBreakdown[] to the expected format (snake_case)
+  return breakdown.map((item) => ({
+    due_date: item.dueDate,
+    amount: item.amount,
+    principal: item.principal,
+    interest: item.interest,
+    remaining_balance: item.remainingBalance
+  }))
 }

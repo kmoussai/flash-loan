@@ -131,6 +131,24 @@ export interface ScheduleGenerationParams {
 }
 
 /**
+ * Parameters for calculating breakdown until balance reaches 0
+ */
+export interface BreakdownUntilZeroParams {
+  /** Starting principal balance */
+  startingBalance: number
+  /** Payment amount per period (fixed) */
+  paymentAmount: number
+  /** Payment frequency */
+  paymentFrequency: PaymentFrequency
+  /** Annual interest rate as percentage (e.g., 29 for 29%) */
+  interestRate: number
+  /** First payment date (ISO date string YYYY-MM-DD) */
+  firstPaymentDate: string
+  /** Maximum number of periods to generate (safety limit, default: 1000) */
+  maxPeriods?: number
+}
+
+/**
  * Failed payment calculation parameters
  */
 export interface FailedPaymentCalculationParams {
@@ -426,6 +444,193 @@ export function calculatePaymentBreakdown(
       principal: principal,
       remainingBalance: remaining
     })
+  }
+
+  return breakdown
+}
+
+/**
+ * Calculate payment breakdown until remaining balance reaches 0
+ * 
+ * This function continues generating payments until the balance is fully paid off.
+ * The payment amount is kept fixed, and a final balloon payment may be generated
+ * if the remaining balance is less than the regular payment amount.
+ * 
+ * @param params - Breakdown calculation parameters
+ * @returns Array of payment breakdowns
+ * 
+ * @example
+ * ```typescript
+ * const breakdown = calculateBreakdownUntilZero({
+ *   startingBalance: 1000,
+ *   paymentAmount: 175,
+ *   paymentFrequency: 'monthly',
+ *   interestRate: 29,
+ *   firstPaymentDate: '2025-01-15'
+ * })
+ * ```
+ */
+export function calculateBreakdownUntilZero(
+  params: BreakdownUntilZeroParams
+): PaymentBreakdown[] {
+  const {
+    startingBalance,
+    paymentAmount,
+    paymentFrequency,
+    interestRate,
+    firstPaymentDate,
+    maxPeriods = 1000
+  } = params
+
+  // Validate inputs
+  if (
+    startingBalance <= 0 ||
+    paymentAmount <= 0 ||
+    interestRate < 0 ||
+    !paymentFrequency ||
+    !Number.isFinite(startingBalance) ||
+    !Number.isFinite(paymentAmount) ||
+    !Number.isFinite(interestRate)
+  ) {
+    return []
+  }
+
+  const config = PAYMENT_FREQUENCY_CONFIG[paymentFrequency]
+  if (!config) {
+    return []
+  }
+
+  const periodicRate = interestRate / 100 / config.paymentsPerYear
+  const breakdown: PaymentBreakdown[] = []
+  let remaining = startingBalance
+
+  // Format date as YYYY-MM-DD in local timezone (avoids timezone issues)
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  // Track payment number and current date
+  let paymentNumber = 1
+  let currentDate = new Date(firstPaymentDate)
+
+  // Continue until balance reaches 0 or max periods reached
+  while (remaining > 0.01 && paymentNumber <= maxPeriods) {
+    // Round remaining to 2 decimal places to avoid floating point issues
+    remaining = Math.round(remaining * 100) / 100
+
+    const interest = remaining * periodicRate
+    const interestRounded = Math.round(interest * 100) / 100
+
+    // Calculate principal portion
+    // For the last payment, use remaining balance as principal
+    let principal: number
+    let paymentAmountForPeriod: number
+
+    if (remaining + interestRounded <= paymentAmount) {
+      // Final payment: pay off remaining balance + interest
+      principal = remaining
+      paymentAmountForPeriod = remaining + interestRounded
+      remaining = 0
+    } else {
+      // Regular payment: principal = paymentAmount - interest
+      principal = Math.max(0, paymentAmount - interestRounded)
+      paymentAmountForPeriod = paymentAmount
+      remaining = Math.max(0, remaining - principal)
+    }
+
+    // Round principal to 2 decimal places
+    principal = Math.round(principal * 100) / 100
+
+    // Calculate due date
+    const isMonthly = paymentFrequency === 'monthly'
+    const isTwiceMonthly = paymentFrequency === 'twice-monthly'
+
+    let dueDate: Date
+    if (isMonthly) {
+      dueDate = addMonths(new Date(firstPaymentDate), paymentNumber - 1)
+    } else if (isTwiceMonthly) {
+      // Twice-monthly: Payments on 15th and last day of each month
+      const [year, month, day] = firstPaymentDate.split('-').map(Number)
+      const firstDate = new Date(year, month - 1, day)
+      const firstMonth = startOfMonth(firstDate)
+      const firstDay = firstDate.getDate()
+      const lastDayOfMonth = endOfMonth(firstDate).getDate()
+
+      const isOn15th = firstDay === 15
+      const isOnLastDay = firstDay === lastDayOfMonth
+
+      const paymentInPair = (paymentNumber - 1) % 2
+      const monthPairIndex = Math.floor((paymentNumber - 1) / 2)
+
+      if (paymentNumber === 1) {
+        if (isOn15th || isOnLastDay) {
+          dueDate = firstDate
+        } else if (firstDay < 15) {
+          dueDate = setDate(firstMonth, 15)
+        } else {
+          dueDate = endOfMonth(firstMonth)
+        }
+      } else {
+        let targetMonth: Date
+        let targetDay: number
+
+        if (isOn15th) {
+          targetMonth = addMonths(firstMonth, monthPairIndex)
+          targetDay = paymentInPair === 0 ? 15 : -1
+        } else if (isOnLastDay) {
+          if (paymentInPair === 0) {
+            targetMonth = addMonths(firstMonth, monthPairIndex)
+            targetDay = -1
+          } else {
+            targetMonth = addMonths(firstMonth, monthPairIndex + 1)
+            targetDay = 15
+          }
+        } else {
+          const adjustedFirstDate =
+            firstDay < 15 ? setDate(firstMonth, 15) : endOfMonth(firstMonth)
+          const adjustedIsOn15th = adjustedFirstDate.getDate() === 15
+
+          if (adjustedIsOn15th) {
+            targetMonth = addMonths(firstMonth, monthPairIndex)
+            targetDay = paymentInPair === 0 ? 15 : -1
+          } else {
+            if (paymentInPair === 0) {
+              targetMonth = addMonths(firstMonth, monthPairIndex)
+              targetDay = -1
+            } else {
+              targetMonth = addMonths(firstMonth, monthPairIndex + 1)
+              targetDay = 15
+            }
+          }
+        }
+
+        if (targetDay === -1) {
+          dueDate = endOfMonth(targetMonth)
+        } else {
+          dueDate = setDate(targetMonth, targetDay)
+        }
+      }
+    } else {
+      // Weekly or bi-weekly: use days between
+      dueDate = addDays(new Date(firstPaymentDate), (paymentNumber - 1) * config.daysBetween)
+    }
+
+    // Adjust date to next business day if it falls on a holiday or weekend
+    dueDate = getPreviousBusinessDay(dueDate)
+
+    breakdown.push({
+      paymentNumber,
+      dueDate: formatDate(dueDate),
+      amount: paymentAmountForPeriod,
+      interest: interestRounded,
+      principal: principal,
+      remainingBalance: Math.round(remaining * 100) / 100
+    })
+
+    paymentNumber++
   }
 
   return breakdown

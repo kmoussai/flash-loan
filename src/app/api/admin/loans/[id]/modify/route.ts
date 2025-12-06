@@ -224,7 +224,7 @@ export async function POST(
     }
 
     // Build new payment schedule (use provided schedule if available, otherwise build from params)
-    let schedule: Array<{ due_date: string; amount: number; interest?: number; principal?: number }>
+    let schedule: Array<{ due_date: string; amount: number; interest?: number; principal?: number; remaining_balance?: number }>
     
     // Calculate payment breakdown using loan library
     const paymentBreakdown = calculatePaymentBreakdown(
@@ -252,7 +252,8 @@ export async function POST(
         due_date: item.due_date,
         amount: roundCurrency(Number(item.amount)),
         interest: paymentBreakdown[index] ? roundCurrency(paymentBreakdown[index].interest) : undefined,
-        principal: paymentBreakdown[index] ? roundCurrency(paymentBreakdown[index].principal) : undefined
+        principal: paymentBreakdown[index] ? roundCurrency(paymentBreakdown[index].principal) : undefined,
+        remaining_balance: paymentBreakdown[index] ? roundCurrency(paymentBreakdown[index].remainingBalance) : undefined
       }))
     } else {
       // Use breakdown from loan library (includes dates and amounts)
@@ -260,7 +261,8 @@ export async function POST(
         due_date: item.dueDate,
         amount: roundCurrency(item.amount),
         interest: roundCurrency(item.interest),
-        principal: roundCurrency(item.principal)
+        principal: roundCurrency(item.principal),
+        remaining_balance: roundCurrency(item.remainingBalance)
       }))
     }
 
@@ -300,6 +302,7 @@ export async function POST(
         status: 'pending',
         interest: item.interest ?? null,
         principal: item.principal ?? null,
+        remaining_balance: item.remaining_balance ?? null,
         notes: `Payment ${paymentNumber} - Modified on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`
       }
 
