@@ -167,7 +167,7 @@ export default function DashboardShell({
             <button
               type='button'
               onClick={handleSignOut}
-              className='rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 hidden sm:inline-flex'
+              className='hidden rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 sm:inline-flex'
               aria-label={t('Sign_Out')}
             >
               {t('Sign_Out')}
@@ -193,6 +193,16 @@ export default function DashboardShell({
                 />
               </svg>
             </button>
+          </div>
+        </div>
+        <div className='flex mx-auto sm:hidden max-w-6xl items-center justify-between px-6 py-1'>
+          <div>
+            <p className='text-sm font-medium text-gray-500'>
+              {t('Welcome_Back')}
+            </p>
+            <h1 className='text-xl font-semibold text-gray-900'>
+              {greetingName}
+            </h1>
           </div>
         </div>
       </header>
@@ -256,9 +266,7 @@ export default function DashboardShell({
             )}
 
             {activeSection === 'documents' && (
-              <DocumentsSection
-                locale={locale}
-              />
+              <DocumentsSection locale={locale} />
             )}
 
             {activeSection === 'contracts' && (
