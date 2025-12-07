@@ -207,13 +207,13 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
 
     const nextPayment = payments
       .filter(p => p.status === 'pending')
-      .sort(
-        (a, b) => {
-          const { parseLocalDate } = require('@/src/lib/utils/date')
-          return parseLocalDate(a.payment_date).getTime() -
-            parseLocalDate(b.payment_date).getTime()
-        }
-      )[0]
+      .sort((a, b) => {
+        const { parseLocalDate } = require('@/src/lib/utils/date')
+        return (
+          parseLocalDate(a.payment_date).getTime() -
+          parseLocalDate(b.payment_date).getTime()
+        )
+      })[0]
 
     const confirmedPayments = payments.filter(
       p => p.status === 'confirmed' || p.status === 'paid'
@@ -573,6 +573,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
               </svg>
             </button>
             <ContractViewer
+              isAdmin={false}
               contract={viewerContract}
               applicationId={viewerContract.loan_application_id}
               onClose={handleCloseViewer}

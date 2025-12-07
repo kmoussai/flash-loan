@@ -81,6 +81,7 @@ export default function ContractSigningModal({
         {/* Contract Viewer */}
         <div className='min-h-0 flex-1 overflow-hidden'>
           <ContractViewer
+            isAdmin={false}
             contract={contract}
             applicationId={applicationId}
             onClose={onClose}

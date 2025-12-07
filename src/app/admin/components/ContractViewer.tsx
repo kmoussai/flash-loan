@@ -34,6 +34,7 @@ interface ContractViewerProps {
   onSend?: () => void
   onDelete?: () => void
   embedded?: boolean // When true, renders without modal wrapper
+  isAdmin?: boolean
 }
 
 export default function ContractViewer({
@@ -43,7 +44,8 @@ export default function ContractViewer({
   onGenerate,
   onSend,
   onDelete,
-  embedded = false
+  embedded = false,
+  isAdmin = true
 }: ContractViewerProps) {
   const [loading, setLoading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -67,13 +69,17 @@ export default function ContractViewer({
     setIsLoadingPdf(true)
     try {
       // Check if contract is signed - if so, prioritize loading the signed PDF
-      const isSigned = contractData.client_signed_at || contractData.contract_status === 'signed'
-      
+      const isSigned =
+        contractData.client_signed_at ||
+        contractData.contract_status === 'signed'
+
       if (isSigned && contractData.contract_document_path) {
         // Contract is signed - load the PDF directly from API (no signed URL needed)
         try {
           // Fetch PDF directly - API will stream it, avoiding JWT expiration issues
-          const pdfUrl = `/api/admin/applications/${applicationId}/contract/view?contractId=${contractData.id}`
+          const pdfUrl = isAdmin
+            ? `/api/admin/applications/${applicationId}/contract/view?contractId=${contractData.id}`
+            : `/api/user/contracts/${contractData.id}/view`
           setPdfUrl(pdfUrl)
           setIsLoadingPdf(false)
           return
@@ -83,7 +89,9 @@ export default function ContractViewer({
             apiError
           )
           // Don't fallback to HTML for signed contracts - show error instead
-          setPdfLoadError('Failed to load signed contract PDF. Please try again or contact support.')
+          setPdfLoadError(
+            'Failed to load signed contract PDF. Please try again or contact support.'
+          )
           setIsLoadingPdf(false)
           return
         }
@@ -104,7 +112,9 @@ export default function ContractViewer({
     } catch (error) {
       console.error('Error loading contract PDF:', error)
       // Only generate HTML fallback if contract is not signed
-      const isSigned = contractData.client_signed_at || contractData.contract_status === 'signed'
+      const isSigned =
+        contractData.client_signed_at ||
+        contractData.contract_status === 'signed'
       if (!isSigned) {
         try {
           const contractHTML = await createContractHTML(contractData)
@@ -154,7 +164,6 @@ export default function ContractViewer({
       return `${day}/${month}/${year}`
     }
 
-
     const flashLoanLogo = await imageToBase64('/images/FlashLoanLogo.png')
     const signatureImage = await imageToBase64('/signature.jpeg')
 
@@ -176,26 +185,27 @@ export default function ContractViewer({
       ? terms.payment_schedule
       : []
     const numberOfPayments = terms.number_of_payments ?? schedule.length ?? 0
-    
+
     // Principal amount is the base loan amount (without fees)
     const principalAmount =
-      typeof terms.principal_amount === 'number'
-        ? terms.principal_amount
-        : 0
-    
+      typeof terms.principal_amount === 'number' ? terms.principal_amount : 0
+
     const interestRate =
       typeof terms.interest_rate === 'number' ? terms.interest_rate : 0
-    const paymentFrequency = (terms.payment_frequency || 'monthly') as PaymentFrequency
+    const paymentFrequency = (terms.payment_frequency ||
+      'monthly') as PaymentFrequency
     const paymentAmount = contractData.contract_terms.payment_amount
-    
+
     // Use loan library to calculate total amounts
     const brokerageFee = terms.fees?.brokerage_fee ?? 0
     const originationFee = terms.fees?.origination_fee ?? 0
     const otherFees = terms.fees?.other_fees ?? 0
-    
+
     // Contract principal amount includes brokerage fee since it's lent to the client
-    const contractPrincipalAmount = roundCurrency(principalAmount + brokerageFee)
-    
+    const contractPrincipalAmount = roundCurrency(
+      principalAmount + brokerageFee
+    )
+
     // Calculate total loan amount (principal + fees) using loan library
     const totalLoanAmount = calculateTotalLoanAmount({
       principalAmount,
@@ -206,7 +216,7 @@ export default function ContractViewer({
       originationFee: 0, // Origination fee not included in loan amount
       otherFees: 0 // Other fees not included in loan amount
     })
-    
+
     // Calculate total repayment amount (principal + fees + interest) using loan library
     let totalAmount = terms.total_amount
     if (typeof totalAmount !== 'number' && schedule.length > 0) {
@@ -219,7 +229,7 @@ export default function ContractViewer({
         principal: item.principal || 0,
         remainingBalance: 0 // Not needed for this calculation
       }))
-      
+
       // Use loan library to calculate total repayment amount
       totalAmount = calculateTotalRepaymentAmount(
         {
@@ -235,11 +245,12 @@ export default function ContractViewer({
       )
     } else if (typeof totalAmount !== 'number') {
       // Fallback: use payment amount * number of payments
-      totalAmount = typeof paymentAmount === 'number' && paymentAmount > 0
-        ? roundCurrency(paymentAmount * numberOfPayments)
-        : totalLoanAmount
+      totalAmount =
+        typeof paymentAmount === 'number' && paymentAmount > 0
+          ? roundCurrency(paymentAmount * numberOfPayments)
+          : totalLoanAmount
     }
-    
+
     const firstPaymentDue =
       schedule[0]?.due_date ?? terms.effective_date ?? null
     const lastPaymentDue =
@@ -750,7 +761,7 @@ export default function ContractViewer({
           </div>
         ) : pdfLoadError ? (
           <div className='flex h-full items-center justify-center'>
-            <div className='text-center max-w-md px-4'>
+            <div className='max-w-md px-4 text-center'>
               <div className='mb-4 text-red-400'>
                 <svg
                   className='mx-auto h-12 w-12'
@@ -766,10 +777,10 @@ export default function ContractViewer({
                   />
                 </svg>
               </div>
-              <p className='text-red-600 font-medium mb-2'>Error Loading PDF</p>
-              <p className='text-gray-600 text-sm'>{pdfLoadError}</p>
+              <p className='mb-2 font-medium text-red-600'>Error Loading PDF</p>
+              <p className='text-sm text-gray-600'>{pdfLoadError}</p>
               {contract?.contract_document_path && (
-                <p className='text-gray-500 text-xs mt-2'>
+                <p className='mt-2 text-xs text-gray-500'>
                   Document path: {contract.contract_document_path}
                 </p>
               )}
