@@ -20,6 +20,7 @@ export type ContractTerms = {
   fees?: {
     brokerage_fee?: number
     origination_fee?: number
+    failed_payment_fee?: number
     processing_fee?: number
     deferral_fee?: number
     other_fees?: number

@@ -153,10 +153,7 @@ export default function LoanSummary({
 
   // Use remaining_balance from database, with fallback calculation if null/0
   // The database value is the source of truth and reflects actual payments made
-  const remainingBalance =
-    loan.remaining_balance !== null && loan.remaining_balance !== undefined
-      ? Number(loan.remaining_balance)
-      : Number(loan.principal_amount || 0) + Number(brokerageFee)
+  const remainingBalance = loan.remaining_balance
 
   // Calculate total interest and cumulative fees from payments
   const payments = data ?? []
@@ -187,11 +184,13 @@ export default function LoanSummary({
     // Check if notes or error_code indicate NSF
     const notes = (p.notes || '').toLowerCase()
     const errorCode = (p.error_code || '').toLowerCase()
-    return notes.includes('nsf') || 
-           notes.includes('non-sufficient') || 
-           notes.includes('insufficient funds') ||
-           errorCode.includes('nsf') ||
-           errorCode.includes('r01') // R01 is common NSF error code for ACH
+    return (
+      notes.includes('nsf') ||
+      notes.includes('non-sufficient') ||
+      notes.includes('insufficient funds') ||
+      errorCode.includes('nsf') ||
+      errorCode.includes('r01')
+    ) // R01 is common NSF error code for ACH
   }).length
 
   return (
@@ -217,7 +216,7 @@ export default function LoanSummary({
         onPaymentUpdate={mutate}
         onAddManualPayment={() => setShowManualPaymentModal(true)}
         onAddRebatePayment={() => setShowRebatePaymentModal(true)}
-        onLoanUpdate={onLoanUpdate}
+        onLoanUpdate={revalidateAll}
       />
       {showManualPaymentModal && (
         <ManualPaymentModal
