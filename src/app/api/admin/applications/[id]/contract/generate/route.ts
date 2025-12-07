@@ -235,12 +235,18 @@ export async function POST(
       }
     }
 
+    // Get brokerage fee early to calculate total loan amount for payment schedule
+    const brokerageFee = payload?.brokerageFee ?? 0
+    const totalLoanAmount = resolvedLoanAmount + brokerageFee
+
     // Build payment schedule if not provided
     let finalPaymentSchedule = payload?.paymentSchedule
     if (!finalPaymentSchedule || !Array.isArray(finalPaymentSchedule) || finalPaymentSchedule.length === 0) {
+      // Use loan library to build payment schedule with total loan amount (principal + brokerage fee)
+      // This ensures remaining_balance is calculated correctly including fees
       finalPaymentSchedule = buildPaymentSchedule({
         payment_frequency: payload?.paymentFrequency,
-        loan_amount: resolvedLoanAmount,
+        loan_amount: totalLoanAmount, // Include brokerage fee so remaining_balance is correct
         interest_rate: resolvedInterestRate,
         num_payments: payload?.numberOfPayments as number,
         start_date: payload?.firstPaymentDate
@@ -251,6 +257,38 @@ export async function POST(
           ? payload.nextPaymentDate
           : undefined
       })
+    } else {
+      // If schedule is provided in payload, ensure remaining_balance is calculated using loan library
+      // Recalculate using loan library to ensure consistency
+      const recalculatedSchedule = buildPaymentSchedule({
+        payment_frequency: payload?.paymentFrequency,
+        loan_amount: totalLoanAmount,
+        interest_rate: resolvedInterestRate,
+        num_payments: payload?.numberOfPayments as number,
+        start_date: finalPaymentSchedule[0]?.due_date || 
+          (payload?.firstPaymentDate
+            ? (typeof payload.firstPaymentDate === 'string'
+                ? payload.firstPaymentDate
+                : payload.firstPaymentDate.toISOString())
+            : payload?.nextPaymentDate)
+      })
+      
+      // If recalculation succeeded, use it (it will have correct remaining_balance)
+      if (recalculatedSchedule && recalculatedSchedule.length === finalPaymentSchedule.length) {
+        finalPaymentSchedule = recalculatedSchedule
+      } else {
+        // Fallback: merge provided schedule with recalculated remaining_balance
+        finalPaymentSchedule = finalPaymentSchedule.map((schedule, index) => {
+          const recalculated = recalculatedSchedule?.[index]
+          return {
+            ...schedule,
+            remaining_balance: recalculated?.remaining_balance ?? 
+                             (schedule as any).remaining_balance ?? 
+                             (schedule as any).remainingBalance ?? 
+                             null
+          }
+        })
+      }
     }
 
     // Validate payment schedule exists
@@ -316,19 +354,8 @@ export async function POST(
         })
         .eq('id', applicationId)
       
-      // Calculate total loan amount including fees using loan library
+      // Use the totalLoanAmount already calculated (principal + brokerage fee)
       // Note: Origination fee is NOT included in initial loan amount - it's only for returned/failed payments
-      const { calculateTotalLoanAmount } = await import('@/src/lib/loan')
-      const brokerageFee = contractTerms.fees?.brokerage_fee ?? 0
-      const totalLoanAmount = calculateTotalLoanAmount({
-        principalAmount: resolvedLoanAmount,
-        interestRate: resolvedInterestRate,
-        paymentFrequency: payload?.paymentFrequency as PaymentFrequency,
-        numberOfPayments: payload?.numberOfPayments as number,
-        originationFee: 0, // Origination fee NOT included in initial loan amount
-        brokerageFee: brokerageFee
-      })
-      
       await updateLoan(
         loanId as string,
         {
@@ -344,12 +371,12 @@ export async function POST(
           // Handle both camelCase (from payload) and snake_case (from buildPaymentSchedule)
           const remainingBalance = (schedule as any).remaining_balance ?? (schedule as any).remainingBalance ?? null
           return {
-            loan_id: loanId as string,
-            payment_date: schedule.due_date,
-            amount: schedule.amount,
-            payment_number: index + 1,
-            status: 'pending' as const, // Status indicates payment is waiting for loan to be active (contract signed)
-            interest: schedule.interest ?? null,
+          loan_id: loanId as string,
+          payment_date: schedule.due_date,
+          amount: schedule.amount,
+          payment_number: index + 1,
+          status: 'pending' as const, // Status indicates payment is waiting for loan to be active (contract signed)
+          interest: schedule.interest ?? null,
             principal: schedule.principal ?? null,
             remaining_balance: remainingBalance
           }
@@ -403,24 +430,13 @@ export async function POST(
         )
       }
 
-      // Calculate total loan amount including fees using loan library
+      // Use the totalLoanAmount already calculated (principal + brokerage fee)
       // Note: Origination fee is NOT included in initial loan amount - it's only for returned/failed payments
-      const { calculateTotalLoanAmount } = await import('@/src/lib/loan')
       const newBrokerageFee = contractTerms.fees?.brokerage_fee ?? 0
       
       // Get old brokerage fee and principal from existing contract for comparison
       const oldBrokerageFee = existing.contract_terms?.fees?.brokerage_fee ?? 0
       const oldPrincipalAmount = existing.contract_terms?.principal_amount ?? loan?.principal_amount ?? resolvedLoanAmount
-      
-      // Calculate new total loan amount (principal + brokerage fee only)
-      const newTotalLoanAmount = calculateTotalLoanAmount({
-        principalAmount: resolvedLoanAmount,
-        interestRate: resolvedInterestRate,
-        paymentFrequency: payload?.paymentFrequency as PaymentFrequency,
-        numberOfPayments: payload?.numberOfPayments as number,
-        originationFee: 0, // Origination fee NOT included in initial loan amount
-        brokerageFee: newBrokerageFee
-      })
       
       // Calculate remaining balance adjustment
       // If loan hasn't been disbursed or no payments made, use new total
@@ -435,7 +451,7 @@ export async function POST(
       let newRemainingBalance: number
       if (currentRemainingBalance === oldTotalLoanAmount || loan?.status === 'pending_disbursement') {
         // No payments made yet, use new total (principal + new brokerage fee)
-        newRemainingBalance = newTotalLoanAmount
+        newRemainingBalance = totalLoanAmount
       } else {
         // Payments have been made, adjust for principal and brokerage fee changes
         // Formula: newRemaining = currentRemaining + (newPrincipal - oldPrincipal) + (newBrokerageFee - oldBrokerageFee)
@@ -472,12 +488,12 @@ export async function POST(
           // Handle both camelCase (from payload) and snake_case (from buildPaymentSchedule)
           const remainingBalance = (schedule as any).remaining_balance ?? (schedule as any).remainingBalance ?? null
           return {
-            loan_id: loanId as string,
-            payment_date: schedule.due_date,
-            amount: schedule.amount,
-            payment_number: index + 1,
-            status: 'pending' as const,
-            interest: schedule.interest ?? null,
+          loan_id: loanId as string,
+          payment_date: schedule.due_date,
+          amount: schedule.amount,
+          payment_number: index + 1,
+          status: 'pending' as const,
+          interest: schedule.interest ?? null,
             principal: schedule.principal ?? null,
             remaining_balance: remainingBalance
           }
@@ -521,10 +537,18 @@ export async function POST(
 /**
  * Build payment schedule using the loan library's calculatePaymentBreakdown
  * This ensures consistency across the application and reuses the tested calculation logic
+ * 
+ * @param args - Payment schedule parameters
+ * @param args.loan_amount - Total loan amount (principal + brokerage fee) to use for calculation
+ * @param args.interest_rate - Annual interest rate as percent (e.g. 29)
+ * @param args.num_payments - Number of payments
+ * @param args.payment_frequency - Payment frequency
+ * @param args.start_date - First payment date (optional)
+ * @returns Payment schedule with remaining_balance calculated by loan library
  */
 function buildPaymentSchedule(args: {
   payment_frequency: PaymentFrequency | undefined
-  loan_amount: number
+  loan_amount: number // This should be total (principal + brokerage fee)
   interest_rate: number // as percent (e.g. 24)
   num_payments: number
   start_date?: string
@@ -550,14 +574,17 @@ function buildPaymentSchedule(args: {
   }
 
   // Use loan library's calculatePaymentBreakdown
+  // Note: loan_amount is the total (principal + brokerage fee), so we pass it as principalAmount
+  // and set brokerageFee to 0 since it's already included in loan_amount
+  // This ensures remaining_balance is calculated correctly including the fee
   const breakdown = calculatePaymentBreakdown(
     {
-      principalAmount: loan_amount,
+      principalAmount: loan_amount, // Total amount (principal + brokerage fee already included)
       interestRate: interest_rate,
       paymentFrequency: payment_frequency,
       numberOfPayments: num_payments,
-      brokerageFee: 0, // No fees in this calculation - loan_amount is already the total
-      originationFee: 0
+      brokerageFee: 0, // Fee already included in loan_amount
+      originationFee: 0 // Origination fee not included in initial loan
     },
     start_date || new Date().toISOString().split('T')[0]
   )
@@ -567,11 +594,12 @@ function buildPaymentSchedule(args: {
   }
 
   // Transform PaymentBreakdown[] to the expected format (snake_case)
+  // The loan library's calculatePaymentBreakdown already includes remainingBalance
   return breakdown.map((item) => ({
     due_date: item.dueDate,
     amount: item.amount,
     principal: item.principal,
     interest: item.interest,
-    remaining_balance: item.remainingBalance
+    remaining_balance: item.remainingBalance // This is already calculated by the loan library
   }))
 }

@@ -275,6 +275,48 @@ export default function PaymentTable({
     setDeferError(null)
   }
 
+  const handleSimulateFailed = async (payment: LoanPayment) => {
+    if (
+      !confirm(
+        `⚠️ TEST MODE: Simulate failed payment?\n\nThis will:\n- Mark payment as failed\n- Add interest and failed payment fee\n- Recalculate payment schedule\n\nThis action cannot be undone.`
+      )
+    ) {
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/admin/loans/${loanId}/payments/${payment.id}/simulate-failed`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to simulate failed payment')
+      }
+
+      const result = await response.json()
+      alert(
+        `✅ Payment failed successfully!\n\nAdded:\n- Interest: ${result.failedPayment.interest}\n- Fee: ${result.failedPayment.fee}\n- New Principal: ${result.failedPayment.newPrincipal}\n\nSchedule has been recalculated.`
+      )
+
+      // Refresh the payment list
+      await onPaymentUpdate()
+      // Refresh loan data if callback provided
+      if (onLoanUpdate) {
+        await onLoanUpdate()
+      }
+    } catch (err: any) {
+      alert(`Failed to simulate failed payment: ${err.message}`)
+      console.error('Error simulating failed payment:', err)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'confirmed':
@@ -376,7 +418,7 @@ export default function PaymentTable({
                     Interest
                   </th>
                   <th className='px-3 py-1.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                    Method
+                    Remaining Balance
                   </th>
                   <th className='px-3 py-1.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                     Status
@@ -390,7 +432,15 @@ export default function PaymentTable({
                 </tr>
               </thead>
               <tbody className='divide-y divide-gray-200 bg-white'>
-                {payments.map((payment: LoanPayment) => (
+                {payments.map((payment: LoanPayment, index: number) => {
+                  // Find the first pending payment index
+                  const firstPendingIndex = payments.findIndex(
+                    (p) => p.status === 'pending'
+                  )
+                  const isFirstPending =
+                    payment.status === 'pending' && index === firstPendingIndex
+
+                  return (
                   <tr
                     key={payment.id}
                     className='transition-colors hover:bg-gray-50'
@@ -413,8 +463,11 @@ export default function PaymentTable({
                         ? formatCurrency(Number(payment.interest))
                         : '-'}
                     </td>
-                    <td className='whitespace-nowrap px-3 py-1.5 text-xs text-gray-500'>
-                      {payment.method || 'N/A'}
+                    <td className='whitespace-nowrap px-3 py-1.5 text-xs text-gray-700'>
+                      {payment.remaining_balance !== null &&
+                      payment.remaining_balance !== undefined
+                        ? formatCurrency(Number(payment.remaining_balance))
+                        : '-'}
                     </td>
                     <td className='whitespace-nowrap px-3 py-1.5'>
                       <span
@@ -448,10 +501,38 @@ export default function PaymentTable({
                             <IconClock className='h-4 w-4' />
                           </button>
                         )}
+                        {isFirstPending && (
+                            <button
+                              onClick={() => handleSimulateFailed(payment)}
+                              className='group relative inline-flex items-center rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-600'
+                              title='Simulate Failed Payment (TEST) - Adds fees and interest, then recalculates schedule'
+                              aria-label='Simulate failed payment'
+                            >
+                              <svg
+                                className='h-4 w-4'
+                                fill='none'
+                                viewBox='0 0 24 24'
+                                stroke='currentColor'
+                              >
+                                <path
+                                  strokeLinecap='round'
+                                  strokeLinejoin='round'
+                                  strokeWidth={2}
+                                  d='M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'
+                                />
+                              </svg>
+                              {/* Tooltip */}
+                              <span className='invisible absolute -top-10 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:visible group-hover:opacity-100'>
+                                Simulate Failed Payment (TEST)
+                                <span className='absolute -bottom-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900'></span>
+                              </span>
+                            </button>
+                          )}
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           )}
