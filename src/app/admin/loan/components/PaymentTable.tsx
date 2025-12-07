@@ -376,7 +376,7 @@ export default function PaymentTable({
                     Interest
                   </th>
                   <th className='px-3 py-1.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                    Method
+                    Remaining Balance
                   </th>
                   <th className='px-3 py-1.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                     Status
@@ -413,8 +413,11 @@ export default function PaymentTable({
                         ? formatCurrency(Number(payment.interest))
                         : '-'}
                     </td>
-                    <td className='whitespace-nowrap px-3 py-1.5 text-xs text-gray-500'>
-                      {payment.method || 'N/A'}
+                    <td className='whitespace-nowrap px-3 py-1.5 text-xs text-gray-700'>
+                      {payment.remaining_balance !== null &&
+                      payment.remaining_balance !== undefined
+                        ? formatCurrency(Number(payment.remaining_balance))
+                        : '-'}
                     </td>
                     <td className='whitespace-nowrap px-3 py-1.5'>
                       <span

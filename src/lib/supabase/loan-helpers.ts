@@ -255,7 +255,7 @@ export async function getLoanPayments(loanId: string) {
   const supabase = await (await import('./server')).createServerSupabaseAdminClient()
   const { data, error } = await supabase
     .from('loan_payments')
-    .select('id, amount, payment_date, status, created_at, payment_number, notes, interest, principal')
+    .select('*')
     .eq('loan_id', loanId)
     .order('payment_date', { ascending: true })
   if (error) {

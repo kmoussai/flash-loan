@@ -8,8 +8,7 @@ import {
 } from '@/src/lib/supabase/types'
 import { Loan } from '@/src/types'
 import { parseLocalDate } from '@/src/lib/utils/date'
-import { calculateBreakdownUntilZero } from '@/src/lib/loan'
-import { roundCurrency } from '@/src/lib/loan'
+import { recalculatePaymentSchedule, roundCurrency } from '@/src/lib/loan'
 
 export const dynamic = 'force-dynamic'
 
@@ -222,8 +221,7 @@ export async function POST(
       monthly: { paymentsPerYear: 12 }
     }[paymentFrequency] || { paymentsPerYear: 12 }
 
-    const periodicRate = interestRate / 100 / config.paymentsPerYear
-    const deferredInterest = remainingPrincipal * periodicRate
+    const deferredInterest = paymentData.interest || 0
 
     // Calculate new principal: remainingPrincipal + deferredInterest + deferralFee
     const newPrincipal = remainingPrincipal + deferredInterest + feeAmount
@@ -232,15 +230,17 @@ export async function POST(
     const deferredPaymentDate = parseLocalDate(paymentData.payment_date)
     const firstPaymentDateStr = deferredPaymentDate.toISOString().split('T')[0]
 
-    // Recalculate payment schedule with new principal
-    const recalculatedBreakdown = calculateBreakdownUntilZero({
-      startingBalance: newPrincipal,
+    // Recalculate payment schedule with new principal using general recalculation function
+    const recalculationResult = recalculatePaymentSchedule({
+      newRemainingBalance: newPrincipal,
       paymentAmount: paymentAmount,
       paymentFrequency: paymentFrequency,
       interestRate: interestRate,
       firstPaymentDate: firstPaymentDateStr,
       maxPeriods: 1000
     })
+
+    const recalculatedBreakdown = recalculationResult.recalculatedBreakdown
 
     if (recalculatedBreakdown.length === 0) {
       return NextResponse.json(

@@ -179,6 +179,21 @@ export default function LoanSummary({
     return payment.status === 'deferred' ? sum + Number(deferralFee) : sum
   }, 0)
 
+  // Calculate payment statistics
+  const failedPaymentCount = payments.filter(p => p.status === 'failed').length
+  // NSF (Non-Sufficient Funds) - typically failed payments, but can also check error codes or notes
+  const nsfCount = payments.filter(p => {
+    if (p.status === 'failed') return true
+    // Check if notes or error_code indicate NSF
+    const notes = (p.notes || '').toLowerCase()
+    const errorCode = (p.error_code || '').toLowerCase()
+    return notes.includes('nsf') || 
+           notes.includes('non-sufficient') || 
+           notes.includes('insufficient funds') ||
+           errorCode.includes('nsf') ||
+           errorCode.includes('r01') // R01 is common NSF error code for ACH
+  }).length
+
   return (
     <div className='space-y-3 p-2'>
       <LoanSummaryTable
@@ -190,6 +205,8 @@ export default function LoanSummary({
         onModifyLoan={() => setShowModifyLoanModal(true)}
         totalInterest={totalInterest}
         cumulativeFees={cumulativeFees}
+        failedPaymentCount={failedPaymentCount}
+        nsfCount={nsfCount}
         onLoanDelete={onLoanUpdate}
       />
       <PaymentTable

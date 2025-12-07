@@ -344,12 +344,12 @@ export async function POST(
           // Handle both camelCase (from payload) and snake_case (from buildPaymentSchedule)
           const remainingBalance = (schedule as any).remaining_balance ?? (schedule as any).remainingBalance ?? null
           return {
-            loan_id: loanId as string,
-            payment_date: schedule.due_date,
-            amount: schedule.amount,
-            payment_number: index + 1,
-            status: 'pending' as const, // Status indicates payment is waiting for loan to be active (contract signed)
-            interest: schedule.interest ?? null,
+          loan_id: loanId as string,
+          payment_date: schedule.due_date,
+          amount: schedule.amount,
+          payment_number: index + 1,
+          status: 'pending' as const, // Status indicates payment is waiting for loan to be active (contract signed)
+          interest: schedule.interest ?? null,
             principal: schedule.principal ?? null,
             remaining_balance: remainingBalance
           }
@@ -472,12 +472,12 @@ export async function POST(
           // Handle both camelCase (from payload) and snake_case (from buildPaymentSchedule)
           const remainingBalance = (schedule as any).remaining_balance ?? (schedule as any).remainingBalance ?? null
           return {
-            loan_id: loanId as string,
-            payment_date: schedule.due_date,
-            amount: schedule.amount,
-            payment_number: index + 1,
-            status: 'pending' as const,
-            interest: schedule.interest ?? null,
+          loan_id: loanId as string,
+          payment_date: schedule.due_date,
+          amount: schedule.amount,
+          payment_number: index + 1,
+          status: 'pending' as const,
+          interest: schedule.interest ?? null,
             principal: schedule.principal ?? null,
             remaining_balance: remainingBalance
           }

@@ -7,10 +7,10 @@ import { formatCurrency, formatDate } from '../[id]/utils'
  */
 function formatPaymentFrequency(frequency: string): string {
   const frequencyMap: Record<string, string> = {
-    'weekly': 'Weekly',
+    weekly: 'Weekly',
     'bi-weekly': 'Bi-weekly',
     'twice-monthly': 'Twice Monthly',
-    'monthly': 'Monthly'
+    monthly: 'Monthly'
   }
   return frequencyMap[frequency.toLowerCase()] || frequency
 }
@@ -24,6 +24,8 @@ interface LoanSummaryTableProps {
   onModifyLoan?: () => void
   totalInterest?: number
   cumulativeFees?: number
+  failedPaymentCount?: number
+  nsfCount?: number
   onLoanDelete?: () => void
 }
 
@@ -36,6 +38,8 @@ export default function LoanSummaryTable({
   onModifyLoan,
   totalInterest = 0,
   cumulativeFees = 0,
+  failedPaymentCount = 0,
+  nsfCount = 0,
   onLoanDelete
 }: LoanSummaryTableProps) {
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -65,7 +69,7 @@ export default function LoanSummaryTable({
       }
 
       alert('Loan deleted successfully')
-      
+
       // Redirect to loans list or refresh
       if (onLoanDelete) {
         onLoanDelete()
@@ -135,9 +139,10 @@ export default function LoanSummaryTable({
 
   // Use remaining_balance from database, with fallback calculation if null/0
   // The database value is the source of truth and reflects actual payments made
-  const remainingBalance = loan.remaining_balance !== null && loan.remaining_balance !== undefined
-    ? Number(loan.remaining_balance)
-    : Number(loan.principal_amount || 0) + Number(brokerageFee)
+  const remainingBalance =
+    loan.remaining_balance !== null && loan.remaining_balance !== undefined
+      ? Number(loan.remaining_balance)
+      : Number(loan.principal_amount || 0) + Number(brokerageFee)
 
   const handleSendContract = async () => {
     if (!contract || !loan.application_id) return
@@ -313,14 +318,21 @@ export default function LoanSummaryTable({
         </div>
       </div>
       <div className='p-4'>
-        {/* <pre>{JSON.stringify(loan.loan_contracts, null, 2)}</pre> */}
-        <div className='grid gap-4 md:grid-cols-2'>
-          {/* Loan Information */}
+        <div className='grid gap-4 md:grid-cols-3'>
+          {/* Column 1: Loan Overview */}
           <div className='space-y-3'>
             <h4 className='text-sm font-semibold text-gray-700'>
-              Loan Information
+              Loan Overview
             </h4>
             <div className='space-y-2 text-xs'>
+              <div className='flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 py-2'>
+                <span className='font-medium text-gray-700'>
+                  Remaining Balance:
+                </span>
+                <span className='text-sm font-bold text-blue-700'>
+                  {formatCurrency(remainingBalance)}
+                </span>
+              </div>
               <div className='flex justify-between'>
                 <span className='text-gray-500'>Loan Number:</span>
                 <span className='font-medium text-gray-900'>
@@ -330,21 +342,26 @@ export default function LoanSummaryTable({
                 </span>
               </div>
               <div className='flex justify-between'>
+                <span className='text-gray-500'>Status:</span>
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusBadge(
+                    loan.status
+                  )}`}
+                >
+                  {loan.status?.toUpperCase().replace('_', ' ') || 'N/A'}
+                </span>
+              </div>
+              <div className='flex justify-between'>
                 <span className='text-gray-500'>Principal Amount:</span>
                 <span className='font-medium text-gray-900'>
                   {formatCurrency(Number(loan.principal_amount))}
                 </span>
               </div>
+
               <div className='flex justify-between'>
                 <span className='text-gray-500'>Brokerage Fees:</span>
                 <span className='font-medium text-gray-900'>
                   {formatCurrency(Number(brokerageFee))}
-                </span>
-              </div>
-              <div className='flex justify-between'>
-                <span className='text-gray-500'>Remaining Balance:</span>
-                <span className='font-medium text-gray-900'>
-                  {formatCurrency(remainingBalance)}
                 </span>
               </div>
               <div className='flex justify-between'>
@@ -357,12 +374,23 @@ export default function LoanSummaryTable({
                 <div className='flex justify-between'>
                   <span className='text-gray-500'>Payment Frequency:</span>
                   <span className='font-medium text-gray-900'>
-                    {formatPaymentFrequency(contract.contract_terms.payment_frequency)}
+                    {formatPaymentFrequency(
+                      contract.contract_terms.payment_frequency
+                    )}
                   </span>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Column 2: Financial Details & Payment Statistics */}
+          <div className='space-y-3'>
+            <h4 className='text-sm font-semibold text-gray-700'>
+              Financial Details
+            </h4>
+            <div className='space-y-2 text-xs'>
               <div className='flex justify-between'>
-                <span className='text-gray-500'>Total Interest Paid:</span>
+                <span className='text-gray-500'>Total Interest:</span>
                 <span className='font-medium text-gray-900'>
                   {formatCurrency(totalInterest)}
                 </span>
@@ -373,30 +401,52 @@ export default function LoanSummaryTable({
                   {formatCurrency(cumulativeFees)}
                 </span>
               </div>
-              {/* Contract sent at */}
-              {contract?.sent_at && (
-                <div className='flex justify-between'>
-                  <span className='text-gray-500'>Contract Sent At:</span>
-                  <span className='font-medium text-gray-900'>
-                    {formatDate(contract.sent_at)}
-                  </span>
-                </div>
-              )}
 
-              <div className='flex justify-between'>
-                <span className='text-gray-500'>Status:</span>
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusBadge(
-                    loan.status
-                  )}`}
-                >
-                  {loan.status?.toUpperCase().replace('_', ' ') || 'N/A'}
-                </span>
+              {/* Payment Statistics Section */}
+              <div className='mt-4 border-t border-gray-200 pt-3'>
+                <h5 className='mb-2 text-xs font-semibold text-gray-700'>
+                  Payment Statistics
+                </h5>
+                <div className='space-y-2'>
+                  <div className='flex justify-between'>
+                    <span className='text-gray-500'>Failed Payments:</span>
+                    <span
+                      className={`font-medium ${failedPaymentCount > 0 ? 'text-orange-600' : 'text-gray-900'}`}
+                    >
+                      {failedPaymentCount}
+                    </span>
+                  </div>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-gray-500'>NSF Count:</span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                        nsfCount > 0
+                          ? 'bg-red-100 text-red-800 ring-2 ring-red-300'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {nsfCount > 0 && (
+                        <svg
+                          className='mr-1 h-3 w-3'
+                          fill='currentColor'
+                          viewBox='0 0 20 20'
+                        >
+                          <path
+                            fillRule='evenodd'
+                            d='M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z'
+                            clipRule='evenodd'
+                          />
+                        </svg>
+                      )}
+                      {nsfCount}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Borrower & Dates */}
+          {/* Column 3: Borrower & Important Dates */}
           <div className='space-y-3'>
             <h4 className='text-sm font-semibold text-gray-700'>
               Borrower & Dates
@@ -411,7 +461,7 @@ export default function LoanSummaryTable({
               {loan.users?.email && (
                 <div className='flex justify-between'>
                   <span className='text-gray-500'>Email:</span>
-                  <span className='font-medium text-gray-900'>
+                  <span className='break-all font-medium text-gray-900'>
                     {loan.users.email}
                   </span>
                 </div>
@@ -424,26 +474,41 @@ export default function LoanSummaryTable({
                   </span>
                 </div>
               )}
-              <div className='flex justify-between'>
-                <span className='text-gray-500'>Disbursement Date:</span>
-                <span className='font-medium text-gray-900'>
-                  {formatDate(loan.disbursement_date)}
-                </span>
-              </div>
-              <div className='flex justify-between'>
-                <span className='text-gray-500'>Due Date:</span>
-                <span className='font-medium text-gray-900'>
-                  {formatDate(loan.due_date)}
-                </span>
-              </div>
-              {loan.loan_applications && (
-                <div className='flex justify-between'>
-                  <span className='text-gray-500'>Application Status:</span>
-                  <span className='font-medium text-gray-900'>
-                    {loan.loan_applications.application_status || 'N/A'}
-                  </span>
+              <div className='mt-3 border-t border-gray-200 pt-3'>
+                <h5 className='mb-2 text-xs font-semibold text-gray-700'>
+                  Important Dates
+                </h5>
+                <div className='space-y-2'>
+                  <div className='flex justify-between'>
+                    <span className='text-gray-500'>Disbursement:</span>
+                    <span className='font-medium text-gray-900'>
+                      {formatDate(loan.disbursement_date)}
+                    </span>
+                  </div>
+                  <div className='flex justify-between'>
+                    <span className='text-gray-500'>Due Date:</span>
+                    <span className='font-medium text-gray-900'>
+                      {formatDate(loan.due_date)}
+                    </span>
+                  </div>
+                  {contract?.sent_at && (
+                    <div className='flex justify-between'>
+                      <span className='text-gray-500'>Contract Sent:</span>
+                      <span className='font-medium text-gray-900'>
+                        {formatDate(contract.sent_at)}
+                      </span>
+                    </div>
+                  )}
+                  {loan.loan_applications && (
+                    <div className='flex justify-between'>
+                      <span className='text-gray-500'>Application Status:</span>
+                      <span className='font-medium text-gray-900'>
+                        {loan.loan_applications.application_status || 'N/A'}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { LoanPaymentInsert, LoanPaymentUpdate, PaymentFrequency } from '@/src/lib/supabase/types'
 import {
   validatePaymentAmount,
-  calculateBreakdownUntilZero,
+  recalculatePaymentSchedule,
   roundCurrency,
   PAYMENT_FREQUENCY_CONFIG
 } from '@/src/lib/loan'
@@ -243,16 +243,18 @@ export async function POST(
         const firstPaymentDate = parseLocalDate(firstFuturePayment.payment_date)
         const firstPaymentDateStr = firstPaymentDate.toISOString().split('T')[0]
 
-        // Recalculate payment schedule with new remaining balance using calculateBreakdownUntilZero
+        // Recalculate payment schedule with new remaining balance using general recalculation function
         // This keeps the scheduled payment amount fixed and continues until balance reaches 0
-        const recalculatedBreakdown = calculateBreakdownUntilZero({
-          startingBalance: newRemainingBalance,
+        const recalculationResult = recalculatePaymentSchedule({
+          newRemainingBalance: newRemainingBalance,
           paymentAmount: scheduledPaymentAmount,
           paymentFrequency: contractPaymentFrequency,
           interestRate: interestRate,
           firstPaymentDate: firstPaymentDateStr,
           maxPeriods: 1000
         })
+        
+        const recalculatedBreakdown = recalculationResult.recalculatedBreakdown
 
         if (recalculatedBreakdown.length > 0) {
           // Update existing future payments and insert new ones if needed

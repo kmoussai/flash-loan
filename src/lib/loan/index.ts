@@ -149,6 +149,35 @@ export interface BreakdownUntilZeroParams {
 }
 
 /**
+ * General parameters for recalculating payment schedule with new remaining balance
+ * Used for defer, manual, and failed payment scenarios
+ */
+export interface RecalculateScheduleParams {
+  /** New remaining balance to use for recalculation (already calculated with fees/interest) */
+  newRemainingBalance: number
+  /** Payment amount per period (fixed, from contract) */
+  paymentAmount: number
+  /** Payment frequency */
+  paymentFrequency: PaymentFrequency
+  /** Annual interest rate as percentage */
+  interestRate: number
+  /** First payment date for recalculation (ISO date string YYYY-MM-DD) */
+  firstPaymentDate: string
+  /** Maximum number of periods to generate (safety limit, default: 1000) */
+  maxPeriods?: number
+}
+
+/**
+ * Result of schedule recalculation
+ */
+export interface RecalculateScheduleResult {
+  /** New remaining balance used for recalculation */
+  newRemainingBalance: number
+  /** Recalculated payment breakdown */
+  recalculatedBreakdown: PaymentBreakdown[]
+}
+
+/**
  * Failed payment calculation parameters
  */
 export interface FailedPaymentCalculationParams {
@@ -637,6 +666,74 @@ export function calculateBreakdownUntilZero(
 }
 
 /**
+ * Recalculate payment schedule with a new remaining balance
+ * 
+ * This is a general-purpose function that can be used for:
+ * - Defer payments: newBalance = remainingPrincipal + deferredInterest + deferralFee
+ * - Manual payments: newBalance = currentBalance - principalPaid
+ * - Failed payments: newBalance = currentBalance + failedInterest + originationFee
+ * 
+ * The function:
+ * 1. Takes the new remaining balance (already calculated by caller)
+ * 2. Recalculates the payment schedule using calculateBreakdownUntilZero
+ * 3. Keeps the payment amount fixed
+ * 4. Returns the new breakdown
+ * 
+ * @param params - Schedule recalculation parameters
+ * @returns Recalculation result with new breakdown
+ * 
+ * @example
+ * ```typescript
+ * // For failed payment:
+ * const newBalance = currentBalance + failedInterest + originationFee
+ * const result = recalculatePaymentSchedule({
+ *   newRemainingBalance: newBalance,
+ *   paymentAmount: 175,
+ *   paymentFrequency: 'monthly',
+ *   interestRate: 29,
+ *   firstPaymentDate: '2025-02-15'
+ * })
+ * 
+ * // For defer:
+ * const newBalance = remainingPrincipal + deferredInterest + deferralFee
+ * const result = recalculatePaymentSchedule({
+ *   newRemainingBalance: newBalance,
+ *   paymentAmount: 175,
+ *   paymentFrequency: 'monthly',
+ *   interestRate: 29,
+ *   firstPaymentDate: '2025-02-15'
+ * })
+ * ```
+ */
+export function recalculatePaymentSchedule(
+  params: RecalculateScheduleParams
+): RecalculateScheduleResult {
+  const {
+    newRemainingBalance,
+    paymentAmount,
+    paymentFrequency,
+    interestRate,
+    firstPaymentDate,
+    maxPeriods = 1000
+  } = params
+
+  // Recalculate payment schedule with new remaining balance
+  const recalculatedBreakdown = calculateBreakdownUntilZero({
+    startingBalance: newRemainingBalance,
+    paymentAmount: paymentAmount,
+    paymentFrequency: paymentFrequency,
+    interestRate: interestRate,
+    firstPaymentDate: firstPaymentDate,
+    maxPeriods: maxPeriods
+  })
+
+  return {
+    newRemainingBalance: roundCurrency(newRemainingBalance),
+    recalculatedBreakdown: recalculatedBreakdown
+  }
+}
+
+/**
  * Calculate total interest to be paid over loan term
  *
  * @param paymentSchedule - Payment breakdown array
@@ -806,7 +903,6 @@ export function calculateFailedPaymentFees(
     failedPaymentCount: failedPayments.length
   }
 }
-
 // ============================================================================
 // LOAN MODIFICATION CALCULATIONS
 // ============================================================================
