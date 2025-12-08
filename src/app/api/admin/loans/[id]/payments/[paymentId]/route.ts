@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { LoanPaymentUpdate } from '@/src/lib/supabase/types'
+import { parseLocalDate } from '@/src/lib/utils/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,15 +39,22 @@ export async function PATCH(
     }
 
     if (body.payment_date !== undefined) {
-      // Validate date format
-      const date = new Date(body.payment_date)
+      // Validate date format using parseLocalDate to avoid timezone shifts
+      const date = parseLocalDate(body.payment_date)
       if (isNaN(date.getTime())) {
         return NextResponse.json(
           { error: 'Invalid payment date format' },
           { status: 400 }
         )
       }
-      updates.payment_date = date.toISOString()
+      // Format date as YYYY-MM-DD in local timezone (avoids timezone issues)
+      const formatDateLocal = (date: Date): string => {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+      updates.payment_date = formatDateLocal(date)
     }
 
     if (body.notes !== undefined) {

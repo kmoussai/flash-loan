@@ -7,7 +7,7 @@
 
 import { PaymentFrequency } from '@/src/types'
 import { addDays, addMonths, startOfMonth, endOfMonth, setDate, getDate } from 'date-fns'
-import { getPreviousBusinessDay } from '@/src/lib/utils/date'
+import { getPreviousBusinessDay, parseLocalDate } from '@/src/lib/utils/date'
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -363,7 +363,8 @@ export function calculatePaymentBreakdown(
     
     let dueDate: Date
     if (isMonthly) {
-      dueDate = addMonths(new Date(firstPaymentDate), i)
+      // Use parseLocalDate to avoid timezone shifts
+      dueDate = addMonths(parseLocalDate(firstPaymentDate), i)
     } else if (isTwiceMonthly) {
       // Twice-monthly: Payments on 15th and last day of each month
       // Parse date string to avoid timezone issues
@@ -456,7 +457,8 @@ export function calculatePaymentBreakdown(
       }
     } else {
       // Weekly or bi-weekly: use days between
-      dueDate = addDays(new Date(firstPaymentDate), i * config.daysBetween)
+      // Use parseLocalDate to avoid timezone shifts
+      dueDate = addDays(parseLocalDate(firstPaymentDate), i * config.daysBetween)
     }
     
     // Adjust date to next business day if it falls on a holiday or weekend
@@ -542,8 +544,9 @@ export function calculateBreakdownUntilZero(
   }
 
   // Track payment number and current date
+  // Use parseLocalDate to avoid timezone shifts when parsing date strings
   let paymentNumber = 1
-  let currentDate = new Date(firstPaymentDate)
+  let currentDate = parseLocalDate(firstPaymentDate)
 
   // Continue until balance reaches 0 or max periods reached
   while (remaining > 0.01 && paymentNumber <= maxPeriods) {
@@ -579,7 +582,8 @@ export function calculateBreakdownUntilZero(
 
     let dueDate: Date
     if (isMonthly) {
-      dueDate = addMonths(new Date(firstPaymentDate), paymentNumber - 1)
+      // Use parseLocalDate to avoid timezone shifts
+      dueDate = addMonths(parseLocalDate(firstPaymentDate), paymentNumber - 1)
     } else if (isTwiceMonthly) {
       // Twice-monthly: Payments on 15th and last day of each month
       const [year, month, day] = firstPaymentDate.split('-').map(Number)
@@ -644,7 +648,8 @@ export function calculateBreakdownUntilZero(
       }
     } else {
       // Weekly or bi-weekly: use days between
-      dueDate = addDays(new Date(firstPaymentDate), (paymentNumber - 1) * config.daysBetween)
+      // Use parseLocalDate to avoid timezone shifts
+      dueDate = addDays(parseLocalDate(firstPaymentDate), (paymentNumber - 1) * config.daysBetween)
     }
 
     // Adjust date to next business day if it falls on a holiday or weekend

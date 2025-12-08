@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { LoanPaymentInsert, LoanPaymentUpdate, PaymentFrequency } from '@/src/lib/supabase/types'
+import { LoanPaymentInsert, PaymentFrequency } from '@/src/lib/supabase/types'
 import {
   validatePaymentAmount,
   recalculatePaymentSchedule,
@@ -9,6 +9,7 @@ import {
 } from '@/src/lib/loan'
 import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
 import { parseLocalDate } from '@/src/lib/utils/date'
+import { updateLoanPaymentsFromBreakdown } from '@/src/lib/supabase/payment-schedule-helpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +57,14 @@ export async function POST(
         { error: 'Invalid payment date format' },
         { status: 400 }
       )
+    }
+
+    // Format date as YYYY-MM-DD in local timezone (avoids timezone issues)
+    const formatDateLocal = (date: Date): string => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
     }
 
     const supabase = await createServerSupabaseAdminClient()
@@ -144,7 +153,7 @@ export async function POST(
     const paymentInsert: LoanPaymentInsert = {
       loan_id: loanId,
       amount: paymentAmount,
-      payment_date: paymentDate.toISOString(),
+      payment_date: formatDateLocal(paymentDate),
       status: 'manual',
       method: 'manual',
       payment_number: maxPaymentNumber + 1,
@@ -194,153 +203,71 @@ export async function POST(
     }
 
     // Recalculate future scheduled payments based on new remaining balance
-    // Use calculateBreakdownUntilZero to recalculate until balance reaches 0, keeping payment amount fixed
-    const paymentDateStart = new Date(paymentDate)
-    paymentDateStart.setHours(0, 0, 0, 0)
-    const nextDay = new Date(paymentDateStart)
-    nextDay.setDate(nextDay.getDate() + 1)
-
-    // Get all future pending payments (after the manual payment date)
-    const { data: futurePayments, error: futurePaymentsError } = await supabase
-      .from('loan_payments')
-      .select('id, payment_date, payment_number, amount, status')
-      .eq('loan_id', loanId)
-      .gte('payment_date', nextDay.toISOString())
-      .eq('status', 'pending')
-      .order('payment_date', { ascending: true })
-
-    if (futurePaymentsError) {
-      console.error('Error fetching future payments:', futurePaymentsError)
-    }
-
-    // Get scheduled payment amount from contract or first future payment (for recalculation)
-    let scheduledPaymentAmount: number = 0
-    if (typedLoan.application_id) {
+    // Only recalculate if there are future payments and we have contract info
+    if (typedLoan.application_id && newRemainingBalance > 0) {
+      // Get contract to retrieve payment amount and frequency
       const contractResult = await getContractByApplicationId(typedLoan.application_id, true)
-      if (contractResult.success && contractResult.data?.contract_terms?.payment_amount) {
-        scheduledPaymentAmount = Number(contractResult.data.contract_terms.payment_amount)
-      }
-    }
-
-    // If we couldn't get payment amount from contract, get it from the first future payment
-    if (scheduledPaymentAmount === 0 && futurePayments && futurePayments.length > 0) {
-      const firstPayment = futurePayments[0] as { amount: number }
-      scheduledPaymentAmount = Number(firstPayment.amount)
-    }
-
-    // If still no payment amount, we can't recalculate
-    if (scheduledPaymentAmount === 0) {
-      console.warn('Could not determine scheduled payment amount for recalculation')
-    } else if (futurePayments && futurePayments.length > 0 && typedLoan.application_id) {
-      // Get contract to get payment frequency
-      const contractResult = await getContractByApplicationId(typedLoan.application_id, true)
+      
       if (contractResult.success && contractResult.data?.contract_terms) {
         const contractTerms = contractResult.data.contract_terms
+        const scheduledPaymentAmount = Number(contractTerms.payment_amount || 0)
         const contractPaymentFrequency = (contractTerms.payment_frequency || paymentFrequency) as PaymentFrequency
 
-        // Get first future payment date
-        const firstFuturePayment = futurePayments[0] as { payment_date: string }
-        const firstPaymentDate = parseLocalDate(firstFuturePayment.payment_date)
-        const firstPaymentDateStr = firstPaymentDate.toISOString().split('T')[0]
+        if (scheduledPaymentAmount > 0) {
+          // Calculate the next day after manual payment for start date
+          // Use parseLocalDate to avoid timezone shifts
+          const nextDay = new Date(paymentDate)
+          nextDay.setDate(nextDay.getDate() + 1)
+          const nextDayStr = formatDateLocal(nextDay)
 
-        // Recalculate payment schedule with new remaining balance using general recalculation function
-        // This keeps the scheduled payment amount fixed and continues until balance reaches 0
-        const recalculationResult = recalculatePaymentSchedule({
-          newRemainingBalance: newRemainingBalance,
-          paymentAmount: scheduledPaymentAmount,
-          paymentFrequency: contractPaymentFrequency,
-          interestRate: interestRate,
-          firstPaymentDate: firstPaymentDateStr,
-          maxPeriods: 1000
-        })
-        
-        const recalculatedBreakdown = recalculationResult.recalculatedBreakdown
+          // Get first future payment date to use as starting point for recalculation
+          const { data: firstFuturePayment } = await supabase
+            .from('loan_payments')
+            .select('payment_date')
+            .eq('loan_id', loanId)
+            .gte('payment_date', nextDayStr)
+            .in('status', ['pending', 'cancelled'])
+            .order('payment_date', { ascending: true })
+            .limit(1)
+            .maybeSingle()
 
-        if (recalculatedBreakdown.length > 0) {
-          // Update existing future payments and insert new ones if needed
-          const paymentsToUpdate: Array<{ id: string; update: LoanPaymentUpdate }> = []
-          const paymentsToInsert: LoanPaymentInsert[] = []
+          // Use first future payment date if available, otherwise use next day
+          // Use parseLocalDate and formatDateLocal to avoid timezone shifts
+          const firstPaymentDateStr = firstFuturePayment
+            ? formatDateLocal(parseLocalDate((firstFuturePayment as { payment_date: string }).payment_date))
+            : nextDayStr
 
-          // Map existing future payments to recalculated breakdown
-          for (let i = 0; i < Math.max(futurePayments.length, recalculatedBreakdown.length); i++) {
-            const breakdownItem = recalculatedBreakdown[i]
+          // Recalculate payment schedule with new remaining balance
+          const recalculationResult = recalculatePaymentSchedule({
+            newRemainingBalance: newRemainingBalance,
+            paymentAmount: scheduledPaymentAmount,
+            paymentFrequency: contractPaymentFrequency,
+            interestRate: interestRate,
+            firstPaymentDate: firstPaymentDateStr,
+            maxPeriods: 1000
+          })
 
-            if (!breakdownItem) {
-              // More existing payments than recalculated - mark extra as cancelled
-              if (i < futurePayments.length) {
-                const existingPayment = futurePayments[i] as { id: string }
-                paymentsToUpdate.push({
-                  id: existingPayment.id,
-                  update: {
-                    status: 'cancelled',
-                    notes: 'Payment cancelled due to schedule recalculation after manual payment.'
-                  }
-                })
-              }
-              continue
-            }
+          const recalculatedBreakdown = recalculationResult.recalculatedBreakdown
 
-            if (i < futurePayments.length) {
-              // Update existing payment
-              const existingPayment = futurePayments[i] as { id: string; payment_number: number | null }
-              paymentsToUpdate.push({
-                id: existingPayment.id,
-                update: {
-                  payment_date: breakdownItem.dueDate,
-                  amount: roundCurrency(breakdownItem.amount),
-                  interest: roundCurrency(breakdownItem.interest),
-                  principal: roundCurrency(breakdownItem.principal),
-                  remaining_balance: roundCurrency(breakdownItem.remainingBalance),
-                  status: 'pending',
-                  notes: ''
-                }
-              })
-            } else {
-              // Insert new payment
-              paymentsToInsert.push({
-                loan_id: loanId,
-                payment_date: breakdownItem.dueDate,
-                amount: roundCurrency(breakdownItem.amount),
-                interest: roundCurrency(breakdownItem.interest),
-                principal: roundCurrency(breakdownItem.principal),
-                remaining_balance: roundCurrency(breakdownItem.remainingBalance),
-                payment_number: breakdownItem.paymentNumber,
-                status: 'pending',
-                notes: 'new payment'
-              })
-            }
-          }
+          if (recalculatedBreakdown.length > 0) {
+            // Use the helper function to update future payments
+            const updateResult = await updateLoanPaymentsFromBreakdown(
+              loanId,
+              recalculatedBreakdown,
+              nextDayStr // Only update payments on or after the day after manual payment
+            )
 
-          // Update existing payments
-          for (const { id, update } of paymentsToUpdate) {
-            const { error: updateError } = await (supabase
-              .from('loan_payments') as any)
-              .update(update)
-              .eq('id', id)
-
-            if (updateError) {
-              console.error(`Error updating payment ${id}:`, updateError)
-            }
-          }
-
-          // Insert new payments if needed
-          if (paymentsToInsert.length > 0) {
-            const { error: insertError } = await (supabase
-              .from('loan_payments') as any)
-              .insert(paymentsToInsert)
-
-            if (insertError) {
-              console.error('Error inserting new payments:', insertError)
+            if (!updateResult.success && updateResult.errors.length > 0) {
+              console.error('Error updating payments from breakdown:', updateResult.errors)
+              // Don't fail the request, but log the errors
             }
           }
         } else {
-          console.warn('No breakdown calculated for future payments')
+          console.warn('Could not determine scheduled payment amount for recalculation')
         }
       } else {
         console.warn('Could not get contract terms for recalculation')
       }
-    } else if (futurePayments && futurePayments.length === 0) {
-      console.log('No future payments to recalculate')
     }
 
     const successMessage = shouldMarkAsCompleted

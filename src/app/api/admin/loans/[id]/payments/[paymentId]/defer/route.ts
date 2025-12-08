@@ -3,12 +3,12 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import {
   LoanPaymentUpdate,
   LoanPayment,
-  LoanPaymentInsert,
   PaymentFrequency
 } from '@/src/lib/supabase/types'
 import { Loan } from '@/src/types'
 import { parseLocalDate } from '@/src/lib/utils/date'
 import { recalculatePaymentSchedule, roundCurrency } from '@/src/lib/loan'
+import { updateLoanPaymentsFromBreakdown } from '@/src/lib/supabase/payment-schedule-helpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -249,11 +249,6 @@ export async function POST(
       )
     }
 
-    // Get all future pending payments (including the deferred one)
-    const futurePayments = paymentsList
-      .slice(deferredPaymentIndex)
-      .filter(p => p.status === 'pending')
-
     // Step 1: Mark the deferred payment as deferred
     const deferredPaymentUpdate: LoanPaymentUpdate = {
       amount: 0,
@@ -302,99 +297,20 @@ export async function POST(
     }
 
     // Step 3: Update existing future payments with recalculated values
-    const paymentsToUpdate: Array<{ id: string; update: LoanPaymentUpdate }> =
-      []
-    const paymentsToInsert: LoanPaymentInsert[] = []
+    // Use the helper function which will automatically:
+    // - Skip the deferred payment (it's now in preserved statuses)
+    // - Update future pending payments by index
+    // - Create new payments as needed
+    // - Cancel extra payments
+    const updateResult = await updateLoanPaymentsFromBreakdown(
+      loanId,
+      recalculatedBreakdown,
+      firstPaymentDateStr // Start from the deferred payment date
+    )
 
-    // Map existing future payments to recalculated breakdown
-    for (
-      let i = 0;
-      i < Math.max(futurePayments.length, recalculatedBreakdown.length);
-      i++
-    ) {
-      const breakdownItem = recalculatedBreakdown[i]
-
-      if (!breakdownItem) {
-        // More existing payments than recalculated - mark extra as cancelled
-        if (i < futurePayments.length) {
-          const existingPayment = futurePayments[i]
-          if (existingPayment.id !== paymentId) {
-            paymentsToUpdate.push({
-              id: existingPayment.id,
-              update: {
-                status: 'cancelled',
-                notes:
-                  'Payment cancelled due to schedule recalculation after deferral.'
-              }
-            })
-          }
-        }
-        continue
-      }
-
-      if (i < futurePayments.length) {
-        // Update existing payment
-        const existingPayment = futurePayments[i]
-
-        // Skip the deferred payment (already updated)
-        if (existingPayment.id === paymentId) {
-          continue
-        }
-
-        paymentsToUpdate.push({
-          id: existingPayment.id,
-          update: {
-            payment_date: breakdownItem.dueDate,
-            amount: roundCurrency(breakdownItem.amount),
-            interest: roundCurrency(breakdownItem.interest),
-            principal: roundCurrency(breakdownItem.principal),
-            remaining_balance: roundCurrency(breakdownItem.remainingBalance),
-            status: 'pending'
-          }
-        })
-      } else {
-        // Insert new payment
-        paymentsToInsert.push({
-          loan_id: loanId,
-          payment_date: breakdownItem.dueDate,
-          amount: roundCurrency(breakdownItem.amount),
-          interest: roundCurrency(breakdownItem.interest),
-          principal: roundCurrency(breakdownItem.principal),
-          remaining_balance: roundCurrency(breakdownItem.remainingBalance),
-          payment_number: breakdownItem.paymentNumber,
-          status: 'pending',
-          notes: 'new payment'
-        })
-      }
-    }
-
-    // Update existing payments
-    for (const { id, update } of paymentsToUpdate) {
-      const { error: updateError } = await (
-        supabase.from('loan_payments') as any
-      )
-        .update(update)
-        .eq('id', id)
-
-      if (updateError) {
-        console.error(`Error updating payment ${id}:`, updateError)
-        // Continue with other updates even if one fails
-      }
-    }
-
-    // Insert new payments if needed
-    if (paymentsToInsert.length > 0) {
-      const { error: insertError } = await (
-        supabase.from('loan_payments') as any
-      ).insert(paymentsToInsert)
-
-      if (insertError) {
-        console.error('Error inserting new payments:', insertError)
-        return NextResponse.json(
-          { error: 'Failed to create new payments' },
-          { status: 500 }
-        )
-      }
+    if (!updateResult.success && updateResult.errors.length > 0) {
+      console.error('Error updating payments from breakdown:', updateResult.errors)
+      // Don't fail the request, but log the errors
     }
 
     // Get updated payment schedule to return

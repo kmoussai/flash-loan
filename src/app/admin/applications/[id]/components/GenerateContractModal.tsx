@@ -236,8 +236,9 @@ export const GenerateContractModal = ({
     }
 
     // Validate next payment date is at least tomorrow
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    // Use parseLocalDate approach to get today in local timezone
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
     const selectedDate = parseLocalDate(nextPaymentDate)
@@ -500,6 +501,7 @@ export const GenerateContractModal = ({
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
                     Next Payment Date <span className='text-red-500'>*</span>
+                    {nextPaymentDate}
                   </label>
                   <DatePicker
                     id='nextPaymentDate'
@@ -507,9 +509,11 @@ export const GenerateContractModal = ({
                     value={nextPaymentDate}
                     onChange={date => setNextPaymentDate(date || '')}
                     minDate={(() => {
-                      const tomorrow = new Date()
+                      // Use local timezone to avoid date shifting
+                      const now = new Date()
+                      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                      const tomorrow = new Date(today)
                       tomorrow.setDate(tomorrow.getDate() + 1)
-                      tomorrow.setHours(0, 0, 0, 0)
                       return tomorrow
                     })()}
                     disabled={isLoading}
@@ -637,9 +641,11 @@ export const GenerateContractModal = ({
                 onScheduleChange={handleScheduleChange}
                 holidays={getCanadianHolidays()}
                 minDate={(() => {
-                  const tomorrow = new Date()
+                  // Use local timezone to avoid date shifting
+                  const now = new Date()
+                  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                  const tomorrow = new Date(today)
                   tomorrow.setDate(tomorrow.getDate() + 1)
-                  tomorrow.setHours(0, 0, 0, 0)
                   return tomorrow
                 })()}
               />
