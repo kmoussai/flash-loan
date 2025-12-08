@@ -10,6 +10,7 @@ import {
   calculatePaymentBreakdown,
   calculateFailedPaymentFees,
   calculateModificationBalance,
+  calculateBreakdownUntilZero,
   roundCurrency
 } from '@/src/lib/loan'
 import { getCanadianHolidays, parseLocalDate } from '@/src/lib/utils/date'
@@ -56,6 +57,7 @@ export default function ModifyLoanModal({
   }, [open])
   const [action, setAction] = useState<'modify' | 'stop'>('modify')
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('')
+  const [debouncedPaymentAmount, setDebouncedPaymentAmount] = useState<number | ''>('')
   const [paymentFrequency, setPaymentFrequency] =
     useState<PaymentFrequency>('monthly')
   const [numberOfPayments, setNumberOfPayments] = useState<number>(0)
@@ -71,6 +73,8 @@ export default function ModifyLoanModal({
     deletedCount: number
     totalBalance: number
   } | null>(null)
+  // Track if payment amount was manually set by user (vs auto-calculated)
+  const [isPaymentAmountManual, setIsPaymentAmountManual] = useState(false)
 
   // Fetch payments to determine future payments count
   const { data: paymentsData } = useSWR(
@@ -160,7 +164,9 @@ export default function ModifyLoanModal({
     ) as PaymentFrequency
     setPaymentFrequency(validFrequency)
     setPaymentAmount(contractPaymentAmount)
+    setDebouncedPaymentAmount(contractPaymentAmount)
     setNumberOfPayments(contractNumberOfPayments)
+    setIsPaymentAmountManual(false) // Contract amount is considered auto-calculated initially
     setAction('modify')
     setPreviewData(null)
     setError(null)
@@ -198,17 +204,9 @@ export default function ModifyLoanModal({
     [fees.origination_fee]
   )
 
-  // Auto-calculate payment amount and breakdown when all 4 parameters change (for modify action)
-  // The 4 parameters are: paymentFrequency, numberOfPayments, startDate, and remaining_balance
-  useEffect(() => {
-    if (action !== 'modify' || !startDate) return
-
-    // Calculate total balance using loan library
-    // Note: remaining_balance already includes brokerage fee (set during contract generation)
-    // So we should NOT add brokerage fee again - only add failed payment fees
+  // Calculate total balance (used in multiple effects)
+  const totalBalance = useMemo(() => {
     const remainingBalance = Number(loan?.remaining_balance || 0)
-
-    // Calculate failed payment fees using loan library
     const failedPaymentResult = calculateFailedPaymentFees({
       failedPayments: failedPayments.map((p: any) => ({
         amount: Number(p.amount || 0),
@@ -217,55 +215,94 @@ export default function ModifyLoanModal({
       })),
       originationFee: originationFee
     })
+    return remainingBalance + failedPaymentResult.totalAmount
+  }, [loan?.remaining_balance, failedPayments, originationFee])
 
-    // Calculate modification balance
-    // remaining_balance already includes brokerage fee, so only add failed payment fees
-    const totalBalance = remainingBalance + failedPaymentResult.totalAmount
+  // Debounce payment amount changes (500ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedPaymentAmount(paymentAmount)
+    }, 500)
 
-    // Check if all 4 required parameters are present
-    if (
-      totalBalance > 0 &&
-      paymentFrequency &&
-      numberOfPayments > 0 &&
-      startDate
-    ) {
-      // Use loan library to calculate payment amount
+    return () => clearTimeout(timer)
+  }, [paymentAmount])
+
+  // Unified recalculation effect: handles all parameter changes
+  // Recalculates payment amount, number of payments, and breakdown based on what changed
+  useEffect(() => {
+    if (action !== 'modify' || !startDate || !paymentFrequency || totalBalance <= 0) {
+      return
+    }
+
+    const currentAmount = typeof debouncedPaymentAmount === 'number' ? debouncedPaymentAmount : 0
+    const currentNumberOfPayments = numberOfPayments
+
+    // Strategy: If payment amount is manually set, calculate number of payments from it
+    // If payment amount is not set or was auto-calculated, calculate it from number of payments
+    let finalAmount = currentAmount
+    let finalNumberOfPayments = currentNumberOfPayments
+
+    if (isPaymentAmountManual && currentAmount > 0) {
+      // Payment amount was manually set → calculate number of payments
+      const breakdown = calculateBreakdownUntilZero({
+        startingBalance: totalBalance,
+        paymentAmount: currentAmount,
+        paymentFrequency: paymentFrequency,
+        interestRate: interestRate,
+        firstPaymentDate: startDate,
+        maxPeriods: 1000
+      })
+
+      if (breakdown.length > 0) {
+        finalNumberOfPayments = breakdown.length
+        if (finalNumberOfPayments !== currentNumberOfPayments) {
+          setNumberOfPayments(finalNumberOfPayments)
+        }
+      }
+    } else if (currentNumberOfPayments > 0) {
+      // Number of payments is set → calculate payment amount
       const calculatedAmount = calculatePaymentAmount({
-        principalAmount: totalBalance, // Use total balance as principal for modification
+        principalAmount: totalBalance,
         interestRate: interestRate,
         paymentFrequency: paymentFrequency,
-        numberOfPayments: numberOfPayments,
-        brokerageFee: 0, // Fees already included in totalBalance
-        originationFee: 0 // Fees already included in totalBalance
+        numberOfPayments: currentNumberOfPayments,
+        brokerageFee: 0,
+        originationFee: 0
       })
 
       if (calculatedAmount) {
-        // Only update if the calculated amount is different to prevent infinite loops
-        const currentAmount =
-          typeof paymentAmount === 'number' ? paymentAmount : 0
-        if (Math.abs(calculatedAmount - currentAmount) > 0.01) {
+        finalAmount = calculatedAmount
+        // Only update if different to prevent infinite loops
+        if (Math.abs(finalAmount - currentAmount) > 0.01) {
           setPaymentAmount(calculatedAmount)
+          setDebouncedPaymentAmount(calculatedAmount)
+          setIsPaymentAmountManual(false) // Mark as auto-calculated
         }
+      }
+    } else {
+      // Neither is set yet, skip calculation
+      return
+    }
 
-        // Use loan library to calculate payment breakdown with interest and principal
-        const breakdown = calculatePaymentBreakdown(
-          {
-            principalAmount: totalBalance, // Use total balance as principal for modification
-            interestRate: interestRate,
-            paymentFrequency: paymentFrequency,
-            numberOfPayments: numberOfPayments,
-            brokerageFee: 0, // Fees already included in totalBalance
-            originationFee: 0 // Fees already included in totalBalance
-          },
-          startDate
-        )
+    // Now calculate the breakdown with the final values
+    if (finalAmount > 0 && finalNumberOfPayments > 0) {
+      const breakdown = calculateBreakdownUntilZero({
+        startingBalance: totalBalance,
+        paymentAmount: finalAmount,
+        paymentFrequency: paymentFrequency,
+        interestRate: interestRate,
+        firstPaymentDate: startDate,
+        maxPeriods: finalNumberOfPayments || 1000
+      })
 
+      if (breakdown.length > 0) {
         // Convert breakdown to schedule format
         const scheduleWithBreakdown = breakdown.map(payment => ({
           due_date: payment.dueDate,
           amount: payment.amount,
           interest: payment.interest,
-          principal: payment.principal
+          principal: payment.principal,
+          remaining_balance: payment.remainingBalance
         }))
 
         // Only update schedule if it's different
@@ -277,7 +314,6 @@ export default function ModifyLoanModal({
         }
 
         // Calculate which payments will be updated, created, or deleted
-        // Get existing future payments
         const existingFuturePayments = payments.filter((p: any) => {
           const paymentDate = parseLocalDate(p.payment_date)
           paymentDate.setHours(0, 0, 0, 0)
@@ -287,7 +323,6 @@ export default function ModifyLoanModal({
           return isFutureDate || isPendingOrFailed
         })
 
-        // Get max payment number from confirmed/paid payments
         const existingConfirmedPayments = payments.filter((p: any) =>
           ['confirmed', 'paid', 'manual', 'rebate'].includes(p.status)
         )
@@ -295,12 +330,10 @@ export default function ModifyLoanModal({
           ? Math.max(...existingConfirmedPayments.map((p: any) => p.payment_number || 0))
           : 0
 
-        // Map existing future payments by payment_number
         const existingFuturePaymentsMap = new Map(
           existingFuturePayments.map((p: any) => [p.payment_number, p])
         )
 
-        // Calculate counts
         let updatedCount = 0
         let createdCount = 0
         const paymentNumbersToKeep = new Set<number>()
@@ -316,7 +349,6 @@ export default function ModifyLoanModal({
           }
         })
 
-        // Count payments that will be deleted (exist but not in new schedule)
         const deletedCount = existingFuturePayments.filter(
           (p: any) => !paymentNumbersToKeep.has(p.payment_number)
         ).length
@@ -330,18 +362,17 @@ export default function ModifyLoanModal({
       }
     }
   }, [
-    // The 4 key parameters that trigger recalculation
     paymentFrequency,
     numberOfPayments,
     startDate,
-    loan?.remaining_balance,
-    // Additional dependencies for accurate calculation
-    brokerageFee,
-    originationFee,
-    failedPayments,
+    debouncedPaymentAmount,
+    totalBalance,
     interestRate,
     action,
-    futurePaymentsCount
+    payments,
+    today,
+    paymentSchedule,
+    isPaymentAmountManual
   ])
 
   // Handle schedule changes from EditablePaymentScheduleList
@@ -528,7 +559,8 @@ export default function ModifyLoanModal({
                     Payment Frequency <span className='text-red-500'>*</span>
                   </label>
                   <Select
-                    value={paymentFrequency}
+                    key={`frequency-${paymentFrequency}`}
+                    value={String(paymentFrequency || 'monthly')}
                     onValueChange={e =>
                       setPaymentFrequency(e as PaymentFrequency)
                     }
@@ -581,13 +613,19 @@ export default function ModifyLoanModal({
                     onChange={e => {
                       const value = e.target.value
                       setPaymentAmount(value === '' ? '' : Number(value))
+                      // Mark as manually set when user changes it
+                      if (value !== '') {
+                        setIsPaymentAmountManual(true)
+                      }
                     }}
                     disabled={isSubmitting}
                     required
                     className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50'
                   />
                   <p className='mt-1 text-xs text-gray-500'>
-                    Automatically calculated based on remaining balance and fees
+                    {typeof paymentAmount === 'number' && paymentAmount > 0
+                      ? 'Changing this will recalculate the number of payments needed'
+                      : 'Automatically calculated based on remaining balance, fees, and number of payments'}
                   </p>
                 </div>
 

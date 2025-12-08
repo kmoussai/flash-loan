@@ -142,18 +142,41 @@ export default function PaymentTable({
       }
 
       if (editDate) {
-        const newDate = parseLocalDate(editDate)
+        console.log('editDate', editDate);
+        
+        // Ensure editDate is a string in YYYY-MM-DD format
+        // DatePicker should return a string, but we'll ensure it's formatted correctly
+        // Parse and reformat to ensure YYYY-MM-DD format in local timezone
+        const parsedDate = parseLocalDate(editDate)
+        const year = parsedDate.getFullYear()
+        const month = String(parsedDate.getMonth() + 1).padStart(2, '0')
+        const day = String(parsedDate.getDate()).padStart(2, '0')
+        const dateToSend = `${year}-${month}-${day}`
+        
+        // Parse both dates to compare them properly
+        const newDate = parseLocalDate(dateToSend)
         const oldDate = parseLocalDate(editingPayment.payment_date)
-        // Compare dates (ignoring time)
-        if (
-          newDate.toISOString().split('T')[0] !==
-          oldDate.toISOString().split('T')[0]
-        ) {
-          updates.payment_date = newDate.toISOString()
-          const oldDateStr = formatDate(editingPayment.payment_date)
-          const newDateStr = formatDate(newDate.toISOString())
+        
+        // Format date as YYYY-MM-DD in local timezone (avoids timezone issues)
+        const formatDateLocal = (date: Date): string => {
+          const year = date.getFullYear()
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const day = String(date.getDate()).padStart(2, '0')
+          return `${year}-${month}-${day}`
+        }
+        
+        // Compare dates (ignoring time) using local date formatting
+        const newDateStr = formatDateLocal(newDate)
+        const oldDateStr = formatDateLocal(oldDate)
+        
+        if (newDateStr !== oldDateStr) {
+          // Use the formatted string to ensure YYYY-MM-DD format
+          // This ensures we always send a string, never a Date object
+          updates.payment_date = dateToSend
+          const oldDateFormatted = formatDate(editingPayment.payment_date)
+          const newDateFormatted = formatDate(dateToSend)
           noteChanges.push(
-            `Payment date changed from ${oldDateStr} to ${newDateStr}`
+            `Payment date changed from ${oldDateFormatted} to ${newDateFormatted}`
           )
         }
       }
@@ -604,7 +627,7 @@ export default function PaymentTable({
                     htmlFor='edit-date'
                     className='mb-1 block text-sm font-medium text-gray-700'
                   >
-                    Payment Date <span className='text-red-500'>*</span>
+                    Payment Date <span className='text-red-500'>*</span> {editDate}
                   </label>
                   <DatePicker
                     id='edit-date'

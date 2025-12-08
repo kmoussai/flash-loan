@@ -3,12 +3,12 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import {
   LoanPaymentUpdate,
   LoanPayment,
-  LoanPaymentInsert,
   PaymentFrequency
 } from '@/src/lib/supabase/types'
 import { Loan } from '@/src/types'
 import { parseLocalDate } from '@/src/lib/utils/date'
 import { recalculatePaymentSchedule, roundCurrency } from '@/src/lib/loan'
+import { updateLoanPaymentsFromBreakdown } from '@/src/lib/supabase/payment-schedule-helpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -257,75 +257,21 @@ export async function POST(
       )
     }
 
-    // 3. Get all future pending payments (including the failed one, which is now 'failed')
-    const futurePayments = paymentsList.filter(
-      (p) =>
-        p.payment_date >= failedPayment.payment_date &&
-        p.status === 'pending' &&
-        p.id !== paymentId
+    // 3. Update existing future payments with recalculated values
+    // Use the helper function which will automatically:
+    // - Skip the failed payment (it's now in preserved statuses)
+    // - Update future pending payments by index
+    // - Create new payments as needed
+    // - Cancel extra payments
+    const updateResult = await updateLoanPaymentsFromBreakdown(
+      loanId,
+      recalculatedBreakdown,
+      nextPaymentDate // Start from the next payment date after the failed payment
     )
 
-    // 4. Update existing future payments and insert new ones
-    let breakdownIndex = 0
-
-    // Update existing future payments
-    for (const futurePayment of futurePayments) {
-      if (breakdownIndex >= recalculatedBreakdown.length) {
-        break
-      }
-
-      const breakdownItem = recalculatedBreakdown[breakdownIndex]
-      const updateData: LoanPaymentUpdate = {
-        payment_date: breakdownItem.dueDate,
-        amount: breakdownItem.amount,
-        interest: breakdownItem.interest,
-        principal: breakdownItem.principal,
-        remaining_balance: breakdownItem.remainingBalance,
-        status: 'pending'
-      }
-
-      const { error: updateError } = await (
-        supabase.from('loan_payments') as any
-      )
-        .update(updateData)
-        .eq('id', futurePayment.id)
-
-      if (updateError) {
-        console.error(
-          `Error updating payment ${futurePayment.id}:`,
-          updateError
-        )
-        // Continue with other payments even if one fails
-      }
-
-      breakdownIndex++
-    }
-
-    // Insert new payments if breakdown has more items
-    while (breakdownIndex < recalculatedBreakdown.length) {
-      const breakdownItem = recalculatedBreakdown[breakdownIndex]
-      const newPayment: LoanPaymentInsert = {
-        loan_id: loanId,
-        payment_date: breakdownItem.dueDate,
-        amount: breakdownItem.amount,
-        interest: breakdownItem.interest,
-        principal: breakdownItem.principal,
-        remaining_balance: breakdownItem.remainingBalance,
-        status: 'pending',
-        notes: 'new payment'
-      }
-
-      const { error: insertError } = await (
-        supabase.from('loan_payments') as any
-      )
-        .insert(newPayment)
-
-      if (insertError) {
-        console.error('Error inserting new payment:', insertError)
-        // Continue with other payments even if one fails
-      }
-
-      breakdownIndex++
+    if (!updateResult.success && updateResult.errors.length > 0) {
+      console.error('Error updating payments from breakdown:', updateResult.errors)
+      // Don't fail the request, but log the errors
     }
 
     return NextResponse.json({

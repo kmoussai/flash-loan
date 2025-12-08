@@ -111,6 +111,12 @@ export {
   updateRequestFormSubmission
 } from './loan-helpers'
 
+// Export payment schedule helpers
+export {
+  updateLoanPaymentsFromBreakdown,
+  getFutureUpdateablePayments
+} from './payment-schedule-helpers'
+
 // Export contract helpers
 export {
   createLoanContract,
