@@ -11,12 +11,17 @@ import {
   EmploymentInsuranceIncomeFields,
   SelfEmployedIncomeFields,
   OtherIncomeFields,
-  Frequency
+  Frequency,
+  IbvProvider
 } from '@/src/lib/supabase/types'
 import { assertFrequency } from '@/src/lib/utils/frequency'
 import { generateReadablePassword } from '@/src/lib/utils/password'
 import { sendInvitationEmail } from '@/src/lib/utils/temp-password'
 import { validateMinimumAge } from '@/src/lib/utils/age'
+import { initializeZumrailsSession } from '@/src/lib/ibv/zumrails-server'
+import { createIbvProviderData } from '@/src/lib/supabase/ibv-helpers'
+
+const IBV_PROVIDER: IbvProvider = 'zumrails'
 
 // ===========================
 // TYPE DEFINITIONS
@@ -471,7 +476,7 @@ export async function POST(request: NextRequest) {
           const preferredLanguage = (
             body.preferredLanguage === 'fr' ? 'fr' : 'en'
           ) as 'en' | 'fr'
-          
+
           const emailResult = await sendInvitationEmail({
             email: body.email,
             firstName: body.firstName,
@@ -660,59 +665,92 @@ export async function POST(request: NextRequest) {
               '[Loan Application] Cannot save IBV request: client_id not found'
             )
           } else {
-
-          // Check if IBV request already exists (database function may have created it)
-          const { data: existingRequest } = await (supabaseForIbv as any)
-            .from('loan_application_ibv_requests')
-            .select('id')
-            .eq('loan_application_id', txResult.application_id)
-            .eq('request_guid', requestGuid)
-            .maybeSingle()
-
-          if (!existingRequest) {
-            // Create IBV request record if it doesn't exist
-            const providerData = {
-              request_guid: requestGuid,
-              iframe_url: (body.ibvProviderData as any)?.iframe_url || null,
-              initiated_by: 'client',
-              requested_at: requestedAt,
-              ...(body.ibvProviderData || {})
-            }
-
-            const { error: ibvInsertError } = await (supabaseForIbv as any)
+            // Check if IBV request already exists for this application and provider
+            // The unique constraint is now on (loan_application_id, provider)
+            const { data: existingRequest } = await (supabaseForIbv as any)
               .from('loan_application_ibv_requests')
-              .insert({
-                loan_application_id: txResult.application_id,
-                client_id: clientId,
-                provider: 'inverite',
-                status: body.ibvStatus || 'pending',
-                request_guid: requestGuid,
-                request_url: (body.ibvProviderData as any)?.start_url || 
-                           (body.ibvProviderData as any)?.iframe_url || 
-                           null,
-                provider_data: providerData,
-                requested_at: requestedAt,
-                completed_at: body.ibvStatus === 'verified' ? requestedAt : null
-              })
+              .select('id')
+              .eq('loan_application_id', txResult.application_id)
+              .eq('provider', 'inverite')
+              .maybeSingle()
 
-            if (ibvInsertError) {
-              console.error(
-                '[Loan Application] Failed to save IBV request to loan_application_ibv_requests:',
-                ibvInsertError
-              )
-              // Non-fatal: continue even if this fails
+            if (!existingRequest) {
+              // Create IBV request record if it doesn't exist
+              const providerData = {
+                request_guid: requestGuid,
+                iframe_url: (body.ibvProviderData as any)?.iframe_url || null,
+                initiated_by: 'client',
+                requested_at: requestedAt,
+                ...(body.ibvProviderData || {})
+              }
+
+              const { error: ibvInsertError } = await (supabaseForIbv as any)
+                .from('loan_application_ibv_requests')
+                .insert({
+                  loan_application_id: txResult.application_id,
+                  client_id: clientId,
+                  provider: 'inverite',
+                  status: body.ibvStatus || 'pending',
+                  request_url:
+                    (body.ibvProviderData as any)?.start_url ||
+                    (body.ibvProviderData as any)?.iframe_url ||
+                    null,
+                  provider_data: providerData, // Contains request_guid for Inverite
+                  requested_at: requestedAt,
+                  completed_at:
+                    body.ibvStatus === 'verified' ? requestedAt : null
+                })
+
+              if (ibvInsertError) {
+                console.error(
+                  '[Loan Application] Failed to save IBV request to loan_application_ibv_requests:',
+                  ibvInsertError
+                )
+                // Non-fatal: continue even if this fails
+              } else {
+                console.log(
+                  '[Loan Application] Successfully saved IBV request to loan_application_ibv_requests:',
+                  requestGuid
+                )
+              }
             } else {
-              console.log(
-                '[Loan Application] Successfully saved IBV request to loan_application_ibv_requests:',
-                requestGuid
-              )
+              // Update existing record
+              const providerData = {
+                request_guid: requestGuid,
+                iframe_url: (body.ibvProviderData as any)?.iframe_url || null,
+                initiated_by: 'client',
+                requested_at: requestedAt,
+                ...(body.ibvProviderData || {})
+              }
+
+              const { error: ibvUpdateError } = await (supabaseForIbv as any)
+                .from('loan_application_ibv_requests')
+                .update({
+                  request_url:
+                    (body.ibvProviderData as any)?.start_url ||
+                    (body.ibvProviderData as any)?.iframe_url ||
+                    null,
+                  provider_data: providerData, // Contains request_guid for Inverite
+                  status: body.ibvStatus || 'pending',
+                  completed_at:
+                    body.ibvStatus === 'verified' ? requestedAt : null,
+                  updated_at: requestedAt
+                })
+                .eq('loan_application_id', txResult.application_id)
+                .eq('provider', 'inverite')
+
+              if (ibvUpdateError) {
+                console.error(
+                  '[Loan Application] Failed to update IBV request:',
+                  ibvUpdateError
+                )
+              } else {
+                console.log(
+                  '[Loan Application] Updated existing IBV request:',
+                  requestGuid
+                )
+              }
             }
-          } else {
-            console.log(
-              '[Loan Application] IBV request already exists in loan_application_ibv_requests:',
-              requestGuid
-            )
-          }
           }
         }
       } catch (ibvError) {
@@ -850,12 +888,151 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // If IBV is required but not yet completed, initiate Inverite request server-side
+    // If IBV is required but not yet completed, initiate IBV request server-side
     let ibvInitiationData: any = null
+
+    // Initiate Zumrails request server-side
     if (
-      body.ibvProvider === 'inverite' &&
-      (!body.ibvStatus || body.ibvStatus === 'pending') &&
-      !body.ibvProviderData?.request_guid &&
+      txResult?.application_id &&
+      txResult?.client_id &&
+      IBV_PROVIDER === 'zumrails'
+    ) {
+      try {
+        const supabaseForIbv = createServerSupabaseAdminClient()
+
+        // Get client details for Zumrails request
+        const { data: clientData } = await (supabaseForIbv as any)
+          .from('users')
+          .select('first_name, last_name, phone, email, preferred_language')
+          .eq('id', txResult.client_id)
+          .single()
+
+        if (clientData) {
+          console.log(
+            '[Loan Application] Initiating Zumrails request after application creation:',
+            { applicationId: txResult.application_id }
+          )
+
+          // Use server helper to get token from cache or authenticate
+          const { connectToken, customerId, iframeUrl, expiresAt } =
+            await initializeZumrailsSession({
+              firstName: clientData.first_name,
+              lastName: clientData.last_name,
+              phone: clientData.phone,
+              email: clientData.email
+            })
+
+          const requestedAt = new Date().toISOString()
+
+          const providerData = createIbvProviderData('zumrails', {
+            customerId,
+            connectToken,
+            connectTokenExpiresAt: expiresAt,
+            connectTokenType: 'AddPaymentProfile',
+            configuration: {
+              allowEft: true,
+              allowInterac: true,
+              allowVisaDirect: true,
+              allowCreditCard: true
+            },
+            initiated_by: 'server',
+            requested_at: requestedAt,
+            iframe_url: iframeUrl
+          })
+
+          // Check if IBV request already exists for this application and provider
+          // The unique constraint is now on (loan_application_id, provider)
+          const { data: existingRequest } = await (supabaseForIbv as any)
+            .from('loan_application_ibv_requests')
+            .select('id')
+            .eq('loan_application_id', txResult.application_id)
+            .eq('provider', 'zumrails')
+            .maybeSingle()
+
+          if (!existingRequest) {
+            // Save IBV request to loan_application_ibv_requests only if it doesn't exist
+            const { error: ibvInsertError } = await (supabaseForIbv as any)
+              .from('loan_application_ibv_requests')
+              .insert({
+                loan_application_id: txResult.application_id,
+                client_id: txResult.client_id,
+                provider: 'zumrails',
+                status: 'pending',
+                request_url: iframeUrl,
+                provider_data: providerData, // Contains customerId for Zumrails
+                requested_at: requestedAt
+              })
+
+            if (ibvInsertError) {
+              console.error(
+                '[Loan Application] Failed to save Zumrails IBV request:',
+                ibvInsertError
+              )
+              // Continue anyway - try to update loan application
+            } else {
+              console.log(
+                '[Loan Application] Successfully saved Zumrails IBV request:',
+                customerId
+              )
+            }
+          } else {
+            // Update existing record
+            const { error: ibvUpdateError } = await (supabaseForIbv as any)
+              .from('loan_application_ibv_requests')
+              .update({
+                request_url: iframeUrl,
+                provider_data: providerData, // Contains customerId for Zumrails
+                status: 'pending',
+                updated_at: requestedAt
+              })
+              .eq('loan_application_id', txResult.application_id)
+              .eq('provider', 'zumrails')
+
+            if (ibvUpdateError) {
+              console.error(
+                '[Loan Application] Failed to update Zumrails IBV request:',
+                ibvUpdateError
+              )
+            } else {
+              console.log(
+                '[Loan Application] Updated existing Zumrails IBV request:',
+                customerId
+              )
+            }
+          }
+
+          // Update loan application with IBV data (whether or not insert succeeded)
+          await (supabaseForIbv as any)
+            .from('loan_applications')
+            .update({
+              ibv_provider: 'zumrails',
+              ibv_status: 'pending',
+              ibv_provider_data: providerData
+            })
+            .eq('id', txResult.application_id)
+
+          ibvInitiationData = {
+            customerId,
+            iframeUrl,
+          }
+
+          console.log(
+            '[Loan Application] Successfully initiated Zumrails request:',
+            customerId
+          )
+        }
+      } catch (ibvInitError) {
+        console.error(
+          '[Loan Application] Error initiating Zumrails request:',
+          ibvInitError
+        )
+        // Non-fatal: continue even if IBV initiation fails
+      }
+    }
+
+    // Initiate Inverite request server-side (existing logic)
+    if (
+      IBV_PROVIDER === 'inverite' &&
       txResult?.application_id &&
       txResult?.client_id
     ) {
@@ -888,7 +1065,10 @@ export async function POST(request: NextRequest) {
             const callbackUrl = new URL(
               `${origin}/${requestedLocale}/quick-apply/inverite/callback`
             )
-            callbackUrl.searchParams.set('application_id', txResult.application_id)
+            callbackUrl.searchParams.set(
+              'application_id',
+              txResult.application_id
+            )
             callbackUrl.searchParams.set('ts', Date.now().toString())
             const redirectUrl = callbackUrl.toString()
 
@@ -935,7 +1115,8 @@ export async function POST(request: NextRequest) {
                 inveriteData.request_GUID
 
               if (requestGuid) {
-                const iframeUrl = inveriteData.iframeurl || inveriteData.iframe_url || null
+                const iframeUrl =
+                  inveriteData.iframeurl || inveriteData.iframe_url || null
                 const requestedAt = new Date().toISOString()
 
                 const customerStartBase =
@@ -961,9 +1142,8 @@ export async function POST(request: NextRequest) {
                     client_id: txResult.client_id,
                     provider: 'inverite',
                     status: 'pending',
-                    request_guid: requestGuid,
                     request_url: startUrl,
-                    provider_data: providerData,
+                    provider_data: providerData, // Contains request_guid for Inverite
                     requested_at: requestedAt
                   })
 
@@ -1025,6 +1205,7 @@ export async function POST(request: NextRequest) {
           // Include IBV initiation data if available
           ...(ibvInitiationData && {
             ibv: {
+              provider: IBV_PROVIDER,
               required: true,
               ...ibvInitiationData
             }

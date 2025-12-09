@@ -26,7 +26,7 @@ export async function POST(
 
     const { data: ibvRequest, error: requestError } = await (supabase as any)
       .from('loan_application_ibv_requests')
-      .select('id, loan_application_id, client_id, request_guid, request_url, provider_data, status')
+      .select('id, loan_application_id, client_id, request_url, provider_data, provider, status')
       .eq('id', ibvRequestId)
       .eq('loan_application_id', applicationId)
       .single()
@@ -80,10 +80,12 @@ export async function POST(
     }
 
     const providerData = (ibvRequest as any)?.provider_data as Record<string, any> | null
-    const requestGuid =
-      (ibvRequest as any)?.request_guid ||
-      providerData?.request_guid ||
+    const provider = (ibvRequest as any)?.provider
+    // Extract provider-specific identifier from provider_data JSONB
+    const requestGuid = providerData?.request_guid ||
+      providerData?.request_GUID ||
       providerData?.requestGuid ||
+      (provider === 'zumrails' ? providerData?.customerId : null) ||
       providerData?.request_GUID ||
       null
 

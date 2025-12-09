@@ -40,7 +40,7 @@ export type ContractStatus =
   | 'signed'
   | 'rejected'
   | 'expired'
-export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'other'
+export type IbvProvider = 'flinks' | 'inverite' | 'plaid' | 'zumrails' | 'other'
 export type IbvStatus =
   | 'pending'
   | 'processing'

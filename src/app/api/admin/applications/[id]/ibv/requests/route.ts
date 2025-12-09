@@ -220,9 +220,8 @@ export async function POST(
       client_id: client.id,
       provider: 'inverite',
       status: 'pending',
-      request_guid: requestGuid,
       request_url: startUrl,
-      provider_data: providerData,
+      provider_data: providerData, // Contains request_guid for Inverite
       note,
       requested_at: requestedAt
     }
