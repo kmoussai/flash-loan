@@ -551,8 +551,9 @@ export async function POST(request: NextRequest) {
         p_phone: body.phone,
         p_date_of_birth: body.dateOfBirth,
         p_preferred_language: body.preferredLanguage,
+        p_loan_amount: parseFloat(body.loanAmount), // Required - must come before optional params
+        // Minimal loan preferences (optional with defaults)
         p_province: body.province || null,
-        p_loan_amount: parseFloat(body.loanAmount),
         p_income_source: incomeSource,
         p_income_fields: incomeFields,
         p_bankruptcy_plan: body.bankruptcyPlan ?? false,

@@ -152,10 +152,10 @@ CREATE OR REPLACE FUNCTION public.submit_loan_application(
   p_phone text,
   p_date_of_birth date,
   p_preferred_language text,
+  p_loan_amount numeric, -- Required parameter - must come before optional parameters
 
-  -- Minimal loan preferences
+  -- Minimal loan preferences (optional with defaults)
   p_province text DEFAULT NULL,
-  p_loan_amount numeric,
   p_income_source public.income_source_type DEFAULT NULL,
   p_income_fields jsonb DEFAULT '{}'::jsonb,
   p_bankruptcy_plan boolean DEFAULT false,
