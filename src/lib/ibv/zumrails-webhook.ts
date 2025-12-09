@@ -390,6 +390,7 @@ export interface ProcessWebhookResult {
   applicationId: string | null
   updated: boolean
   message?: string
+  shouldRetry?: boolean // Indicates if webhook should be retried (for timing issues)
 }
 
 /**
@@ -421,11 +422,20 @@ export async function processZumrailsWebhook(
   const { applicationId, application, ibvRequest } = result
 
   if (!applicationId) {
+    console.log('[Zumrails Webhook] No matching application found - likely timing issue', {
+      requestId,
+      message: 'Request ID not yet stored in database. This may be a timing issue - webhook arrived before frontend updated the request ID.'
+    })
+    
+    // Return shouldRetry flag to indicate webhook should be retried
+    // This handles the case where the webhook arrives before the frontend
+    // calls /api/zumrails/update-request-id to store the request_id
     return {
       processed: false,
       applicationId: null,
       updated: false,
-      message: `No matching application found for request ID: ${requestId}`
+      shouldRetry: true, // Signal that this is a retryable timing issue
+      message: `No matching application found for request ID: ${requestId}. This may be a timing issue - webhook may have arrived before request ID was stored.`
     }
   }
 

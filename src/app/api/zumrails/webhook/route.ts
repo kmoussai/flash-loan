@@ -87,12 +87,33 @@ export async function POST(request: NextRequest) {
       processed: result.processed,
       applicationId: result.applicationId,
       updated: result.updated,
+      shouldRetry: result.shouldRetry,
       message: result.message
     })
 
-    // Always return 200 to acknowledge receipt
+    // If this is a timing issue (request ID not yet stored), return 503 Service Unavailable
+    // This tells Zumrails to retry the webhook later
     // Per documentation: https://docs.zumrails.com/api-reference/webhooks#retry-in-case-of-failure
     // Non-200 responses will trigger retries (3x in sandbox, 5x in production)
+    if (result.shouldRetry) {
+      console.log('[Zumrails Webhook] Returning 503 to trigger retry', {
+        requestId: result.applicationId,
+        message: result.message
+      })
+      return NextResponse.json(
+        {
+          received: true,
+          processed: false,
+          updated: false,
+          applicationId: result.applicationId,
+          message: result.message,
+          retry: true
+        },
+        { status: 503 } // Service Unavailable - triggers retry
+      )
+    }
+
+    // Successfully processed or not applicable - return 200
     return NextResponse.json({
       received: true,
       processed: result.processed,
