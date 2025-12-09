@@ -249,3 +249,66 @@ export async function initializeZumrailsSession(userData?: {
     expiresAt
   }
 }
+
+/**
+ * Fetch bank account information from Zumrails API by request ID
+ * Calls: /api/aggregation/GetInformationByRequestId/{requestId}
+ */
+export async function fetchZumrailsDataByRequestId(
+  requestId: string
+): Promise<any> {
+  // Authenticate with Zumrails
+  const { token } = await getZumrailsAuthToken()
+
+  // Call Zumrails API to fetch information by request ID
+  const baseUrl =
+    process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
+  const fetchUrl = `${baseUrl}/api/aggregation/GetInformationByRequestId/${requestId}`
+
+  console.log('[Zumrails] Fetching data by request ID', {
+    url: fetchUrl,
+    requestId
+  })
+
+  const response = await fetch(fetchUrl, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    }
+  })
+
+  const rawText = await response.text().catch(() => '')
+
+  if (!response.ok) {
+    console.error('[Zumrails] Fetch API call failed', {
+      status: response.status,
+      statusText: response.statusText,
+      body: rawText
+    })
+    throw new Error(
+      `Zumrails API returned ${response.status}: ${rawText || response.statusText}`
+    )
+  }
+
+  let apiData: any
+  try {
+    apiData = rawText ? JSON.parse(rawText) : {}
+  } catch (error) {
+    console.error('[Zumrails] Failed to parse API response', error)
+    throw new Error('Failed to parse Zumrails API response')
+  }
+
+  // Check for errors in Zumrails response format
+  if (apiData.isError) {
+    console.error('[Zumrails] Zumrails returned error', apiData)
+    throw new Error(apiData.message || 'Zumrails API returned an error')
+  }
+
+  console.log('[Zumrails] Successfully fetched data by request ID', {
+    requestId,
+    hasData: !!apiData.result || !!apiData.data
+  })
+
+  return apiData.result || apiData.data || apiData
+}

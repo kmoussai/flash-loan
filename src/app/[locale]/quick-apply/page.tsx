@@ -527,8 +527,8 @@ export default function MicroLoanApplicationPage() {
     }
   }
 
-  // Removed: Auto-submit on requestGuid - now we submit first, then show IBV
-
+  // For Zumrails: Data fetching is handled by webhook when Insights "Completed" event is received
+  // For Inverite: Still fetch from frontend after verification
   useEffect(() => {
     if (!ibvVerified) return
     if (!applicationId) return
@@ -541,51 +541,51 @@ export default function MicroLoanApplicationPage() {
       return
     }
 
-    const fetchVerifiedData = async () => {
-      verifiedFetchInFlight.current = true
-      try {
-        const provider = serverIbvProvider || 'zumrails'
-        let fetchUrl: string
+    const provider = serverIbvProvider || 'zumrails'
 
-        if (provider === 'inverite') {
-          fetchUrl = `/api/inverite/fetch/${encodeURIComponent(
-            inveriteRequestGuid
-          )}?application_id=${encodeURIComponent(applicationId)}`
-        } else if (provider === 'zumrails') {
-          fetchUrl = `/api/zumrails/fetch/${encodeURIComponent(
-            inveriteRequestGuid
-          )}?application_id=${encodeURIComponent(applicationId)}`
-        } else {
-          // Unknown provider, just mark as submitted
-          setLastVerifiedSubmissionGuid(inveriteRequestGuid)
-          setIsSubmitted(true)
-          return
-        }
-
-        const res = await fetch(fetchUrl)
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          console.warn(
-            `[Quick Apply] Failed to fetch ${provider} data after verification`,
-            res.status,
-            text
-          )
-          return
-        }
-
-        setLastVerifiedSubmissionGuid(inveriteRequestGuid)
+    // Zumrails: Data fetching is handled by webhook, just mark as submitted
+    if (provider === 'zumrails') {
+      setLastVerifiedSubmissionGuid(inveriteRequestGuid)
+      if (hasSubmittedApplication && !isSubmitted) {
         setIsSubmitted(true)
-      } catch (error) {
-        console.error(
-          `[Quick Apply] Error fetching ${serverIbvProvider || 'IBV'} data after verification`,
-          error
-        )
-      } finally {
-        verifiedFetchInFlight.current = false
       }
+      return
     }
 
-    void fetchVerifiedData()
+    // Inverite: Fetch data from frontend after verification
+    if (provider === 'inverite') {
+      const fetchVerifiedData = async () => {
+        verifiedFetchInFlight.current = true
+        try {
+          const fetchUrl = `/api/inverite/fetch/${encodeURIComponent(
+            inveriteRequestGuid
+          )}?application_id=${encodeURIComponent(applicationId)}`
+
+          const res = await fetch(fetchUrl)
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            console.warn(
+              '[Quick Apply] Failed to fetch Inverite data after verification',
+              res.status,
+              text
+            )
+            return
+          }
+
+          setLastVerifiedSubmissionGuid(inveriteRequestGuid)
+          setIsSubmitted(true)
+        } catch (error) {
+          console.error(
+            '[Quick Apply] Error fetching Inverite data after verification',
+            error
+          )
+        } finally {
+          verifiedFetchInFlight.current = false
+        }
+      }
+
+      void fetchVerifiedData()
+    }
   }, [
     ibvVerified,
     applicationId,
@@ -849,10 +849,32 @@ export default function MicroLoanApplicationPage() {
                   setIbvSubmissionOverride(null)
                 } else if (provider === 'zumrails') {
                   const zumrailsConn = connection as ZumrailsConnection
-                  // Store customer ID for Zumrails
-                  if (zumrailsConn.customerId) {
-                    setInveriteRequestGuid(zumrailsConn.customerId)
+                  
+                  // Update request ID and connection data in database
+                  // Store all identifiers from CONNECTIONSUCCESSFULLYCOMPLETED response:
+                  // - requestid: Primary identifier for webhook matching
+                  // - cardid: Card/connection identifier
+                  // - userid: User identifier
+                  if (applicationId && zumrailsConn.requestId) {
+                    fetch('/api/zumrails/update-request-id', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        applicationId,
+                        requestId: zumrailsConn.requestId,
+                        cardId: zumrailsConn.cardId,
+                        userId: zumrailsConn.userId
+                      })
+                    }).catch(error => {
+                      console.error('[Zumrails] Failed to update request ID:', error)
+                    })
                   }
+                  
+                  // Store request ID for reference (legacy compatibility)
+                  if (zumrailsConn.requestId) {
+                    setInveriteRequestGuid(zumrailsConn.requestId)
+                  }
+                  
                   setIbvVerified(true)
                   setIbvSubmissionOverride(null)
                 }

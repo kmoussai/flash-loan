@@ -65,6 +65,14 @@ async function checkUserType(req: NextRequest, userId: string): Promise<'client'
   return null
 }
 
+const publicApiRoutes = [
+  '/api/loan-application',
+  '/api/public',
+  '/api/auth',
+  '/api/zumrails/update-request-id',
+  '/api/webhook'
+]
+
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
@@ -99,6 +107,11 @@ export default async function middleware(req: NextRequest) {
 
     // Allow inverite routes without auth (bank verification callbacks and webhooks)
     if (pathname.startsWith('/api/inverite/')) {
+      return NextResponse.next()
+    }
+
+    // Allow zumrails routes without auth (bank verification callbacks, webhooks, and updates)
+    if (pathname.startsWith('/api/zumrails/')) {
       return NextResponse.next()
     }
 

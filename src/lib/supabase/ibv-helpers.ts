@@ -36,11 +36,17 @@ export function createIbvProviderData(
 
     case 'zumrails':
       return {
-        customer_id: data.customerId || data.customer_id,
-        token: data.token,
+        // Primary identifier for webhook matching
+        request_id: data.requestId || data.request_id || data.requestid || data.token,
+        // Other identifiers from CONNECTIONSUCCESSFULLYCOMPLETED response
+        card_id: data.cardId || data.card_id || data.cardid,
+        user_id: data.userId || data.user_id || data.userid,
+        // Legacy fields
+        customer_id: data.customerId || data.customer_id || data.userId || data.user_id,
+        token: data.token || data.requestId || data.request_id || data.requestid,
         refresh_token: data.refreshToken || data.refresh_token,
         token_expires_at: data.tokenExpiresAt || data.token_expires_at,
-        connect_token: data.connectToken || data.connect_token,
+        connect_token: data.connectToken || data.connect_token || data.cardId || data.card_id || data.cardid,
         connect_token_expires_at: data.connectTokenExpiresAt || data.connect_token_expires_at,
         connect_token_type: data.connectTokenType || data.connect_token_type,
         configuration: data.configuration,
