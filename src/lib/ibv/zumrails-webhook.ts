@@ -150,65 +150,80 @@ export async function findLoanApplicationByRequestId(
 }> {
   const supabase = createServerSupabaseAdminClient()
 
-  // First, try to find in IBV requests table by request_id in provider_data
-  const { data: ibvRequests, error: ibvError } = await supabase
-    .from('loan_application_ibv_requests')
-    .select('id, loan_application_id, status, provider_data')
-    .eq('provider', 'zumrails')
-    .not('provider_data', 'is', null)
-
+  // First, try to find in IBV requests table by request_id in provider_data using JSONB filter
+  // Try different field name variations (request_id, requestId, token)
   let ibvRequest: any = null
   let applicationId: string | null = null
 
-  if (!ibvError && ibvRequests) {
-    ibvRequest = ibvRequests.find((req: any) => {
-      const providerData = req.provider_data as any
-      // Match by request_id (primary identifier - stored from CONNECTIONSUCCESSFULLYCOMPLETED)
-      return (
-        providerData?.request_id === requestId ||
-        providerData?.requestId === requestId ||
-        providerData?.token === requestId
-      )
-    })
+  // Query using JSONB contains filter for request_id
+  const { data: ibvRequestByRequestId, error: ibvError1 } = await (supabase as any)
+    .from('loan_application_ibv_requests')
+    .select('id, loan_application_id, status, provider_data')
+    .eq('provider', 'zumrails')
+    .eq('provider_data->>request_id', requestId);
 
-    if (ibvRequest) {
-      applicationId = ibvRequest.loan_application_id
-    }
+  if (!ibvError1 && ibvRequestByRequestId) {
+    ibvRequest = ibvRequestByRequestId
+    applicationId = ibvRequestByRequestId.loan_application_id
   }
 
-  // If not found in IBV requests, search loan_applications
+
+
+  // If not found in IBV requests, search loan_applications using JSONB filter
   if (!applicationId) {
-    const { data: applications } = await supabase
+    // Try request_id in ibv_provider_data
+    const { data: appByRequestId, error: appError1 } = await (supabase as any)
       .from('loan_applications')
       .select('id, ibv_provider_data, ibv_status')
       .eq('ibv_provider', 'zumrails')
-      .not('ibv_provider_data', 'is', null)
+      .contains('ibv_provider_data', { request_id: requestId })
+      .maybeSingle()
 
-    const matching = (applications as any[])?.find((app: any) => {
-      const providerData = app.ibv_provider_data as any
-      // Match by request_id (primary identifier)
-      return (
-        providerData?.request_id === requestId ||
-        providerData?.requestId === requestId ||
-        providerData?.token === requestId
-      )
-    })
+    if (!appError1 && appByRequestId) {
+      applicationId = appByRequestId.id
+    }
 
-    if (matching) {
-      applicationId = matching.id
+    // Try requestId (camelCase)
+    if (!applicationId) {
+      const { data: appByRequestIdCamel, error: appError2 } = await (supabase as any)
+        .from('loan_applications')
+        .select('id, ibv_provider_data, ibv_status')
+        .eq('ibv_provider', 'zumrails')
+        .contains('ibv_provider_data', { requestId: requestId })
+        .maybeSingle()
+
+      if (!appError2 && appByRequestIdCamel) {
+        applicationId = appByRequestIdCamel.id
+      }
     }
   }
 
   // Get full application data if we have an ID
   let application: any = null
   if (applicationId) {
-    const { data: app } = await supabase
+    const { data: app, error: appFetchError } = await supabase
       .from('loan_applications')
       .select('id, ibv_provider_data, ibv_status')
       .eq('id', applicationId)
       .single()
 
-    application = app
+    if (!appFetchError) {
+      application = app
+    }
+
+    // Also get IBV request if we don't have it yet
+    if (!ibvRequest) {
+      const { data: ibvReq } = await supabase
+        .from('loan_application_ibv_requests')
+        .select('id, loan_application_id, status, provider_data')
+        .eq('loan_application_id', applicationId)
+        .eq('provider', 'zumrails')
+        .maybeSingle()
+
+      if (ibvReq) {
+        ibvRequest = ibvReq
+      }
+    }
   }
 
   return {
@@ -484,45 +499,24 @@ export interface ProcessWebhookResult {
 export async function processZumrailsWebhook(
   webhook: ZumrailsWebhook
 ): Promise<ProcessWebhookResult> {
-  // Extract request ID first (primary identifier - unique per IBV session)
+  // Extract request ID (primary identifier - unique per IBV session)
   const requestId = extractRequestId(webhook)
-  
-  // Extract customer ID as fallback
-  const customerId = extractCustomerId(webhook)
 
-  if (!requestId && !customerId) {
+  if (!requestId) {
     return {
       processed: false,
       applicationId: null,
       updated: false,
-      message: 'No request ID or customer ID found in webhook payload'
+      message: 'No request ID found in webhook payload'
     }
   }
 
-  // Find matching loan application by request ID first (more specific)
-  // Fallback to customer ID if request ID not found
-  let result = { applicationId: null, application: null, ibvRequest: null } as {
-    applicationId: string | null
-    application: any | null
-    ibvRequest: any | null
-  }
-
-  if (requestId) {
-    result = await findLoanApplicationByRequestId(requestId)
-    console.log('[Zumrails Webhook] Search by request ID', {
-      requestId,
-      found: !!result.applicationId
-    })
-  }
-
-  // Fallback to customer ID if request ID didn't find a match
-  if (!result.applicationId && customerId) {
-    result = await findLoanApplicationByCustomerId(customerId)
-    console.log('[Zumrails Webhook] Search by customer ID (fallback)', {
-      customerId,
-      found: !!result.applicationId
-    })
-  }
+  // Find matching loan application by request ID only
+  const result = await findLoanApplicationByRequestId(requestId)
+  console.log('[Zumrails Webhook] Search by request ID', {
+    requestId,
+    found: !!result.applicationId
+  })
 
   const { applicationId, application, ibvRequest } = result
 
@@ -531,7 +525,7 @@ export async function processZumrailsWebhook(
       processed: false,
       applicationId: null,
       updated: false,
-      message: `No matching application found for customer ID: ${customerId}`
+      message: `No matching application found for request ID: ${requestId}`
     }
   }
 
