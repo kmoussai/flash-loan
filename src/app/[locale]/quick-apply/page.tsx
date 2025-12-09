@@ -6,10 +6,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import {
   restoreInveriteConnection,
-  addInveriteListener,
-  persistInveriteConnection,
   type InveriteConnection
 } from '@/src/lib/ibv/inverite'
+import type { ZumrailsConnection } from '@/src/lib/ibv/zumrails'
 import {
   createIbvProviderData,
   determineIbvStatus
@@ -97,8 +96,12 @@ export default function MicroLoanApplicationPage() {
   >(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
   const [isPrefilling, setIsPrefilling] = useState(false)
-  const [serverIbvStartUrl, setServerIbvStartUrl] = useState<string | null>(null)
-  const [serverIbvIframeUrl, setServerIbvIframeUrl] = useState<string | null>(null)
+  const [serverIbvIframeUrl, setServerIbvIframeUrl] = useState<string | null>(
+    null
+  )
+  const [serverIbvProvider, setServerIbvProvider] = useState<string | null>(
+    null
+  )
   const verifiedFetchInFlight = useRef(false)
 
   // Development mode detection
@@ -216,46 +219,11 @@ export default function MicroLoanApplicationPage() {
       setInveriteConnection(restored)
       setIbvVerified(true)
       setIbvSubmissionOverride(null)
+      if (restored.requestGuid) {
+        setInveriteRequestGuid(restored.requestGuid)
+      }
     }
   }, [])
-
-  // Inverite event listener
-  useEffect(() => {
-    if (currentStep !== 5) return
-
-    const cleanup = addInveriteListener(true, {
-      onSuccess: connection => {
-        setInveriteConnection(connection)
-        // Store requestGuid if available
-        if (connection.requestGuid) {
-          setInveriteRequestGuid(connection.requestGuid)
-        }
-        persistInveriteConnection(connection)
-        setIbvVerified(true)
-        setIbvSubmissionOverride(null)
-        setIsVerifying(false)
-        // Don't auto-submit - let user click Submit button instead
-        // This prevents duplicate submissions if user clicks Submit at the same time
-      },
-      onError: () => {
-        setInveriteConnection(prev =>
-          prev ? { ...prev, verificationStatus: 'failed' } : null
-        )
-        setIbvVerified(false)
-        setIsVerifying(false)
-        setIbvSubmissionOverride('failed')
-        alert('Bank verification failed. Please try again.')
-      },
-      onCancel: () => {
-        setInveriteConnection(prev =>
-          prev ? { ...prev, verificationStatus: 'cancelled' } : null
-        )
-        setIsVerifying(false)
-      }
-    })
-
-    return cleanup
-  }, [currentStep])
 
   // Save form data to localStorage
   useEffect(() => {
@@ -534,13 +502,19 @@ export default function MicroLoanApplicationPage() {
       setApplicationReferenceNumber(referenceNumber)
       setApplicationId(applicationIdFromResponse)
 
-      // If server initiated IBV, set up for Step 5
-      if (ibvData && ibvData.required) {
-        setInveriteRequestGuid(ibvData.requestGuid || null)
-        setServerIbvStartUrl(ibvData.startUrl || null)
-        setServerIbvIframeUrl(ibvData.iframeUrl || null)
-        // Move to Step 5 for IBV verification
-        setCurrentStep(5)
+      // If server initiated IBV and we have an iframe URL, set up for Step 5
+      if (ibvData?.required) {
+        const iframeUrl = ibvData.iframeUrl || ibvData.startUrl
+        const provider = ibvData.provider || 'zumrails'
+        if (iframeUrl) {
+          setServerIbvIframeUrl(iframeUrl)
+          setServerIbvProvider(provider)
+          // Move to Step 5 for IBV verification
+          setCurrentStep(5)
+        } else {
+          // IBV required but no URL available, mark as submitted
+          setIsSubmitted(true)
+        }
       } else {
         // No IBV required, mark as submitted
         setIsSubmitted(true)
@@ -553,8 +527,8 @@ export default function MicroLoanApplicationPage() {
     }
   }
 
-  // Removed: Auto-submit on requestGuid - now we submit first, then show IBV
-
+  // For Zumrails: Data fetching is handled by webhook when Insights "Completed" event is received
+  // For Inverite: Still fetch from frontend after verification
   useEffect(() => {
     if (!ibvVerified) return
     if (!applicationId) return
@@ -567,44 +541,59 @@ export default function MicroLoanApplicationPage() {
       return
     }
 
-    const fetchVerifiedData = async () => {
-      verifiedFetchInFlight.current = true
-      try {
-        const fetchUrl = `/api/inverite/fetch/${encodeURIComponent(
-          inveriteRequestGuid
-        )}?application_id=${encodeURIComponent(applicationId)}`
+    const provider = serverIbvProvider || 'zumrails'
 
-        const res = await fetch(fetchUrl)
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          console.warn(
-            '[Quick Apply] Failed to fetch Inverite data after verification',
-            res.status,
-            text
-          )
-          return
-        }
-
-        setLastVerifiedSubmissionGuid(inveriteRequestGuid)
+    // Zumrails: Data fetching is handled by webhook, just mark as submitted
+    if (provider === 'zumrails') {
+      setLastVerifiedSubmissionGuid(inveriteRequestGuid)
+      if (hasSubmittedApplication && !isSubmitted) {
         setIsSubmitted(true)
-      } catch (error) {
-        console.error(
-          '[Quick Apply] Error fetching Inverite data after verification',
-          error
-        )
-      } finally {
-        verifiedFetchInFlight.current = false
       }
+      return
     }
 
-    void fetchVerifiedData()
+    // Inverite: Fetch data from frontend after verification
+    if (provider === 'inverite') {
+      const fetchVerifiedData = async () => {
+        verifiedFetchInFlight.current = true
+        try {
+          const fetchUrl = `/api/inverite/fetch/${encodeURIComponent(
+            inveriteRequestGuid
+          )}?application_id=${encodeURIComponent(applicationId)}`
+
+          const res = await fetch(fetchUrl)
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            console.warn(
+              '[Quick Apply] Failed to fetch Inverite data after verification',
+              res.status,
+              text
+            )
+            return
+          }
+
+          setLastVerifiedSubmissionGuid(inveriteRequestGuid)
+          setIsSubmitted(true)
+        } catch (error) {
+          console.error(
+            '[Quick Apply] Error fetching Inverite data after verification',
+            error
+          )
+        } finally {
+          verifiedFetchInFlight.current = false
+        }
+      }
+
+      void fetchVerifiedData()
+    }
   }, [
     ibvVerified,
     applicationId,
     inveriteRequestGuid,
     lastVerifiedSubmissionGuid,
     hasSubmittedApplication,
-    isSubmitted
+    isSubmitted,
+    serverIbvProvider
   ])
 
   const isStepValid = useCallback(() => {
@@ -844,23 +833,74 @@ export default function MicroLoanApplicationPage() {
           )}
 
           {/* Step 5: Bank Verification */}
-          {currentStep === 5 && (
+          {currentStep === 5 && serverIbvIframeUrl && (
             <Step5BankVerification
-              formData={formData}
-              ibvVerified={ibvVerified}
-              ibvStatus={inveriteConnection?.verificationStatus || null}
-              onRequestGuidReceived={requestGuid =>
-                setInveriteRequestGuid(requestGuid)
-              }
-              onSubmitWithoutVerification={status =>
-                setIbvSubmissionOverride(status)
-              }
-              onClearOverride={() => setIbvSubmissionOverride(null)}
-              hasRequestGuid={Boolean(inveriteRequestGuid)}
-              submissionOverride={ibvSubmissionOverride}
-              serverRequestGuid={inveriteRequestGuid}
-              serverStartUrl={serverIbvStartUrl}
-              serverIframeUrl={serverIbvIframeUrl}
+              iframeUrl={serverIbvIframeUrl}
+              ibvProvider={(serverIbvProvider as any) || 'zumrails'}
+              applicationId={applicationId}
+              onVerificationSuccess={({ provider, connection }) => {
+                if (provider === 'inverite') {
+                  const inveriteConn = connection as InveriteConnection
+                  setInveriteConnection(inveriteConn)
+                  if (inveriteConn.requestGuid) {
+                    setInveriteRequestGuid(inveriteConn.requestGuid)
+                  }
+                  setIbvVerified(true)
+                  setIbvSubmissionOverride(null)
+                } else if (provider === 'zumrails') {
+                  const zumrailsConn = connection as ZumrailsConnection
+                  
+                  // Update request ID and connection data in database
+                  // Store all identifiers from CONNECTIONSUCCESSFULLYCOMPLETED response:
+                  // - requestid: Primary identifier for webhook matching
+                  // - cardid: Card/connection identifier
+                  // - userid: User identifier
+                  if (applicationId && zumrailsConn.requestId) {
+                    fetch('/api/zumrails/update-request-id', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        applicationId,
+                        requestId: zumrailsConn.requestId,
+                        cardId: zumrailsConn.cardId,
+                        userId: zumrailsConn.userId
+                      })
+                    }).catch(error => {
+                      console.error('[Zumrails] Failed to update request ID:', error)
+                    })
+                  }
+                  
+                  // Store request ID for reference (legacy compatibility)
+                  if (zumrailsConn.requestId) {
+                    setInveriteRequestGuid(zumrailsConn.requestId)
+                  }
+                  
+                  setIbvVerified(true)
+                  setIbvSubmissionOverride(null)
+                }
+                setIsVerifying(false)
+                // Show success step immediately after verification success
+                // Application should already be submitted if we reached step 5
+                if (hasSubmittedApplication || applicationId) {
+                  setIsSubmitted(true)
+                }
+              }}
+              onVerificationError={() => {
+                setIbvVerified(false)
+                setIsVerifying(false)
+                setIbvSubmissionOverride('failed')
+                alert('Bank verification failed. Please try again.')
+              }}
+              onVerificationCancel={() => {
+                setIsVerifying(false)
+                // Handle connector closed - allow user to retry or go back
+                // For now, just reset verification state
+                // User can resubmit or continue with the application
+                setIbvVerified(false)
+                setIbvSubmissionOverride(null)
+                // Optionally show a message or allow retry
+                // You can customize this behavior based on requirements
+              }}
             />
           )}
 

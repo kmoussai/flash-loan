@@ -19,7 +19,7 @@ export async function GET(
       )
     }
 
-    // Check if application exists and has Inverite provider
+    // Check if application exists and has IBV provider
     const supabase = createServerSupabaseAdminClient()
     const { data: appCheck, error: checkError } = await supabase
       .from('loan_applications')
@@ -36,7 +36,8 @@ export async function GET(
     }
 
     const appCheckData = appCheck as any
-    if (appCheckData?.ibv_provider !== 'inverite') {
+    // Support both Inverite and Zumrails providers
+    if (!['inverite', 'zumrails'].includes(appCheckData?.ibv_provider)) {
       return NextResponse.json({ transactions: [], count: 0 })
     }
 

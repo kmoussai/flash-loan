@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { IBVSummary } from '../../api/inverite/fetch/[guid]/types'
 
 const PENDING_MESSAGE =
@@ -50,6 +50,7 @@ export default function IbvCard({
   const [reRequesting, setReRequesting] = useState(false)
   const [history, setHistory] = useState<IbvRequestHistory[]>([])
   const [notifyingId, setNotifyingId] = useState<string | null>(null)
+  const [currentAccountIndex, setCurrentAccountIndex] = useState(0)
 
   const load = async () => {
     try {
@@ -80,6 +81,8 @@ export default function IbvCard({
 
       setData(summaryJson)
       setHistory(historyJson.requests || [])
+      // Reset account index when data changes
+      setCurrentAccountIndex(0)
       setInfoMessage(prev => {
         const accounts = Array.isArray(summaryJson?.ibv_results?.accounts)
           ? summaryJson.ibv_results.accounts
@@ -136,52 +139,6 @@ export default function IbvCard({
     }
   }
 
-  const fetchInveriteAndRefresh = async () => {
-    const requestGuid = summary?.request_guid || data?.request_guid
-    if (!requestGuid) {
-      console.warn('[IbvCard] No request_guid available for fetch')
-      return
-    }
-    try {
-      setFetchingInveriteData(true)
-      setError(null)
-      console.log('[IbvCard] Fetching Inverite data for GUID:', requestGuid)
-      const res = await fetch(
-        `/api/inverite/fetch/${requestGuid}?application_id=${applicationId}`
-      )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to fetch Inverite data')
-      }
-      const fetchResult = await res.json()
-      if (fetchResult?.pending) {
-        setInfoMessage(fetchResult.message || PENDING_MESSAGE)
-      } else if (fetchResult?.success === false) {
-        throw new Error(
-          fetchResult.error ||
-            fetchResult.message ||
-            'Failed to fetch Inverite data'
-        )
-      } else if (fetchResult?.success === true) {
-        setInfoMessage(null)
-      }
-
-      console.log('[IbvCard] Fetch completed:', {
-        success: fetchResult.success,
-        hasIbvResults: !!fetchResult.ibv_results,
-        accountsCount: fetchResult.ibv_results?.accounts?.length || 0,
-        pending: fetchResult?.pending || false
-      })
-      // Small delay to ensure database write is complete
-      await new Promise(resolve => setTimeout(resolve, 500))
-      await load()
-    } catch (e: any) {
-      console.error('[IbvCard] Error fetching Inverite data:', e)
-      setError(e.message || 'Failed to fetch Inverite data')
-    } finally {
-      setFetchingInveriteData(false)
-    }
-  }
 
   const sendNotification = async (requestId: string) => {
     try {
@@ -279,58 +236,6 @@ export default function IbvCard({
             </div>
           </div>
           <div className='flex items-center gap-2'>
-            <button
-              onClick={fetchInveriteAndRefresh}
-              disabled={!summary?.request_guid || fetchingInveriteData}
-              className='rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50'
-              title={
-                summary?.request_guid
-                  ? 'Fetch latest IBV data'
-                  : 'No request GUID yet'
-              }
-            >
-              {fetchingInveriteData ? (
-                <span className='flex items-center gap-2'>
-                  <svg
-                    className='h-4 w-4 animate-spin'
-                    fill='none'
-                    viewBox='0 0 24 24'
-                  >
-                    <circle
-                      className='opacity-25'
-                      cx='12'
-                      cy='12'
-                      r='10'
-                      stroke='currentColor'
-                      strokeWidth='4'
-                    />
-                    <path
-                      className='opacity-75'
-                      fill='currentColor'
-                      d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-                    />
-                  </svg>
-                  Fetching...
-                </span>
-              ) : (
-                <span className='flex items-center gap-1.5'>
-                  <svg
-                    className='h-4 w-4'
-                    fill='none'
-                    stroke='currentColor'
-                    viewBox='0 0 24 24'
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
-                    />
-                  </svg>
-                  Refresh
-                </span>
-              )}
-            </button>
             <button
               onClick={async () => {
                 if (reRequesting) return
@@ -665,215 +570,99 @@ export default function IbvCard({
               </div>
             </div>
 
-            {/* Accounts Section */}
+            {/* Accounts Section - Slider */}
             <div>
               <div className='mb-4 flex items-center justify-between'>
                 <h3 className='text-base font-bold text-gray-900'>
                   Linked Accounts
                 </h3>
                 <span className='rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700'>
-                  {summary.accounts.length}{' '}
-                  {summary.accounts.length === 1 ? 'Account' : 'Accounts'}
+                  {currentAccountIndex + 1} / {summary.accounts.length}
                 </span>
               </div>
 
-              <div className='grid gap-4'>
-                {summary.accounts.map((account, index) => (
+              {/* Slider Container */}
+              <div className='relative'>
+                {/* Navigation Buttons */}
+                {summary.accounts.length > 1 && (
+                  <>
+                    <button
+                      onClick={() =>
+                        setCurrentAccountIndex(prev =>
+                          prev > 0 ? prev - 1 : summary.accounts.length - 1
+                        )
+                      }
+                      className='absolute left-0 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition-all hover:bg-gray-50 hover:shadow-xl disabled:opacity-50'
+                      aria-label='Previous account'
+                    >
+                      <svg
+                        className='h-5 w-5 text-gray-700'
+                        fill='none'
+                        stroke='currentColor'
+                        viewBox='0 0 24 24'
+                      >
+                        <path
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          strokeWidth={2}
+                          d='M15 19l-7-7 7-7'
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setCurrentAccountIndex(prev =>
+                          prev < summary.accounts.length - 1 ? prev + 1 : 0
+                        )
+                      }
+                      className='absolute right-0 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-lg transition-all hover:bg-gray-50 hover:shadow-xl disabled:opacity-50'
+                      aria-label='Next account'
+                    >
+                      <svg
+                        className='h-5 w-5 text-gray-700'
+                        fill='none'
+                        stroke='currentColor'
+                        viewBox='0 0 24 24'
+                      >
+                        <path
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          strokeWidth={2}
+                          d='M9 5l7 7-7 7'
+                        />
+                      </svg>
+                    </button>
+                  </>
+                )}
+
+                {/* Account Cards Slider */}
+                <div className='relative overflow-hidden'>
                   <div
-                    key={index}
-                    onClick={() => onViewTransactions?.(index)}
-                    className={`group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition-all duration-300 ${
-                      onViewTransactions
-                        ? 'cursor-pointer hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md'
-                        : ''
-                    }`}
+                    className='flex transition-transform duration-300 ease-in-out'
+                    style={{
+                      transform: `translateX(-${currentAccountIndex * 100}%)`
+                    }}
                   >
-                    {/* Subtle gradient accent */}
-                    <div className='absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500'></div>
+                    {summary.accounts.map((account, index) => (
+                      <div key={index} className='w-full flex-shrink-0 px-2'>
+                        <div
+                          onClick={() => onViewTransactions?.(index)}
+                          className={`group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition-all duration-300 ${
+                            onViewTransactions
+                              ? 'cursor-pointer hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md'
+                              : ''
+                          }`}
+                        >
+                          {/* Subtle gradient accent */}
+                          <div className='absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500'></div>
 
-                    <div className='flex items-start justify-between gap-4'>
-                      {/* Left: Bank Info */}
-                      <div className='flex-1'>
-                        <div className='mb-3 flex items-center gap-3'>
-                          <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100'>
-                            <svg
-                              className='h-6 w-6 text-indigo-600'
-                              fill='none'
-                              stroke='currentColor'
-                              viewBox='0 0 24 24'
-                            >
-                              <path
-                                strokeLinecap='round'
-                                strokeLinejoin='round'
-                                strokeWidth={2}
-                                d='M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'
-                              />
-                            </svg>
-                          </div>
-                          <div>
-                            <h4 className='text-lg font-bold text-gray-900'>
-                              {account.bank_name ||
-                                account.institution ||
-                                'Unknown Bank'}
-                            </h4>
-                            <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500'>
-                              <span className='inline-flex items-center gap-1'>
-                                <span className='font-medium'>
-                                  {account.type || 'N/A'}
-                                </span>
-                              </span>
-                              {account.number && (
-                                <>
-                                  <span className='text-gray-300'>•</span>
-                                  <span className='font-mono'>
-                                    {account.number}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Account Details Grid */}
-                        <div className='mt-4 grid grid-cols-2 gap-3'>
-                          {account.transit && (
-                            <div>
-                              <p className='text-xs font-medium text-gray-500'>
-                                Transit
-                              </p>
-                              <p className='mt-0.5 text-sm font-semibold text-gray-900'>
-                                {account.transit}
-                              </p>
-                            </div>
-                          )}
-                          {account.routing_code && (
-                            <div>
-                              <p className='text-xs font-medium text-gray-500'>
-                                Routing
-                              </p>
-                              <p className='mt-0.5 font-mono text-sm font-semibold text-gray-900'>
-                                {account.routing_code}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: Transaction Count & Stats */}
-                      <div className='flex flex-col items-end gap-4'>
-                        {/* Transaction Count Badge */}
-                        <div className='text-right'>
-                          <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                            Transactions
-                          </p>
-                          <div className='inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 px-4 py-2 shadow-md'>
-                            <svg
-                              className='h-4 w-4 text-white'
-                              fill='none'
-                              stroke='currentColor'
-                              viewBox='0 0 24 24'
-                            >
-                              <path
-                                strokeLinecap='round'
-                                strokeLinejoin='round'
-                                strokeWidth={2}
-                                d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'
-                              />
-                            </svg>
-                            <span className='text-xl font-bold text-white'>
-                              {account.total_transactions != null
-                                ? account.total_transactions
-                                : 'N/A'}
-                            </span>
-                          </div>
-                          {onViewTransactions && (
-                            <p className='mt-2 text-xs font-medium text-indigo-600 group-hover:text-indigo-700'>
-                              Click to view →
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Statistics Row - Prominent */}
-                    <div className='mt-6 grid grid-cols-2 gap-4 border-t-2 border-gray-200 pt-5'>
-                      <div className='rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-4 shadow-lg'>
-                        <div className='mb-2 flex items-center gap-2'>
-                          <svg
-                            className='h-4 w-4 text-white'
-                            fill='none'
-                            stroke='currentColor'
-                            viewBox='0 0 24 24'
-                          >
-                            <path
-                              strokeLinecap='round'
-                              strokeLinejoin='round'
-                              strokeWidth={2}
-                              d='M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
-                            />
-                          </svg>
-                          <p className='text-xs font-semibold uppercase tracking-wide text-white/90'>
-                            Income Net
-                          </p>
-                        </div>
-                        <p className='text-2xl font-bold text-white'>
-                          {account.statistics?.income_net != null
-                            ? formatCurrency(account.statistics.income_net)
-                            : 'N/A'}
-                        </p>
-                      </div>
-                      <div className='rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 p-4 shadow-lg'>
-                        <div className='mb-2 flex items-center gap-2'>
-                          <svg
-                            className='h-4 w-4 text-white'
-                            fill='none'
-                            stroke='currentColor'
-                            viewBox='0 0 24 24'
-                          >
-                            <path
-                              strokeLinecap='round'
-                              strokeLinejoin='round'
-                              strokeWidth={2}
-                              d='M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'
-                            />
-                          </svg>
-                          <p className='text-xs font-semibold uppercase tracking-wide text-white/90'>
-                            NSF (All Time)
-                          </p>
-                        </div>
-                        <p className='text-2xl font-bold text-white'>
-                          {account.statistics?.nsf?.all_time != null
-                            ? account.statistics.nsf?.all_time
-                            : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* PDF Statements */}
-                    {account.bank_pdf_statements &&
-                      account.bank_pdf_statements.length > 0 && (
-                        <div className='mt-4 border-t border-gray-100 pt-4'>
-                          <div className='mb-2 flex items-center justify-between'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                              Bank Statements
-                            </p>
-                            <span className='rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700'>
-                              {account.bank_pdf_statements.length}
-                            </span>
-                          </div>
-                          <div className='flex flex-wrap gap-2'>
-                            {account.bank_pdf_statements.map(
-                              (pdf, pdfIndex) => (
-                                <a
-                                  key={pdfIndex}
-                                  href={pdf}
-                                  target='_blank'
-                                  rel='noopener noreferrer'
-                                  onClick={e => e.stopPropagation()}
-                                  className='inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700'
-                                >
+                          <div className='flex items-start justify-between gap-4'>
+                            {/* Left: Bank Info */}
+                            <div className='flex-1'>
+                              <div className='mb-3 flex items-center gap-3'>
+                                <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100'>
                                   <svg
-                                    className='h-3.5 w-3.5'
+                                    className='h-6 w-6 text-indigo-600'
                                     fill='none'
                                     stroke='currentColor'
                                     viewBox='0 0 24 24'
@@ -882,18 +671,217 @@ export default function IbvCard({
                                       strokeLinecap='round'
                                       strokeLinejoin='round'
                                       strokeWidth={2}
-                                      d='M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z'
+                                      d='M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'
                                     />
                                   </svg>
-                                  PDF {pdfIndex + 1}
-                                </a>
-                              )
-                            )}
+                                </div>
+                                <div>
+                                  <h4 className='text-lg font-bold text-gray-900'>
+                                    {account.bank_name ||
+                                      account.institution ||
+                                      'Unknown Bank'}
+                                  </h4>
+                                  <div className='mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500'>
+                                    <span className='inline-flex items-center gap-1'>
+                                      <span className='font-medium'>
+                                        {account.type || 'N/A'}
+                                      </span>
+                                    </span>
+                                    {account.number && (
+                                      <>
+                                        <span className='text-gray-300'>•</span>
+                                        <span className='font-mono'>
+                                          {account.number}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Account Details Grid */}
+                              <div className='mt-4 grid grid-cols-2 gap-3'>
+                                {account.transit && (
+                                  <div>
+                                    <p className='text-xs font-medium text-gray-500'>
+                                      Transit
+                                    </p>
+                                    <p className='mt-0.5 text-sm font-semibold text-gray-900'>
+                                      {account.transit}
+                                    </p>
+                                  </div>
+                                )}
+                                {account.routing_code && (
+                                  <div>
+                                    <p className='text-xs font-medium text-gray-500'>
+                                      Routing
+                                    </p>
+                                    <p className='mt-0.5 font-mono text-sm font-semibold text-gray-900'>
+                                      {account.routing_code}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right: Transaction Count & Stats */}
+                            <div className='flex flex-col items-end gap-4'>
+                              {/* Transaction Count Badge */}
+                              <div className='text-right'>
+                                <p className='mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                                  Transactions
+                                </p>
+                                <div className='inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 px-4 py-2 shadow-md'>
+                                  <svg
+                                    className='h-4 w-4 text-white'
+                                    fill='none'
+                                    stroke='currentColor'
+                                    viewBox='0 0 24 24'
+                                  >
+                                    <path
+                                      strokeLinecap='round'
+                                      strokeLinejoin='round'
+                                      strokeWidth={2}
+                                      d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'
+                                    />
+                                  </svg>
+                                  <span className='text-xl font-bold text-white'>
+                                    {account.total_transactions != null
+                                      ? account.total_transactions
+                                      : 'N/A'}
+                                  </span>
+                                </div>
+                                {onViewTransactions && (
+                                  <p className='mt-2 text-xs font-medium text-indigo-600 group-hover:text-indigo-700'>
+                                    Click to view →
+                                  </p>
+                                )}
+                              </div>
+                            </div>
                           </div>
+
+                          {/* Statistics Row - Prominent */}
+                          <div className='mt-6 grid grid-cols-2 gap-4 border-t-2 border-gray-200 pt-5'>
+                            <div className='rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-4 shadow-lg'>
+                              <div className='mb-2 flex items-center gap-2'>
+                                <svg
+                                  className='h-4 w-4 text-white'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  viewBox='0 0 24 24'
+                                >
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                                  />
+                                </svg>
+                                <p className='text-xs font-semibold uppercase tracking-wide text-white/90'>
+                                  Income Net
+                                </p>
+                              </div>
+                              <p className='text-2xl font-bold text-white'>
+                                {account.statistics?.income_net != null
+                                  ? formatCurrency(
+                                      account.statistics.income_net
+                                    )
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                            <div className='rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 p-4 shadow-lg'>
+                              <div className='mb-2 flex items-center gap-2'>
+                                <svg
+                                  className='h-4 w-4 text-white'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  viewBox='0 0 24 24'
+                                >
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'
+                                  />
+                                </svg>
+                                <p className='text-xs font-semibold uppercase tracking-wide text-white/90'>
+                                  NSF (All Time)
+                                </p>
+                              </div>
+                              <p className='text-2xl font-bold text-white'>
+                                {account.statistics?.nsf?.all_time != null
+                                  ? account.statistics.nsf?.all_time
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* PDF Statements */}
+                          {account.bank_pdf_statements &&
+                            account.bank_pdf_statements.length > 0 && (
+                              <div className='mt-4 border-t border-gray-100 pt-4'>
+                                <div className='mb-2 flex items-center justify-between'>
+                                  <p className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                                    Bank Statements
+                                  </p>
+                                  <span className='rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700'>
+                                    {account.bank_pdf_statements.length}
+                                  </span>
+                                </div>
+                                <div className='flex flex-wrap gap-2'>
+                                  {account.bank_pdf_statements.map(
+                                    (pdf, pdfIndex) => (
+                                      <a
+                                        key={pdfIndex}
+                                        href={pdf}
+                                        target='_blank'
+                                        rel='noopener noreferrer'
+                                        onClick={e => e.stopPropagation()}
+                                        className='inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700'
+                                      >
+                                        <svg
+                                          className='h-3.5 w-3.5'
+                                          fill='none'
+                                          stroke='currentColor'
+                                          viewBox='0 0 24 24'
+                                        >
+                                          <path
+                                            strokeLinecap='round'
+                                            strokeLinejoin='round'
+                                            strokeWidth={2}
+                                            d='M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z'
+                                          />
+                                        </svg>
+                                        PDF {pdfIndex + 1}
+                                      </a>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
                         </div>
-                      )}
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                {/* Dot Indicators */}
+                {summary.accounts.length > 1 && (
+                  <div className='mt-4 flex justify-center gap-2'>
+                    {summary.accounts.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentAccountIndex(index)}
+                        className={`h-2 rounded-full transition-all ${
+                          index === currentAccountIndex
+                            ? 'w-8 bg-indigo-600'
+                            : 'w-2 bg-gray-300 hover:bg-gray-400'
+                        }`}
+                        aria-label={`Go to account ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

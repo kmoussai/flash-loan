@@ -34,6 +34,28 @@ export function createIbvProviderData(
         access_token: data.accessToken || data.access_token
       }
 
+    case 'zumrails':
+      return {
+        // Primary identifier for webhook matching
+        request_id: data.requestId || data.request_id || data.requestid || data.token,
+        // Other identifiers from CONNECTIONSUCCESSFULLYCOMPLETED response
+        card_id: data.cardId || data.card_id || data.cardid,
+        user_id: data.userId || data.user_id || data.userid,
+        // Legacy fields
+        customer_id: data.customerId || data.customer_id || data.userId || data.user_id,
+        token: data.token || data.requestId || data.request_id || data.requestid,
+        refresh_token: data.refreshToken || data.refresh_token,
+        token_expires_at: data.tokenExpiresAt || data.token_expires_at,
+        connect_token: data.connectToken || data.connect_token || data.cardId || data.card_id || data.cardid,
+        connect_token_expires_at: data.connectTokenExpiresAt || data.connect_token_expires_at,
+        connect_token_type: data.connectTokenType || data.connect_token_type,
+        configuration: data.configuration,
+        connected_at: data.connectedAt || data.connected_at || new Date().toISOString(),
+        verified_at: data.verifiedAt || data.verified_at,
+        account_info: data.accountInfo || data.account_info,
+        raw_response: data.rawResponse || data.raw_response
+      }
+
     case 'other':
     default:
       // Store as-is for other providers
@@ -56,6 +78,8 @@ export function getProviderSpecificData<T = any>(
     case 'inverite':
       return providerData as T
     case 'plaid':
+      return providerData as T
+    case 'zumrails':
       return providerData as T
     case 'other':
     default:
@@ -109,6 +133,12 @@ export function isIbvDataComplete(
     case 'plaid':
       const plaidData = providerData as any
       return !!plaidData.item_id
+
+    case 'zumrails':
+      const zumrailsData = providerData as any
+      // Require connect_token for verification to be considered complete
+      // Customer ID and token are required for authentication
+      return !!zumrailsData.connect_token && !!zumrailsData.customer_id
 
     default:
       return true // Assume complete for other providers

@@ -232,13 +232,12 @@ export async function GET(
 
     // Check if Inverite data has already been fetched by checking loan_application_ibv_requests
     // If status is not pending/processing, data has already been fetched
+    // Query using (loan_application_id, provider) which is unique - then verify request_guid matches
     const { data: ibvRequest, error: ibvRequestError } = await (supabase as any)
       .from('loan_application_ibv_requests')
       .select('id, status, results, provider_data, completed_at')
-      .eq('request_guid', requestGuid)
       .eq('loan_application_id', applicationId)
-      .order('requested_at', { ascending: false })
-      .limit(1)
+      .eq('provider', 'inverite')
       .maybeSingle()
 
     const pendingStatuses = new Set(['pending', 'processing'])
@@ -355,7 +354,8 @@ export async function GET(
             results: null,
             completed_at: null
           })
-          .eq('request_guid', requestGuid)
+          .eq('loan_application_id', applicationId)
+          .eq('provider', 'inverite')
       } catch (historyError) {
         console.warn(
           '[Inverite Fetch] Failed to update IBV history row for pending status',
@@ -506,7 +506,8 @@ export async function GET(
           provider_data: updatedProviderData,
           completed_at: new Date().toISOString()
         })
-        .eq('request_guid', requestGuid)
+          .eq('loan_application_id', applicationId)
+          .eq('provider', 'inverite')
     } catch (historyError) {
       console.warn(
         '[Inverite Fetch] Failed to update IBV history row',
