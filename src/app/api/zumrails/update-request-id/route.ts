@@ -1,11 +1,14 @@
 // Route: POST /api/zumrails/update-request-id
 // Updates the request ID and connection data in provider_data after IBV verification completes
 // This allows webhooks to match by request ID (primary identifier)
+// Also attempts to fetch data from Zumrails API immediately
 
 import { NextRequest, NextResponse } from 'next/server'
 import { updateIbvRequestId } from '@/src/lib/ibv/zumrails-webhook'
 import { createIbvProviderData } from '@/src/lib/supabase/ibv-helpers'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
+import { fetchZumrailsDataByRequestId } from '@/src/lib/ibv/zumrails-server'
+import { transformZumrailsToIBVSummary } from '@/src/lib/ibv/zumrails-transform'
 
 export async function POST(request: NextRequest) {
   try {
@@ -89,9 +92,77 @@ export async function POST(request: NextRequest) {
       userId
     })
 
+    // Try to fetch data from Zumrails API immediately
+    // This ensures data is available when webhook arrives
+    let fetchedData: any = null
+    let ibvSummary: any = null
+    let fetchError: any = null
+
+    try {
+      console.log('[Zumrails] Attempting to fetch data from Zumrails API', {
+        requestId,
+        applicationId
+      })
+
+      fetchedData = await fetchZumrailsDataByRequestId(requestId)
+      
+      if (fetchedData) {
+        // Transform Zumrails response to IBVSummary format
+        ibvSummary = transformZumrailsToIBVSummary(fetchedData, requestId)
+
+        // Update provider_data with fetched information
+        const finalProviderData = createIbvProviderData('zumrails', {
+          ...updatedProviderData,
+          account_info: fetchedData,
+          fetched_at: new Date().toISOString()
+        })
+
+        // Update loan application with fetched data
+        await (supabase.from('loan_applications') as any)
+          .update({
+            ibv_status: 'verified',
+            ibv_provider_data: finalProviderData,
+            ibv_results: ibvSummary, // Store transformed summary
+            ibv_verified_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', applicationId)
+
+        // Also update IBV request if it exists
+        if (ibvRequest && (ibvRequest as any).id) {
+          await (supabase.from('loan_application_ibv_requests') as any)
+            .update({
+              provider_data: finalProviderData,
+              status: 'verified' as any,
+              results: ibvSummary, // Store transformed summary
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', (ibvRequest as any).id)
+        }
+
+        console.log('[Zumrails] Successfully fetched and stored data', {
+          applicationId,
+          requestId,
+          hasAccounts: ibvSummary?.accounts?.length || 0
+        })
+      }
+    } catch (error: any) {
+      // Don't fail the request if fetch fails - data might not be ready yet
+      // Webhook will handle fetching when data becomes available
+      fetchError = error
+      console.warn('[Zumrails] Failed to fetch data immediately (this is OK, webhook will retry)', {
+        requestId,
+        applicationId,
+        error: error?.message || error
+      })
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Request ID and connection data updated successfully'
+      message: 'Request ID and connection data updated successfully',
+      dataFetched: !!fetchedData,
+      fetchError: fetchError ? fetchError.message : null
     })
   } catch (error: any) {
     console.error('[Zumrails Update Request ID] Error:', error)

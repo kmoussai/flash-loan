@@ -81,46 +81,15 @@ export async function POST(request: NextRequest) {
     })
 
     // Process webhook using generic helper
-    const result = await processZumrailsWebhook(body)
-
-    console.log('[Zumrails Webhook] Processing result', {
-      processed: result.processed,
-      applicationId: result.applicationId,
-      updated: result.updated,
-      shouldRetry: result.shouldRetry,
-      message: result.message
+    // Process in background - don't block response
+    processZumrailsWebhook(body).catch((error) => {
+      console.error('[Zumrails Webhook] Error processing webhook:', error)
     })
 
-    // If this is a timing issue (request ID not yet stored), return 503 Service Unavailable
-    // This tells Zumrails to retry the webhook later
+    // Return 200 immediately to acknowledge receipt
     // Per documentation: https://docs.zumrails.com/api-reference/webhooks#retry-in-case-of-failure
-    // Non-200 responses will trigger retries (3x in sandbox, 5x in production)
-    if (result.shouldRetry) {
-      console.log('[Zumrails Webhook] Returning 503 to trigger retry', {
-        requestId: result.applicationId,
-        message: result.message
-      })
-      return NextResponse.json(
-        {
-          received: true,
-          processed: false,
-          updated: false,
-          applicationId: result.applicationId,
-          message: result.message,
-          retry: true
-        },
-        { status: 503 } // Service Unavailable - triggers retry
-      )
-    }
-
-    // Successfully processed or not applicable - return 200
-    return NextResponse.json({
-      received: true,
-      processed: result.processed,
-      updated: result.updated,
-      applicationId: result.applicationId,
-      message: result.message
-    })
+    // 200 response indicates successful receipt - Zumrails won't retry
+    return NextResponse.json({ received: true }, { status: 200 })
   } catch (error: any) {
     console.error('[Zumrails Webhook] Error processing webhook:', error)
 
@@ -128,20 +97,9 @@ export async function POST(request: NextRequest) {
     // In production, you might want to log to an error tracking service
     // and only return 200 for transient errors
 
-    // For parsing errors or other critical issues, you might return 400
-    // to indicate the webhook shouldn't be retried
-    if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { error: 'Invalid JSON payload', received: false },
-        { status: 400 }
-      )
-    }
-
-    // Return 200 for other errors to prevent Zumrails retries
-    // Log to error tracking service in production
-    return NextResponse.json(
-      { error: 'Internal error', received: true },
-      { status: 200 }
-    )
+    // Return 200 for all errors to acknowledge receipt
+    // Log errors but don't trigger retries from Zumrails
+    // Per documentation: 200 response means webhook was received
+    return NextResponse.json({ received: true }, { status: 200 })
   }
 }
