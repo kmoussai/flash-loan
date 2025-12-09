@@ -156,46 +156,22 @@ export async function findLoanApplicationByRequestId(
   let applicationId: string | null = null
 
   // Query using JSONB contains filter for request_id
-  const { data: ibvRequestByRequestId, error: ibvError1 } = await (supabase as any)
+  const { data: ibvRequestByRequestId, error: ibvError1 } = await (
+    supabase as any
+  )
     .from('loan_application_ibv_requests')
     .select('id, loan_application_id, status, provider_data')
     .eq('provider', 'zumrails')
-    .eq('provider_data->>request_id', requestId);
+    .eq('provider_data->>request_id', requestId)
+    .maybeSingle()
+    console.log('[Zumrails Webhook] IBV request by request ID', {
+      ibvRequestByRequestId,
+      ibvError1
+    })
 
   if (!ibvError1 && ibvRequestByRequestId) {
     ibvRequest = ibvRequestByRequestId
     applicationId = ibvRequestByRequestId.loan_application_id
-  }
-
-
-
-  // If not found in IBV requests, search loan_applications using JSONB filter
-  if (!applicationId) {
-    // Try request_id in ibv_provider_data
-    const { data: appByRequestId, error: appError1 } = await (supabase as any)
-      .from('loan_applications')
-      .select('id, ibv_provider_data, ibv_status')
-      .eq('ibv_provider', 'zumrails')
-      .contains('ibv_provider_data', { request_id: requestId })
-      .maybeSingle()
-
-    if (!appError1 && appByRequestId) {
-      applicationId = appByRequestId.id
-    }
-
-    // Try requestId (camelCase)
-    if (!applicationId) {
-      const { data: appByRequestIdCamel, error: appError2 } = await (supabase as any)
-        .from('loan_applications')
-        .select('id, ibv_provider_data, ibv_status')
-        .eq('ibv_provider', 'zumrails')
-        .contains('ibv_provider_data', { requestId: requestId })
-        .maybeSingle()
-
-      if (!appError2 && appByRequestIdCamel) {
-        applicationId = appByRequestIdCamel.id
-      }
-    }
   }
 
   // Get full application data if we have an ID
@@ -234,84 +210,6 @@ export async function findLoanApplicationByRequestId(
 }
 
 /**
- * Find loan application by customer ID (fallback method)
- */
-export async function findLoanApplicationByCustomerId(
-  customerId: string
-): Promise<{
-  applicationId: string | null
-  application: any | null
-  ibvRequest: any | null
-}> {
-  const supabase = createServerSupabaseAdminClient()
-
-  // First, try to find in IBV requests table
-  const { data: ibvRequests, error: ibvError } = await supabase
-    .from('loan_application_ibv_requests')
-    .select('id, loan_application_id, status, provider_data')
-    .eq('provider', 'zumrails')
-    .not('provider_data', 'is', null)
-
-  let ibvRequest: any = null
-  let applicationId: string | null = null
-
-  if (!ibvError && ibvRequests) {
-    ibvRequest = ibvRequests.find((req: any) => {
-      const providerData = req.provider_data as any
-      return (
-        providerData?.customerId === customerId ||
-        providerData?.customer_id === customerId ||
-        providerData?.userid === customerId
-      )
-    })
-
-    if (ibvRequest) {
-      applicationId = ibvRequest.loan_application_id
-    }
-  }
-
-  // If not found in IBV requests, search loan_applications
-  if (!applicationId) {
-    const { data: applications } = await supabase
-      .from('loan_applications')
-      .select('id, ibv_provider_data, ibv_status')
-      .eq('ibv_provider', 'zumrails')
-      .not('ibv_provider_data', 'is', null)
-
-    const matching = (applications as any[])?.find((app: any) => {
-      const providerData = app.ibv_provider_data as any
-      return (
-        providerData?.customerId === customerId ||
-        providerData?.customer_id === customerId ||
-        providerData?.userid === customerId
-      )
-    })
-
-    if (matching) {
-      applicationId = matching.id
-    }
-  }
-
-  // Get full application data if we have an ID
-  let application: any = null
-  if (applicationId) {
-    const { data: app } = await supabase
-      .from('loan_applications')
-      .select('id, ibv_provider_data, ibv_status')
-      .eq('id', applicationId)
-      .single()
-
-    application = app
-  }
-
-  return {
-    applicationId,
-    application,
-    ibvRequest
-  }
-}
-
-/**
  * Update IBV request/provider data with request ID after IBV completes
  * This should be called when IBV verification completes to store the request ID
  * The request ID is used to match webhook events (especially Insights webhooks)
@@ -339,8 +237,9 @@ export async function updateIbvRequestId(
       return false
     }
 
-    const currentProviderData = ((application as any).ibv_provider_data as any) || {}
-    
+    const currentProviderData =
+      ((application as any).ibv_provider_data as any) || {}
+
     // Update provider_data with request_id
     const updatedProviderData = {
       ...currentProviderData,
@@ -366,7 +265,8 @@ export async function updateIbvRequestId(
       .maybeSingle()
 
     if (!ibvError && ibvRequest && (ibvRequest as any).id) {
-      const currentIbvProviderData = ((ibvRequest as any).provider_data as any) || {}
+      const currentIbvProviderData =
+        ((ibvRequest as any).provider_data as any) || {}
       const updatedIbvProviderData = {
         ...currentIbvProviderData,
         request_id: requestId
@@ -621,10 +521,13 @@ export async function processZumrailsWebhook(
             .eq('id', ibvRequest.id)
         }
 
-        console.log('[Zumrails Webhook] Successfully fetched and updated data', {
-          applicationId,
-          requestId
-        })
+        console.log(
+          '[Zumrails Webhook] Successfully fetched and updated data',
+          {
+            applicationId,
+            requestId
+          }
+        )
       } catch (error: any) {
         console.error(
           '[Zumrails Webhook] Failed to fetch data from Zumrails API',
