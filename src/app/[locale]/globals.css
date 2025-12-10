@@ -172,6 +172,36 @@
   }
 }
 
+@layer utilities {
+  /* Consistent Section Spacing */
+  .section-padding {
+    @apply py-12 md:py-16;
+  }
+  
+  /* Consistent Content Spacing */
+  .content-spacing {
+    @apply space-y-6;
+  }
+  
+  /* Consistent Margin Bottom */
+  .mb-section {
+    @apply mb-8 md:mb-12;
+  }
+  
+  .mb-content {
+    @apply mb-4 md:mb-6;
+  }
+  
+  /* Consistent Gap */
+  .gap-section {
+    @apply gap-6 md:gap-8;
+  }
+  
+  .gap-content {
+    @apply gap-4;
+  }
+}
+
 /* Fix z-index for Radix Select portal to appear above modals */
 [data-radix-popper-content-wrapper] {
   z-index: 9999 !important;

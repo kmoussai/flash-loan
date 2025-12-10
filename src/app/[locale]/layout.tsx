@@ -8,6 +8,7 @@ import {
 import { Inter, Rubik, Space_Grotesk } from 'next/font/google'
 import NextTopLoader from 'nextjs-toploader'
 import ConditionalHeader from './components/ConditionalHeader'
+import ConditionalFooter from './components/ConditionalFooter'
 import ConditionalWrapper from './components/ConditionalWrapper'
 import AuthCallbackHandler from './components/AuthCallbackHandler'
 import './globals.css'
@@ -92,6 +93,7 @@ export default function RootLayout({
             <main>
               <ConditionalWrapper>{children}</ConditionalWrapper>
             </main>
+            <ConditionalFooter locale={locale} />
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>
