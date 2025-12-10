@@ -1,5 +1,5 @@
 import { headers } from 'next/headers'
-import { getTranslations } from 'next-intl/server'
+import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { redirect } from 'next/navigation'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 
@@ -10,9 +10,10 @@ export default async function InveriteCallbackPage({
   searchParams: { [key: string]: string | string[] | undefined }
   params: { locale: string }
 }) {
+  const locale = params.locale
+  setRequestLocale(locale)
   const t = await getTranslations('')
   const headersList = await headers()
-  const locale = params.locale
 
   // Extract query parameters
   const applicationId =
