@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server'
+import { getTranslations, setRequestLocale } from 'next-intl/server'
 import type { Metadata } from 'next'
 import { Link } from '@/src/navigation'
 import { locales } from '@/src/i18n'
@@ -12,6 +12,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string }
 }): Promise<Metadata> {
+  setRequestLocale(locale)
   const t = await getTranslations()
   
   return {
@@ -31,6 +32,7 @@ export default async function PrivacyPolicyPage({
 }: {
   params: { locale: string }
 }) {
+  setRequestLocale(locale)
   const t = await getTranslations()
 
   return (

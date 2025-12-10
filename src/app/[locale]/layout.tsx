@@ -25,7 +25,23 @@ const space_grotesk = Space_Grotesk({
   subsets: ['latin'],
   variable: '--font-space-grotesk'
 })
+// Get the base URL for metadata
+const getMetadataBase = (): string => {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`
+  }
+  // In development, use localhost
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000'
+  }
+  return 'https://prod.flash-loan.ca'
+}
+
 export const metadata: Metadata = {
+  metadataBase: new URL(getMetadataBase()),
   title: 'Flash-Loan - Personal Loans & Micro-Credits',
   description: 'Get fast and reliable personal loans and micro-credits in Canada. No credit check required. Apply online today!',
   icons: {

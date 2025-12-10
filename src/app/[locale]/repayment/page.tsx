@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server'
+import { getTranslations, setRequestLocale } from 'next-intl/server'
 import type { Metadata } from 'next'
 import { Link } from '@/src/navigation'
 import Button from '../components/Button'
@@ -13,6 +13,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string }
 }): Promise<Metadata> {
+  setRequestLocale(locale)
   const t = await getTranslations()
   
   return {
@@ -32,6 +33,7 @@ export default async function Repayment({
 }: {
   params: { locale: string }
 }) {
+  setRequestLocale(locale)
   const t = await getTranslations()
 
   return (
