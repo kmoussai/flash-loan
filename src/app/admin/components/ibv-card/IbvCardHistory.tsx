@@ -16,13 +16,13 @@ export default function IbvCardHistory({
   if (history.length === 0) return null
 
   return (
-    <div className='border-t border-gray-100 bg-gray-50 px-4 py-3'>
-      <h3 className='text-xs font-semibold text-gray-700'>Verification History</h3>
-      <ul className='mt-3 space-y-2'>
+    <div className='flex-shrink-0 border-t border-gray-100 bg-gray-50 px-3 py-2'>
+      <h3 className='text-[10px] font-semibold text-gray-700'>Verification History</h3>
+      <ul className='mt-2 space-y-1.5 max-h-48 overflow-y-auto'>
         {history.map(entry => (
           <li
             key={entry.id}
-            className='rounded-lg border border-gray-200 bg-white p-3 shadow-sm'
+            className='rounded-lg border border-gray-200 bg-white p-2 shadow-sm'
           >
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <div>

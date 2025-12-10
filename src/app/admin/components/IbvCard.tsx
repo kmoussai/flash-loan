@@ -161,9 +161,10 @@ export default function IbvCard({
 
 
   return (
-    <div className='overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
+    <div className='flex h-full flex-col rounded-lg border border-gray-200 bg-white shadow-sm'>
       <IbvCardHeader
         reRequesting={reRequesting}
+        ibvStatus={data?.ibv_status || null}
         onReRequest={async () => {
           if (reRequesting) return
           await initiateNewRequest()
@@ -172,30 +173,31 @@ export default function IbvCard({
 
       {infoMessage && !error && <IbvCardInfoMessage message={infoMessage} />}
 
-      {loading ? (
-        <IbvCardLoading />
-      ) : error ? (
-        <IbvCardError error={error} />
-      ) : summary && summary.accounts && summary.accounts.length > 0 ? (
-        <div className='p-4'>
-          <div className='space-y-4'>
-            <IbvCardStatistics accounts={summary.accounts} />
-            <IbvCardStatusCards
-              ibvStatus={data?.ibv_status || null}
-              ibvProvider={data?.ibv_provider || null}
-              requestGuid={summary.request_guid}
-            />
-            <IbvCardAccounts
-              accounts={summary.accounts}
-              onViewTransactions={onViewTransactions}
-            />
+      <div className=''>
+        {loading ? (
+          <IbvCardLoading />
+        ) : error ? (
+          <IbvCardError error={error} />
+        ) : summary && summary.accounts && summary.accounts.length > 0 ? (
+          <div className='p-3'>
+            <div className='space-y-2.5'>
+              <IbvCardStatistics accounts={summary.accounts} />
+              {/* <IbvCardStatusCards
+                ibvProvider={data?.ibv_provider || null}
+                requestGuid={summary.request_guid}
+              /> */}
+              <IbvCardAccounts
+                accounts={summary.accounts}
+                onViewTransactions={onViewTransactions}
+              />
+            </div>
           </div>
-        </div>
-      ) : (
-        <IbvCardEmpty summary={summary} />
-      )}
+        ) : (
+          <IbvCardEmpty summary={summary || null} />
+        )}
 
-      {summary?.ibvDocUrl && <IbvCardDocument ibvDocUrl={summary.ibvDocUrl} />}
+        {summary?.ibvDocUrl && <IbvCardDocument ibvDocUrl={summary.ibvDocUrl} />}
+      </div>
 
       <IbvCardHistory
         history={history}

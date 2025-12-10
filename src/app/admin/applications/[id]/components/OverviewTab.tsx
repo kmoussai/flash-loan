@@ -78,40 +78,40 @@ const OverviewTab = ({
   }
 
   return (
-    <div className='space-y-6'>
-      <div className='grid gap-4 md:grid-cols-3'>
-        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-5'>
-          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+    <div className='space-y-3'>
+      <div className='grid gap-3 md:grid-cols-3'>
+        <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-3'>
+          <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
             Loan Amount
           </label>
-          <p className='mt-2 text-3xl font-bold text-gray-900'>
+          <p className='mt-1 text-xl font-bold text-gray-900'>
             {formatCurrency(application.loan_amount)}
           </p>
         </div>
-        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-5'>
-          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+        <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-3'>
+          <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
             Income Source
           </label>
-          <p className='mt-2 text-lg font-bold capitalize text-gray-900'>
+          <p className='mt-1 text-sm font-bold capitalize text-gray-900'>
             {application.income_source
               ? application.income_source.replace(/-/g, ' ')
               : 'Not provided'}
           </p>
         </div>
-        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5'>
-          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+        <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-amber-50 to-orange-50 p-3'>
+          <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
             Status
           </label>
-          <p className='mt-2 text-lg font-bold text-gray-900'>
+          <p className='mt-1 text-sm font-bold text-gray-900'>
             {getStatusLabel(application.application_status)}
           </p>
         </div>
         {application.interest_rate && (
-          <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-5'>
-            <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
+          <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-3'>
+            <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
               Interest Rate
             </label>
-            <p className='mt-2 text-lg font-bold text-gray-900'>
+            <p className='mt-1 text-sm font-bold text-gray-900'>
               {application.interest_rate}%
             </p>
           </div>
@@ -128,37 +128,37 @@ const OverviewTab = ({
         )} */}
       </div>
 
-      <div className='grid gap-6 lg:grid-cols-2'>
-        <div className='overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
-          <div className='border-b border-gray-200 bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4'>
-            <h2 className='text-lg font-bold text-gray-900'>Loan Information</h2>
+      <div className='grid gap-3 lg:grid-cols-2'>
+        <div className='overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm'>
+          <div className='border-b border-gray-200 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-2'>
+            <h2 className='text-sm font-bold text-gray-900'>Loan Information</h2>
           </div>
-          <div className='p-6'>
-            <div className='space-y-4'>
+          <div className='p-3'>
+            <div className='space-y-2.5'>
               <div>
-                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                <label className='text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                   Income Source
                 </label>
-                <p className='mt-1 text-base font-medium capitalize text-gray-900'>
+                <p className='mt-0.5 text-xs font-medium capitalize text-gray-900'>
                   {application.income_source
                     ? application.income_source.replace(/-/g, ' ')
                     : 'Not provided'}
                 </p>
               </div>
               <div>
-                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                <label className='text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                   Bankruptcy Plan
                 </label>
-                <p className='mt-1 text-base font-medium text-gray-900'>
+                <p className='mt-0.5 text-xs font-medium text-gray-900'>
                   {application.bankruptcy_plan ? 'Yes' : 'No'}
                 </p>
               </div>
               {application.interest_rate && (
                 <div>
-                  <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                  <label className='text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                     Interest Rate
                   </label>
-                  <p className='mt-1 text-base font-medium text-gray-900'>
+                  <p className='mt-0.5 text-xs font-medium text-gray-900'>
                     {application.interest_rate}% APR
                   </p>
                 </div>
@@ -166,10 +166,10 @@ const OverviewTab = ({
               {application.income_fields &&
                 Object.keys(application.income_fields).length > 0 && (
                   <div>
-                    <label className='mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500'>
+                    <label className='mb-1.5 block text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                       Income Details
                     </label>
-                    <div className='space-y-1 text-sm text-gray-700'>
+                    <div className='space-y-0.5 text-xs text-gray-700'>
                       {(() => {
                         const fields = Object.entries(application.income_fields)
                         // Prioritize address fields for employed/self-employed (handle both camelCase and snake_case)
@@ -231,42 +231,42 @@ const OverviewTab = ({
           </div>
         </div>
 
-        <div className='overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm'>
-          <div className='border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4'>
-            <h2 className='text-lg font-bold text-gray-900'>Client Information</h2>
+        <div className='overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm'>
+          <div className='border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2'>
+            <h2 className='text-sm font-bold text-gray-900'>Client Information</h2>
           </div>
-          <div className='p-6'>
-            <div className='space-y-4'>
+          <div className='p-3'>
+            <div className='space-y-2.5'>
               <div>
-                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                <label className='text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                   Email
                 </label>
-                <p className='mt-1 text-sm font-medium text-gray-900'>
+                <p className='mt-0.5 text-xs font-medium text-gray-900'>
                   {application.users?.email || 'N/A'}
                 </p>
               </div>
               <div>
-                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                <label className='text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                   Phone
                 </label>
-                <p className='mt-1 text-sm font-medium text-gray-900'>
+                <p className='mt-0.5 text-xs font-medium text-gray-900'>
                   {application.users?.phone || 'N/A'}
                 </p>
               </div>
               <div>
-                <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                <label className='text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                   Language
                 </label>
-                <p className='mt-1 text-sm font-medium text-gray-900'>
+                <p className='mt-0.5 text-xs font-medium text-gray-900'>
                   {application.users?.preferred_language || 'N/A'}
                 </p>
               </div>
               {application.addresses && application.addresses.length > 0 && (
                 <div>
-                  <label className='text-xs font-medium uppercase tracking-wide text-gray-500'>
+                  <label className='text-[10px] font-medium uppercase tracking-wide text-gray-500'>
                     Address
                   </label>
-                  <p className='mt-1 text-sm text-gray-900'>
+                  <p className='mt-0.5 text-xs text-gray-900'>
                     {formatAddress(application)}
                   </p>
                 </div>
@@ -280,21 +280,21 @@ const OverviewTab = ({
         application.application_status === 'contract_pending' ||
         application.application_status === 'contract_signed' ||
         application.application_status === 'approved') && (
-        <div className='rounded-xl border border-gray-200 bg-white p-6'>
-          <div className='mb-4'>
-            <h3 className='text-lg font-semibold text-gray-900'>Contract Management</h3>
-            <p className='mt-1 text-sm text-gray-600'>
+        <div className='rounded-lg border border-gray-200 bg-white p-3'>
+          <div className='mb-2'>
+            <h3 className='text-sm font-semibold text-gray-900'>Contract Management</h3>
+            <p className='mt-0.5 text-xs text-gray-600'>
               Generate, view, and send loan contracts to clients
             </p>
           </div>
-          <div className='flex items-center gap-3'>
+          <div className='flex items-center gap-2'>
             {(application.application_status === 'contract_pending' ||
               application.application_status === 'contract_signed' ||
               application.application_status === 'approved') && (
               <Button
                 onClick={onViewContract}
                 disabled={loadingContract}
-                className='rounded-lg border border-indigo-600 bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50'
+                className='rounded-lg border border-indigo-600 bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50'
               >
                 {loadingContract ? 'Loading...' : 'View Contract'}
               </Button>

@@ -8,11 +8,11 @@ interface IbvCardEmptyProps {
 
 export default function IbvCardEmpty({ summary }: IbvCardEmptyProps) {
   return (
-    <div className='p-6'>
+    <div className='p-3'>
       <div className='text-center'>
-        <div className='mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100'>
+        <div className='mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-gray-100'>
           <svg
-            className='h-6 w-6 text-gray-400'
+            className='h-4 w-4 text-gray-400'
             fill='none'
             stroke='currentColor'
             viewBox='0 0 24 24'
@@ -25,18 +25,18 @@ export default function IbvCardEmpty({ summary }: IbvCardEmptyProps) {
             />
           </svg>
         </div>
-        <h3 className='mt-3 text-sm font-semibold text-gray-900'>
+        <h3 className='mt-2 text-xs font-semibold text-gray-900'>
           No IBV Data Available
         </h3>
-        <p className='mt-1.5 text-xs text-gray-500'>
+        <p className='mt-1 text-[10px] text-gray-500'>
           Fetch data to see account verification summary
         </p>
         {summary && (
-          <details className='mt-4 text-left'>
-            <summary className='cursor-pointer text-xs text-gray-400 hover:text-gray-600'>
+          <details className='mt-2 text-left'>
+            <summary className='cursor-pointer text-[10px] text-gray-400 hover:text-gray-600'>
               Show raw data
             </summary>
-            <pre className='mt-2 max-h-64 overflow-auto rounded-lg bg-gray-50 p-4 text-xs'>
+            <pre className='mt-1.5 max-h-48 overflow-auto rounded-lg bg-gray-50 p-2 text-[10px]'>
               {JSON.stringify(summary, null, 2)}
             </pre>
           </details>

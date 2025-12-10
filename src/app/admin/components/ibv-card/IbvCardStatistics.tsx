@@ -11,10 +11,10 @@ export default function IbvCardStatistics({
   accounts
 }: IbvCardStatisticsProps) {
   return (
-    <div className='rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-4 shadow-lg'>
-      <div className='mb-3 flex items-center gap-2'>
+    <div className='rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-2.5 shadow-sm'>
+      <div className='mb-2 flex items-center gap-1.5'>
         <svg
-          className='h-4 w-4 text-indigo-600'
+          className='h-3.5 w-3.5 text-indigo-600'
           fill='none'
           stroke='currentColor'
           viewBox='0 0 24 24'
@@ -26,14 +26,14 @@ export default function IbvCardStatistics({
             d='M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'
           />
         </svg>
-        <h3 className='text-sm font-bold text-gray-900'>
+        <h3 className='text-xs font-bold text-gray-900'>
           Account Statistics Overview
         </h3>
       </div>
 
-      <div className='grid gap-3 md:grid-cols-3'>
+      <div className='grid gap-2 md:grid-cols-3'>
         {/* Total Income Net */}
-        <div className='rounded-lg border border-indigo-100 bg-white/80 p-3 backdrop-blur-sm'>
+        <div className='rounded-lg border border-indigo-100 bg-white/80 p-2 backdrop-blur-sm'>
           <div className='mb-1.5 flex items-center gap-1.5'>
             <div className='flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-100'>
               <svg
@@ -54,7 +54,7 @@ export default function IbvCardStatistics({
               Total Income Net
             </label>
           </div>
-          <p className='text-lg font-bold text-emerald-900'>
+          <p className='text-sm font-bold text-emerald-900'>
             {(() => {
               const total = accounts.reduce(
                 (sum, acc) => sum + (acc.statistics?.income_net || 0),
@@ -69,11 +69,11 @@ export default function IbvCardStatistics({
         </div>
 
         {/* Total Transactions */}
-        <div className='rounded-lg border border-indigo-100 bg-white/80 p-3 backdrop-blur-sm'>
-          <div className='mb-1.5 flex items-center gap-1.5'>
-            <div className='flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-100'>
+        <div className='rounded-lg border border-indigo-100 bg-white/80 p-2 backdrop-blur-sm'>
+          <div className='mb-1 flex items-center gap-1'>
+            <div className='flex h-5 w-5 items-center justify-center rounded-lg bg-indigo-100'>
               <svg
-                className='h-3.5 w-3.5 text-indigo-600'
+                className='h-3 w-3 text-indigo-600'
                 fill='none'
                 stroke='currentColor'
                 viewBox='0 0 24 24'
@@ -90,7 +90,7 @@ export default function IbvCardStatistics({
               Total Transactions
             </label>
           </div>
-          <p className='text-lg font-bold text-indigo-900'>
+          <p className='text-sm font-bold text-indigo-900'>
             {(() => {
               const total = accounts.reduce(
                 (sum, acc) => sum + (acc.total_transactions || 0),
@@ -105,11 +105,11 @@ export default function IbvCardStatistics({
         </div>
 
         {/* Total NSF */}
-        <div className='rounded-lg border border-indigo-100 bg-white/80 p-3 backdrop-blur-sm'>
-          <div className='mb-1.5 flex items-center gap-1.5'>
-            <div className='flex h-6 w-6 items-center justify-center rounded-lg bg-amber-100'>
+        <div className='rounded-lg border border-indigo-100 bg-white/80 p-2 backdrop-blur-sm'>
+          <div className='mb-1 flex items-center gap-1'>
+            <div className='flex h-5 w-5 items-center justify-center rounded-lg bg-amber-100'>
               <svg
-                className='h-3.5 w-3.5 text-amber-600'
+                className='h-3 w-3 text-amber-600'
                 fill='none'
                 stroke='currentColor'
                 viewBox='0 0 24 24'
@@ -126,7 +126,7 @@ export default function IbvCardStatistics({
               Total NSF (All Time)
             </label>
           </div>
-          <p className='text-lg font-bold text-amber-900'>
+          <p className='text-sm font-bold text-amber-900'>
             {(() => {
               const total = accounts.reduce(
                 (sum, acc) => sum + (acc.statistics?.nsf?.all_time || 0),

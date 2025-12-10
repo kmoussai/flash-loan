@@ -6,7 +6,7 @@ interface IbvTabProps {
 }
 
 const IbvTab = ({ applicationId, onViewTransactions }: IbvTabProps) => (
-  <div className='space-y-6'>
+  <div className='flex h-full flex-col'>
     <IbvCard applicationId={applicationId} onViewTransactions={onViewTransactions} />
   </div>
 )

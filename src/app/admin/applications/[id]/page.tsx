@@ -404,17 +404,17 @@ export default function ApplicationDetailsPage() {
 
   return (
     <AdminDashboardLayout>
-      <div className='flex h-[calc(100vh-80px)] flex-col'>
+      <div className='flex h-[calc(100vh-64px)] flex-col'>
         {/* Header - Compact */}
-        <div className='flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3'>
+        <div className='flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2'>
           <div className='flex items-center gap-2'>
             <button
               onClick={() => router.push('/admin/applications')}
-              className='flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700'
+              className='flex h-6 w-6 items-center justify-center rounded border border-gray-300 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700'
               title='Back to Applications'
             >
               <svg
-                className='h-3.5 w-3.5'
+                className='h-3 w-3'
                 fill='none'
                 stroke='currentColor'
                 viewBox='0 0 24 24'
@@ -427,56 +427,30 @@ export default function ApplicationDetailsPage() {
                 />
               </svg>
             </button>
-            <div className='flex items-center gap-2'>
-              <h1 className='text-base font-medium text-gray-700'>
+            <div className='flex items-center gap-1.5'>
+              <h1 className='text-sm font-medium text-gray-700'>
                 Application Details
               </h1>
-              <span className='text-xs text-gray-400'>•</span>
-              <span className='font-mono text-xs text-gray-500'>
+              <span className='text-[10px] text-gray-400'>•</span>
+              <span className='font-mono text-[10px] text-gray-500'>
                 {application.id.slice(0, 8)}
               </span>
             </div>
           </div>
 
-          <div className='flex items-center gap-3'>
+          <div className='flex items-center gap-2'>
             <button
               onClick={fetchApplicationDetails}
               disabled={loading}
-              className='flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50'
+              className='flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50'
               title='Refresh application details'
             >
               <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
             </button>
-            {/* Pre-Approve and Reject Actions */}
-            {application &&
-              application.application_status !== 'pre_approved' &&
-              application.application_status !== 'rejected' && (
-                <div className='border-b border-gray-200 bg-white px-6 py-4'>
-                  <div className='flex items-center justify-center gap-4'>
-                    <button
-                      onClick={() => {
-                        setPreApproveAmount(application.loan_amount)
-                        setShowApproveModal(true)
-                      }}
-                      disabled={processing}
-                      className='rounded-lg border border-gray-900 bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg disabled:opacity-50'
-                    >
-                      Pre-Approve Application
-                    </button>
-                    <button
-                      onClick={() => setShowRejectModal(true)}
-                      disabled={processing}
-                      className='rounded-lg border border-red-300 bg-white px-6 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50'
-                    >
-                      Reject Application
-                    </button>
-                  </div>
-                </div>
-              )}
             {/* Client Info - Compact */}
-            <div className='flex items-center gap-2'>
+            <div className='flex items-center gap-1.5'>
               <svg
-                className='h-4 w-4 text-gray-400'
+                className='h-3.5 w-3.5 text-gray-400'
                 fill='none'
                 stroke='currentColor'
                 viewBox='0 0 24 24'
@@ -493,18 +467,18 @@ export default function ApplicationDetailsPage() {
                   onClick={() =>
                     router.push(`/admin/clients/${application.users?.id}`)
                   }
-                  className='text-sm font-semibold text-gray-900 transition-colors hover:text-blue-600'
+                  className='text-xs font-semibold text-gray-900 transition-colors hover:text-blue-600'
                 >
                   {application.users?.first_name} {application.users?.last_name}
                 </button>
               ) : (
-                <span className='text-sm font-semibold text-gray-900'>
+                <span className='text-xs font-semibold text-gray-900'>
                   {application.users?.first_name} {application.users?.last_name}
                 </span>
               )}
             </div>
             <span
-              className={`inline-flex rounded px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${getStatusBadgeColor(application.application_status)}`}
+              className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${getStatusBadgeColor(application.application_status)}`}
             >
               {getStatusLabel(application.application_status)}
             </span>
@@ -512,19 +486,19 @@ export default function ApplicationDetailsPage() {
         </div>
 
         {/* Modern Tabs */}
-        <div className='border-b border-gray-200 bg-white px-6'>
-          <div className='flex items-center gap-1'>
+        <div className='border-b border-gray-200 bg-white px-4'>
+          <div className='flex items-center gap-0.5'>
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
                   activeTab === tab.id
                     ? 'text-indigo-600'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <span>{tab.icon}</span>
+                <span className='text-xs'>{tab.icon}</span>
                 <span>{tab.label}</span>
                 {activeTab === tab.id && (
                   <span className='absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600'></span>
@@ -535,8 +509,8 @@ export default function ApplicationDetailsPage() {
         </div>
 
         {/* Tab Content - Scrollable */}
-        <div className='flex-1 overflow-y-auto bg-gray-50'>
-          <div className='mx-auto max-w-7xl px-6 py-6'>
+        <div className='flex-1 overflow-hidden bg-gray-50'>
+          <div className='mx-auto h-full max-w-7xl px-4 py-3'>
             {/* Tab: Overview */}
             {activeTab === 'overview' && (
               <OverviewTab
