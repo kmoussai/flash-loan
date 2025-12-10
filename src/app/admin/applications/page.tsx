@@ -229,25 +229,25 @@ export default function ApplicationsPage() {
 
   return (
     <AdminDashboardLayout>
-      <div className='space-y-4'>
+      <div className='space-y-3'>
         {/* Header */}
         <div className='flex items-center justify-between'>
           <div>
-            <h1 className='text-2xl font-bold text-gray-900'>
+            <h1 className='text-lg font-bold text-gray-900'>
               Loan Applications
             </h1>
-            <p className='text-xs text-gray-600'>
+            <p className='text-[10px] text-gray-600'>
               Review and manage all loan applications
             </p>
           </div>
-          <div className='flex items-center gap-3'>
+          <div className='flex items-center gap-2'>
             <button
               onClick={() => fetchApplications()}
               disabled={loading}
-              className='flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition-all duration-300 hover:scale-105 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
+              className='flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-md shadow-blue-500/30 transition-all duration-300 hover:scale-105 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100'
             >
               <svg
-                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+                className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`}
                 fill='none'
                 viewBox='0 0 24 24'
                 stroke='currentColor'
@@ -261,89 +261,89 @@ export default function ApplicationsPage() {
               </svg>
               {loading ? 'Refreshing...' : 'Refresh'}
             </button>
-            <div className='rounded-lg bg-white px-4 py-2 shadow-sm'>
-              <div className='flex items-center gap-2'>
-                <span className='text-xl'>📝</span>
-                <span className='text-2xl font-bold text-gray-900'>
+            <div className='rounded-lg bg-white px-3 py-1.5 shadow-sm'>
+              <div className='flex items-center gap-1.5'>
+                <span className='text-sm'>📝</span>
+                <span className='text-lg font-bold text-gray-900'>
                   {total}
                 </span>
-                <span className='text-xs text-gray-500'>total</span>
+                <span className='text-[10px] text-gray-500'>total</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className='grid gap-3 md:grid-cols-5'>
+        <div className='grid gap-2 md:grid-cols-5'>
           <div
-            className='cursor-pointer rounded-lg bg-yellow-50 p-3 shadow-sm transition-all hover:shadow-md'
+            className='cursor-pointer rounded-lg bg-yellow-50 p-2 shadow-sm transition-all hover:shadow-md'
             onClick={() => handleStatusFilterChange('pending')}
           >
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-yellow-800'>Pending</h3>
-              <span className='text-lg'>⏳</span>
+            <div className='mb-0.5 flex items-center justify-between'>
+              <h3 className='text-[10px] font-medium text-yellow-800'>Pending</h3>
+              <span className='text-sm'>⏳</span>
             </div>
-            <p className='text-2xl font-bold text-yellow-900'>
+            <p className='text-xl font-bold text-yellow-900'>
               {statusCounts.pending}
             </p>
           </div>
 
           <div
-            className='cursor-pointer rounded-lg bg-blue-50 p-3 shadow-sm transition-all hover:shadow-md'
+            className='cursor-pointer rounded-lg bg-blue-50 p-2 shadow-sm transition-all hover:shadow-md'
             onClick={() => handleStatusFilterChange('processing')}
           >
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-blue-800'>Processing</h3>
-              <span className='text-lg'>🔄</span>
+            <div className='mb-0.5 flex items-center justify-between'>
+              <h3 className='text-[10px] font-medium text-blue-800'>Processing</h3>
+              <span className='text-sm'>🔄</span>
             </div>
-            <p className='text-2xl font-bold text-blue-900'>
+            <p className='text-xl font-bold text-blue-900'>
               {statusCounts.processing}
             </p>
           </div>
 
           <div
-            className='cursor-pointer rounded-lg bg-green-50 p-3 shadow-sm transition-all hover:shadow-md'
+            className='cursor-pointer rounded-lg bg-green-50 p-2 shadow-sm transition-all hover:shadow-md'
             onClick={() => handleStatusFilterChange('approved')}
           >
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-green-800'>Approved</h3>
-              <span className='text-lg'>✅</span>
+            <div className='mb-0.5 flex items-center justify-between'>
+              <h3 className='text-[10px] font-medium text-green-800'>Approved</h3>
+              <span className='text-sm'>✅</span>
             </div>
-            <p className='text-2xl font-bold text-green-900'>
+            <p className='text-xl font-bold text-green-900'>
               {statusCounts.approved}
             </p>
           </div>
 
           <div
-            className='cursor-pointer rounded-lg bg-red-50 p-3 shadow-sm transition-all hover:shadow-md'
+            className='cursor-pointer rounded-lg bg-red-50 p-2 shadow-sm transition-all hover:shadow-md'
             onClick={() => handleStatusFilterChange('rejected')}
           >
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-red-800'>Rejected</h3>
-              <span className='text-lg'>❌</span>
+            <div className='mb-0.5 flex items-center justify-between'>
+              <h3 className='text-[10px] font-medium text-red-800'>Rejected</h3>
+              <span className='text-sm'>❌</span>
             </div>
-            <p className='text-2xl font-bold text-red-900'>
+            <p className='text-xl font-bold text-red-900'>
               {statusCounts.rejected}
             </p>
           </div>
 
           <div
-            className='cursor-pointer rounded-lg bg-gray-50 p-3 shadow-sm transition-all hover:shadow-md'
+            className='cursor-pointer rounded-lg bg-gray-50 p-2 shadow-sm transition-all hover:shadow-md'
             onClick={() => handleStatusFilterChange('cancelled')}
           >
-            <div className='mb-1 flex items-center justify-between'>
-              <h3 className='text-xs font-medium text-gray-800'>Cancelled</h3>
-              <span className='text-lg'>🚫</span>
+            <div className='mb-0.5 flex items-center justify-between'>
+              <h3 className='text-[10px] font-medium text-gray-800'>Cancelled</h3>
+              <span className='text-sm'>🚫</span>
             </div>
-            <p className='text-2xl font-bold text-gray-900'>
+            <p className='text-xl font-bold text-gray-900'>
               {statusCounts.cancelled}
             </p>
           </div>
         </div>
 
         {/* Filters */}
-        <div className='rounded-lg bg-white p-3 shadow-sm'>
-          <div className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
+        <div className='rounded-lg bg-white p-2.5 shadow-sm'>
+          <div className='flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
             <div className='flex items-center gap-3'>
               <label className='text-xs font-medium text-gray-700'>
                 Status:
@@ -420,14 +420,14 @@ export default function ApplicationsPage() {
 
         {/* Applications Table */}
         <div className='rounded-lg bg-white shadow-sm'>
-          <div className='border-b border-gray-200 px-4 py-2'>
+          <div className='border-b border-gray-200 px-3 py-1.5'>
             <div className='flex items-center justify-between'>
-              <h2 className='text-sm font-semibold text-gray-900'>
+              <h2 className='text-xs font-semibold text-gray-900'>
                 {statusFilter === 'all'
                   ? 'All Applications'
                   : `${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Applications`}
               </h2>
-              <span className='text-xs text-gray-500'>
+              <span className='text-[10px] text-gray-500'>
                 Showing {(currentPage - 1) * limit + 1}-
                 {Math.min(currentPage * limit, total)} of {total}{' '}
                 {total === 1 ? 'result' : 'results'}
@@ -437,20 +437,20 @@ export default function ApplicationsPage() {
 
           <div className='overflow-x-auto'>
             {loading ? (
-              <div className='p-12 text-center'>
-                <div className='mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600'></div>
-                <p className='mt-4 text-gray-600'>Loading applications...</p>
+              <div className='p-8 text-center'>
+                <div className='mx-auto h-8 w-8 animate-spin rounded-full border-3 border-gray-200 border-t-blue-600'></div>
+                <p className='mt-3 text-xs text-gray-600'>Loading applications...</p>
               </div>
             ) : error ? (
-              <div className='p-12 text-center'>
-                <span className='mb-4 block text-4xl'>⚠️</span>
-                <p className='text-red-600'>{error}</p>
+              <div className='p-8 text-center'>
+                <span className='mb-3 block text-2xl'>⚠️</span>
+                <p className='text-sm text-red-600'>{error}</p>
               </div>
             ) : applications.length === 0 ? (
-              <div className='p-12 text-center'>
-                <span className='mb-4 block text-4xl'>📝</span>
-                <p className='text-gray-600'>No applications found</p>
-                <p className='mt-2 text-sm text-gray-400'>
+              <div className='p-8 text-center'>
+                <span className='mb-3 block text-2xl'>📝</span>
+                <p className='text-sm text-gray-600'>No applications found</p>
+                <p className='mt-1 text-xs text-gray-400'>
                   {debouncedSearchTerm || statusFilter !== 'all'
                     ? 'Try adjusting your filters'
                     : 'Applications will appear here once they are submitted'}
@@ -460,28 +460,28 @@ export default function ApplicationsPage() {
               <table className='min-w-full divide-y divide-gray-200'>
                 <thead className='bg-gray-50'>
                   <tr>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       Applicant
                     </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       Amount
                     </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       Income Source
                     </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       Status
                     </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       Province
                     </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       IBV Status
                     </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       Submitted
                     </th>
-                    <th className='px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                    <th className='px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500'>
                       Actions
                     </th>
                   </tr>
@@ -492,46 +492,46 @@ export default function ApplicationsPage() {
                       key={app.id}
                       className='transition-colors hover:bg-gray-50'
                     >
-                      <td className='px-4 py-2'>
+                      <td className='px-3 py-1.5'>
                         <div className='flex items-center'>
-                          <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-600'>
+                          <div className='flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-medium text-blue-600'>
                             {app.users?.first_name?.[0] || '?'}
                           </div>
-                          <div className='ml-3'>
-                            <div className='text-sm font-medium text-gray-900'>
+                          <div className='ml-2'>
+                            <div className='text-xs font-medium text-gray-900'>
                               {getClientName(app)}
                             </div>
-                            <div className='text-xs text-gray-500'>
+                            <div className='text-[10px] text-gray-500'>
                               {app.users?.email || 'No email'}
                             </div>
-                            <div className='text-xs text-gray-400'>
+                            <div className='text-[10px] text-gray-400'>
                               {app.users?.phone || 'No phone'}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className='whitespace-nowrap px-4 py-2'>
-                        <div className='text-sm font-semibold text-gray-900'>
+                      <td className='whitespace-nowrap px-3 py-1.5'>
+                        <div className='text-xs font-semibold text-gray-900'>
                           {formatCurrency(app.loan_amount)}
                         </div>
                       </td>
-                      <td className='whitespace-nowrap px-4 py-2'>
-                        <span className='text-xs text-gray-600'>
+                      <td className='whitespace-nowrap px-3 py-1.5'>
+                        <span className='text-[10px] text-gray-600'>
                           {formatIncomeSource(app.income_source)}
                         </span>
                       </td>
-                      <td className='px-4 py-2'>
-                        <div className='flex flex-col gap-1'>
+                      <td className='px-3 py-1.5'>
+                        <div className='flex flex-col gap-0.5'>
                           <span
-                            className={`inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeColor(app.application_status)}`}
+                            className={`inline-flex w-fit rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getStatusBadgeColor(app.application_status)}`}
                           >
                             {app.application_status.toUpperCase()}
                           </span>
                           {app.application_status === 'rejected' && app.rejection_reason && (
                             <div className='group relative'>
-                              <div className='flex items-start gap-1.5 text-xs text-red-700 cursor-help'>
+                              <div className='flex items-start gap-1 text-[10px] text-red-700 cursor-help'>
                                 <svg
-                                  className='h-3.5 w-3.5 flex-shrink-0 mt-0.5'
+                                  className='h-3 w-3 flex-shrink-0 mt-0.5'
                                   fill='none'
                                   stroke='currentColor'
                                   viewBox='0 0 24 24'
@@ -543,13 +543,13 @@ export default function ApplicationsPage() {
                                     d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
                                   />
                                 </svg>
-                                <span className='truncate max-w-[200px] leading-tight'>
+                                <span className='truncate max-w-[150px] leading-tight'>
                                   {app.rejection_reason}
                                 </span>
                               </div>
                               {/* Tooltip on hover for full reason */}
-                              <div className='pointer-events-none absolute left-0 top-full z-20 mt-1 hidden max-w-sm rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 shadow-xl group-hover:block'>
-                                <p className='whitespace-normal font-medium text-gray-900 mb-1'>
+                              <div className='pointer-events-none absolute left-0 top-full z-20 mt-1 hidden max-w-sm rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[10px] text-gray-700 shadow-xl group-hover:block'>
+                                <p className='whitespace-normal font-medium text-gray-900 mb-0.5'>
                                   Rejection Reason:
                                 </p>
                                 <p className='whitespace-normal'>{app.rejection_reason}</p>
@@ -559,12 +559,12 @@ export default function ApplicationsPage() {
                           )}
                         </div>
                       </td>
-                      <td className='whitespace-nowrap px-4 py-2 text-sm text-gray-900'>
+                      <td className='whitespace-nowrap px-3 py-1.5 text-xs text-gray-900'>
                         {app.addresses ? app.addresses.province : 'N/A'}
                       </td>
-                      <td className='whitespace-nowrap px-4 py-2'>
+                      <td className='whitespace-nowrap px-3 py-1.5'>
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
                             app.ibv_status === 'verified'
                               ? 'bg-green-100 text-green-800'
                               : app.ibv_status === 'failed'
@@ -580,19 +580,19 @@ export default function ApplicationsPage() {
                           {app.ibv_provider ? `(${app.ibv_provider})` : ''}
                         </span>
                       </td>
-                      <td className='whitespace-nowrap px-4 py-2 text-xs text-gray-500'>
+                      <td className='whitespace-nowrap px-3 py-1.5 text-[10px] text-gray-500'>
                         {formatDate(app.created_at)}
                       </td>
-                      <td className='whitespace-nowrap px-4 py-2 text-sm'>
+                      <td className='whitespace-nowrap px-3 py-1.5 text-xs'>
                         <button
                           onClick={() =>
                             router.push(`/admin/applications/${app.id}`)
                           }
-                          className='mr-2 text-blue-600 hover:text-blue-800'
+                          className='mr-1.5 text-blue-600 hover:text-blue-800 text-[10px]'
                         >
                           View
                         </button>
-                        <button className='text-green-600 hover:text-green-800'>
+                        <button className='text-green-600 hover:text-green-800 text-[10px]'>
                           Process
                         </button>
                       </td>
@@ -605,16 +605,16 @@ export default function ApplicationsPage() {
 
           {/* Pagination Controls */}
           {!loading && !error && totalPages > 1 && (
-            <div className='border-t border-gray-200 px-4 py-3'>
+            <div className='border-t border-gray-200 px-3 py-2'>
               <div className='flex items-center justify-between'>
-                <div className='text-sm text-gray-700'>
+                <div className='text-xs text-gray-700'>
                   Page {currentPage} of {totalPages}
                 </div>
-                <div className='flex items-center gap-2'>
+                <div className='flex items-center gap-1.5'>
                   <button
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className='rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
+                    className='rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
                   >
                     Previous
                   </button>
@@ -634,7 +634,7 @@ export default function ApplicationsPage() {
                         <button
                           key={pageNum}
                           onClick={() => handlePageChange(pageNum)}
-                          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium ${
                             currentPage === pageNum
                               ? 'bg-blue-600 text-white'
                               : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
@@ -648,7 +648,7 @@ export default function ApplicationsPage() {
                   <button
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className='rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
+                    className='rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
                   >
                     Next
                   </button>
