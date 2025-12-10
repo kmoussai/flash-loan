@@ -11,6 +11,8 @@ export const pathnames = {
   '/contact': '/contact',
   '/apply': '/apply',
   '/quick-apply': '/quick-apply',
+  '/privacy-policy': '/privacy-policy',
+  '/cookie-policy': '/cookie-policy',
   '/dashboard': '/dashboard',
   '/client/dashboard': '/client/dashboard',
   '/client/dashboard/change-password': '/client/dashboard/change-password',

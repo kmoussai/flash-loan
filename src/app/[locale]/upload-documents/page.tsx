@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import Image from 'next/image'
 import Button from '../components/Button'
 import { createClient } from '@/src/lib/supabase/client'
 
@@ -953,12 +954,16 @@ export default function UploadDocumentsPage() {
             {/* Modal Content */}
             <div className='relative max-h-[calc(90vh-80px)] overflow-auto p-6'>
               {previewMime?.startsWith('image/') ? (
-                <img 
-                  src={previewUrl} 
-                  alt={previewFileName || 'Document'}
-                  className='mx-auto max-w-full h-auto'
-                  onError={() => setError(t('Failed_To_Load_Image') || 'Failed to load image')}
-                />
+                <div className='relative w-full flex justify-center'>
+                  <Image 
+                    src={previewUrl} 
+                    alt={previewFileName || 'Document'}
+                    width={800}
+                    height={600}
+                    className='max-w-full h-auto'
+                    unoptimized
+                  />
+                </div>
               ) : previewMime === 'application/pdf' ? (
                 <iframe
                   src={previewUrl}
