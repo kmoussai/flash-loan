@@ -1,5 +1,5 @@
-'use client'
-import { useTranslations } from 'next-intl'
+import { getTranslations, setRequestLocale } from 'next-intl/server'
+import { redirect } from 'next/navigation'
 import { Link } from '@/src/navigation'
 import Image from 'next/image'
 import LoanApplicationForm from '../components/LoanApplicationForm'
@@ -14,8 +14,23 @@ import LangSwitcher from '../components/LangSwitcher'
  * - Centered multi-step form
  * - Clean, focused layout
  */
-export default function ApplyPage() {
-  const t = useTranslations('')
+interface ApplyPageProps {
+  params: {
+    locale: string
+  }
+}
+
+export default async function ApplyPage({
+  params: { locale }
+}: ApplyPageProps) {
+  setRequestLocale(locale)
+  const t = await getTranslations('')
+
+  // Check for redirect URL in environment variables
+  const redirectUrl = process.env.REDIRECT_URL
+  if (redirectUrl) {
+    redirect(redirectUrl)
+  }
 
   return (
     <div className='min-h-screen bg-background'>
