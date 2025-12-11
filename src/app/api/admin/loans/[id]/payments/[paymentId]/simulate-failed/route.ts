@@ -9,6 +9,7 @@ import { Loan } from '@/src/types'
 import { parseLocalDate } from '@/src/lib/utils/date'
 import { recalculatePaymentSchedule, roundCurrency } from '@/src/lib/loan'
 import { updateLoanPaymentsFromBreakdown } from '@/src/lib/supabase/payment-schedule-helpers'
+import { handleScheduleRecalculationForZumRails } from '@/src/lib/payment-providers/zumrails'
 
 export const dynamic = 'force-dynamic'
 
@@ -273,6 +274,30 @@ export async function POST(
       console.error('Error updating payments from breakdown:', updateResult.errors)
       // Don't fail the request, but log the errors
     }
+
+    // Handle ZumRails transactions - cancel old ones and create new ones (non-blocking)
+    // Run in background without blocking the response
+    handleScheduleRecalculationForZumRails({
+      loanId: loanId,
+      reason: `Payment schedule recalculated after simulated failed payment. Failed payment: ${paymentId}, added interest: ${roundCurrency(failedPaymentInterest).toFixed(2)}`
+    })
+      .then((zumRailsResult) => {
+        if (!zumRailsResult.success) {
+          console.warn('[Simulate Failed Payment] ZumRails transaction handling completed with warnings:', {
+            cancelled: zumRailsResult.cancelled.count,
+            created: zumRailsResult.created.created,
+            errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
+          })
+        } else {
+          console.log('[Simulate Failed Payment] ZumRails transactions handled:', {
+            cancelled: zumRailsResult.cancelled.count,
+            created: zumRailsResult.created.created
+          })
+        }
+      })
+      .catch((zumRailsError: any) => {
+        console.error('[Simulate Failed Payment] Error handling ZumRails transactions:', zumRailsError)
+      })
 
     return NextResponse.json({
       success: true,

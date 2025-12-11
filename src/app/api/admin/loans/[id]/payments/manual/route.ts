@@ -10,6 +10,7 @@ import {
 import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
 import { parseLocalDate } from '@/src/lib/utils/date'
 import { updateLoanPaymentsFromBreakdown } from '@/src/lib/supabase/payment-schedule-helpers'
+import { handleScheduleRecalculationForZumRails } from '@/src/lib/payment-providers/zumrails'
 
 export const dynamic = 'force-dynamic'
 
@@ -261,6 +262,30 @@ export async function POST(
               console.error('Error updating payments from breakdown:', updateResult.errors)
               // Don't fail the request, but log the errors
             }
+
+            // Handle ZumRails transactions - cancel old ones and create new ones (non-blocking)
+            // Run in background without blocking the response
+            handleScheduleRecalculationForZumRails({
+              loanId: loanId,
+              reason: `Payment schedule recalculated after manual payment. Manual payment amount: ${paymentAmount.toFixed(2)}`
+            })
+              .then((zumRailsResult) => {
+                if (!zumRailsResult.success) {
+                  console.warn('[Manual Payment] ZumRails transaction handling completed with warnings:', {
+                    cancelled: zumRailsResult.cancelled.count,
+                    created: zumRailsResult.created.created,
+                    errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
+                  })
+                } else {
+                  console.log('[Manual Payment] ZumRails transactions handled:', {
+                    cancelled: zumRailsResult.cancelled.count,
+                    created: zumRailsResult.created.created
+                  })
+                }
+              })
+              .catch((zumRailsError: any) => {
+                console.error('[Manual Payment] Error handling ZumRails transactions:', zumRailsError)
+              })
           }
         } else {
           console.warn('Could not determine scheduled payment amount for recalculation')

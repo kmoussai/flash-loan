@@ -10,6 +10,7 @@ import {
 } from '@/src/lib/loan'
 import { parseLocalDate } from '@/src/lib/utils/date'
 import { updateLoanPaymentsFromBreakdown } from '@/src/lib/supabase/payment-schedule-helpers'
+import { handleScheduleRecalculationForZumRails } from '@/src/lib/payment-providers/zumrails'
 
 export const dynamic = 'force-dynamic'
 
@@ -266,6 +267,30 @@ export async function POST(
       console.error('Error updating payments from breakdown:', updateResult.errors)
       // Don't fail the request, but log the errors
     }
+
+    // Handle ZumRails transactions - cancel old ones and create new ones (non-blocking)
+    // Run in background without blocking the response
+    handleScheduleRecalculationForZumRails({
+      loanId: loanId,
+      reason: `Payment schedule recalculated after loan modification. Payment amount: ${paymentAmount.toFixed(2)}, frequency: ${payment_frequency}, start date: ${start_date}`
+    })
+      .then((zumRailsResult) => {
+        if (!zumRailsResult.success) {
+          console.warn('[Modify Loan] ZumRails transaction handling completed with warnings:', {
+            cancelled: zumRailsResult.cancelled.count,
+            created: zumRailsResult.created.created,
+            errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
+          })
+        } else {
+          console.log('[Modify Loan] ZumRails transactions handled:', {
+            cancelled: zumRailsResult.cancelled.count,
+            created: zumRailsResult.created.created
+          })
+        }
+      })
+      .catch((zumRailsError: any) => {
+        console.error('[Modify Loan] Error handling ZumRails transactions:', zumRailsError)
+      })
 
     // Update loan's remaining balance to the new total balance
     // This reflects the balance that will be amortized over the new payment schedule

@@ -1,11 +1,11 @@
 /**
  * Transform Zumrails API response to IBVSummary format
  * Converts Zumrails GetInformationByRequestId response to match Inverite IBVSummary structure
+ * Simplified to use transaction categories directly from ZumRails
  */
 
 import type { IBVSummary } from '@/src/app/api/inverite/fetch/[guid]/types'
 import type { Frequency } from '@/src/lib/supabase/types'
-import { normalizeFrequency } from '@/src/lib/utils/frequency'
 
 interface ZumrailsTransaction {
   Id: string
@@ -63,12 +63,9 @@ interface ZumrailsResponse {
 
 /**
  * Calculate NSF (Non-Sufficient Funds) counts from transactions
- * NSF is typically indicated by negative balances, overdraft fees, or specific transaction types
+ * Uses ZumRails category data to identify NSF transactions
  */
-function calculateNSFCounts(
-  transactions: ZumrailsTransaction[],
-  accountCreatedDate?: string
-): {
+function calculateNSFCounts(transactions: ZumrailsTransaction[]): {
   all_time: number
   quarter_3_months: number
   quarter_6_months: number
@@ -81,49 +78,22 @@ function calculateNSFCounts(
   const nineMonthsAgo = new Date(now.getTime() - 270 * 24 * 60 * 60 * 1000)
   const twelveMonthsAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
 
-  const accountStartDate = accountCreatedDate
-    ? new Date(accountCreatedDate)
-    : transactions.length > 0
-      ? new Date(transactions[transactions.length - 1].Date)
-      : twelveMonthsAgo
-
-  // Common NSF indicators
-  const nsfKeywords = [
-    'nsf',
-    'non-sufficient',
-    'insufficient funds',
-    'overdraft',
-    'od fee',
-    'returned',
-    'bounce',
-    'unpaid',
-    'declined'
-  ]
-
+  // Use ZumRails category to identify NSF transactions
   const isNSF = (transaction: ZumrailsTransaction): boolean => {
-    const desc = transaction.Description?.toLowerCase() || ''
     const categoryName = transaction.Category?.Name?.toLowerCase() || ''
+    const insightsType = transaction.Category?.InsightsType?.toLowerCase() || ''
+    const desc = transaction.Description?.toLowerCase() || ''
 
-    // Check if transaction description contains NSF keywords
-    if (nsfKeywords.some(keyword => desc.includes(keyword))) {
-      return true
-    }
-
-    // Check if category indicates NSF
-    if (
+    // Check category name or insights type for NSF indicators
+    return (
       categoryName.includes('nsf') ||
       categoryName.includes('overdraft') ||
-      categoryName.includes('insufficient')
-    ) {
-      return true
-    }
-
-    // Negative balance with debit transaction might indicate NSF
-    if (transaction.Balance < 0 && transaction.Debit) {
-      return true
-    }
-
-    return false
+      categoryName.includes('insufficient') ||
+      insightsType.includes('nsf') ||
+      insightsType.includes('overdraft') ||
+      desc.includes('nsf') ||
+      desc.includes('insufficient funds')
+    )
   }
 
   const nsfTransactions = transactions.filter(isNSF)
@@ -138,52 +108,41 @@ function calculateNSFCounts(
 }
 
 /**
- * Extract income patterns from transactions
- * Looks for recurring income transactions (e.g., Employment Paycheck, Government Income)
+ * Calculate income per account based on ZumRails transaction categories
+ * Groups transactions by category and sums credits for income-related categories
  */
-function extractIncomePatterns(transactions: ZumrailsTransaction[]): Array<{
+function calculateIncomeByCategory(transactions: ZumrailsTransaction[]): Array<{
   frequency: Frequency | null
   raw_frequency: string | null
   details: string
   monthly_income: number
   future_payments: Date[]
 }> {
-  const incomeCategories = [
-    'Employment Paycheck',
-    'Employment Income',
-    'Salary',
-    'Payroll',
-    'Child Support Income',
-    'Other Government Income',
-    'Social Assistance Income',
-    'Tax Refund',
-    'Tax Rebate'
-  ]
-
-  // Filter income transactions
-  const incomeTransactions = transactions.filter(t => {
-    if (t.Credit && t.Credit > 0) {
-      const categoryName = t.Category?.Name || ''
-      return incomeCategories.some(cat => categoryName.includes(cat))
-    }
-    return false
-  })
+  // Filter for credit transactions (income)
+  const incomeTransactions = transactions.filter(t => t.Credit && t.Credit > 0)
 
   if (incomeTransactions.length === 0) {
     return []
   }
 
-  // Group by category
-  const byCategory = new Map<string, ZumrailsTransaction[]>()
+  // Group by category name from ZumRails
+  const byCategory = new Map<string, { transactions: ZumrailsTransaction[], totalAmount: number }>()
+  
   incomeTransactions.forEach(t => {
-    const category = t.Category?.Name || 'Other Income'
-    if (!byCategory.has(category)) {
-      byCategory.set(category, [])
+    const categoryName = t.Category?.Name || 'Other Income'
+    const creditAmount = t.Credit || 0
+
+    if (!byCategory.has(categoryName)) {
+      byCategory.set(categoryName, { transactions: [], totalAmount: 0 })
     }
-    byCategory.get(category)!.push(t)
+
+    const categoryData = byCategory.get(categoryName)!
+    categoryData.transactions.push(t)
+    categoryData.totalAmount += creditAmount
   })
 
-  const patterns: Array<{
+  // Convert to income patterns format
+  const incomePatterns: Array<{
     frequency: Frequency | null
     raw_frequency: string | null
     details: string
@@ -191,104 +150,43 @@ function extractIncomePatterns(transactions: ZumrailsTransaction[]): Array<{
     future_payments: Date[]
   }> = []
 
-  byCategory.forEach((transactions, categoryName) => {
-    // Sort by date descending
-    const sorted = [...transactions].sort(
-      (a, b) => new Date(b.Date).getTime() - new Date(a.Date).getTime()
-    )
+  byCategory.forEach((categoryData, categoryName) => {
+    const transactionCount = categoryData.transactions.length
+    const totalAmount = categoryData.totalAmount
 
-    // Calculate frequency based on intervals
-    const dates = sorted.map(t => new Date(t.Date)).filter(d => !isNaN(d.getTime()))
-    if (dates.length < 2) {
-      // Not enough data to determine frequency
-      const avgAmount = transactions.reduce((sum, t) => sum + (t.Credit || 0), 0) / transactions.length
-      patterns.push({
-        frequency: null,
-        raw_frequency: null,
-        details: `${categoryName}: ${transactions.length} transaction(s)`,
-        monthly_income: avgAmount * 4, // Rough estimate
-        future_payments: []
-      })
-      return
-    }
+    // Calculate average monthly income based on transaction history
+    // This is a simple calculation - total amount divided by number of months in the data
+    const dates = categoryData.transactions
+      .map(t => new Date(t.Date))
+      .filter(d => !isNaN(d.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime())
 
-    // Calculate average interval between payments
-    const intervals: number[] = []
-    for (let i = 0; i < dates.length - 1; i++) {
-      const diff = dates[i].getTime() - dates[i + 1].getTime()
-      intervals.push(diff)
-    }
-    const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length
-    const avgDays = avgInterval / (1000 * 60 * 60 * 24)
-
-    // Determine frequency
-    let frequency: Frequency | null = null
-    let rawFrequency: string | null = null
-
-    if (avgDays >= 6 && avgDays <= 8 || avgDays >= 3 && avgDays <= 4) {
-      frequency = 'weekly'
-      rawFrequency = 'weekly'
-    } else if (avgDays >= 13 && avgDays <= 16) {
-      frequency = 'bi-weekly'
-      rawFrequency = 'bi-weekly'
-    } else if (avgDays >= 28 && avgDays <= 31) {
-      frequency = 'monthly'
-      rawFrequency = 'monthly'
-    }
-    // Note: 'twice-monthly' would typically be around 14-15 days, which overlaps with bi-weekly
-    // We prioritize bi-weekly for that range
-
-    // Calculate monthly income
-    const avgAmount = transactions.reduce((sum, t) => sum + (t.Credit || 0), 0) / transactions.length
     let monthlyIncome = 0
-
-    if (frequency === 'weekly') {
-      monthlyIncome = avgAmount * 4
-    } else if (frequency === 'bi-weekly') {
-      monthlyIncome = avgAmount * 2
-    } else if (frequency === 'monthly') {
-      monthlyIncome = avgAmount
+    if (dates.length > 0) {
+      const oldestDate = dates[0]
+      const newestDate = dates[dates.length - 1]
+      const daysDiff = Math.max(1, (newestDate.getTime() - oldestDate.getTime()) / (1000 * 60 * 60 * 24))
+      const monthsDiff = daysDiff / 30
+      monthlyIncome = monthsDiff > 0 ? totalAmount / monthsDiff : totalAmount
     } else {
-      // Estimate based on transactions per month (for null frequency or other cases)
-      const transactionsPerMonth = (30 / avgDays) * transactions.length
-      monthlyIncome = avgAmount * transactionsPerMonth
+      monthlyIncome = totalAmount
     }
 
-    // Predict future payments (next 3 payments)
-    const futurePayments: Date[] = []
-    if (dates.length > 0 && frequency) {
-      const lastPaymentDate = dates[0]
-      let daysBetween = 30 // Default to monthly
-
-      if (frequency === 'weekly') {
-        daysBetween = 7
-      } else if (frequency === 'bi-weekly') {
-        daysBetween = 14
-      } else if (frequency === 'monthly') {
-        daysBetween = 30
-      }
-
-      for (let i = 1; i <= 3; i++) {
-        const nextDate = new Date(lastPaymentDate)
-        nextDate.setDate(nextDate.getDate() + daysBetween * i)
-        futurePayments.push(nextDate)
-      }
-    }
-
-    patterns.push({
-      frequency,
-      raw_frequency: rawFrequency,
-      details: `${categoryName}: ${transactions.length} transaction(s), avg ${avgDays.toFixed(1)} days apart`,
+    incomePatterns.push({
+      frequency: null, // ZumRails categories don't provide frequency directly
+      raw_frequency: null,
+      details: `${categoryName}: ${transactionCount} transaction(s), total $${totalAmount.toFixed(2)}`,
       monthly_income: Math.round(monthlyIncome * 100) / 100,
-      future_payments: futurePayments
+      future_payments: [] // No future payment prediction without frequency data
     })
   })
 
-  return patterns
+  return incomePatterns
 }
 
 /**
  * Transform Zumrails response to IBVSummary format
+ * Simplified to use ZumRails transaction categories directly
  */
 export function transformZumrailsToIBVSummary(
   zumrailsData: ZumrailsResponse,
@@ -309,16 +207,16 @@ export function transformZumrailsToIBVSummary(
     const accountNumber = account.AccountNumber || ''
     const transitNumber = account.TransitNumber || ''
     const institutionNumber = account.InstitutionNumber || ''
-    const routingCode = `${institutionNumber}-${transitNumber}` // Combine for routing code
+    const routingCode = `${institutionNumber}-${transitNumber}`
 
     // Get transactions
     const transactions = account.Transactions || []
 
-    // Calculate NSF counts
+    // Calculate NSF counts using ZumRails categories
     const nsfCounts = calculateNSFCounts(transactions)
 
-    // Extract income patterns
-    const incomePatterns = extractIncomePatterns(transactions)
+    // Calculate income by category using ZumRails transaction categories
+    const incomeByCategory = calculateIncomeByCategory(transactions)
 
     // Calculate net income (sum of all credits minus debits)
     const totalCredits = transactions.reduce((sum, t) => sum + (t.Credit || 0), 0)
@@ -332,7 +230,7 @@ export function transformZumrailsToIBVSummary(
       transit: transitNumber,
       institution: institutionNumber,
       routing_code: routingCode,
-      income: incomePatterns,
+      income: incomeByCategory,
       statistics: {
         income_net: Math.round(incomeNet * 100) / 100,
         nsf: nsfCounts
