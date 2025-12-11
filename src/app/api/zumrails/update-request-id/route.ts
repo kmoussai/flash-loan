@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Get current provider_data
     const { data: application } = await supabase
       .from('loan_applications')
-      .select('id, ibv_provider_data')
+      .select('id, ibv_provider_data, client_id')
       .eq('id', applicationId)
       .eq('ibv_provider', 'zumrails')
       .single()
@@ -40,8 +40,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Update provider_data with all connection data from CONNECTIONSUCCESSFULLYCOMPLETED
-    const currentProviderData = ((application as any).ibv_provider_data as any) || {}
-    
+    const currentProviderData =
+      ((application as any).ibv_provider_data as any) || {}
+
     // Use createIbvProviderData helper to normalize the data
     const updatedProviderData = createIbvProviderData('zumrails', {
       ...currentProviderData,
@@ -65,6 +66,51 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', applicationId)
+
+    // Save Zum Rails userId to payment_provider_data table
+    if (userId) {
+      if (application && (application as any).client_id) {
+        const clientId = (application as any).client_id
+
+        // Upsert payment provider data (insert or update if exists)
+        // First, try to get existing data to merge
+        const { data: existingData } = await (
+          supabase.from('payment_provider_data') as any
+        )
+          .select('provider_data')
+          .eq('client_id', clientId)
+          .eq('provider', 'zumrails')
+          .maybeSingle()
+
+        const mergedProviderData = {
+          ...(existingData?.provider_data || {}),
+          userId: userId,
+          ...(cardId && { cardId: cardId }),
+          ...(requestId && { requestId: requestId })
+        }
+
+        await (supabase.from('payment_provider_data') as any).upsert(
+          {
+            client_id: clientId,
+            provider: 'zumrails',
+            provider_data: mergedProviderData,
+            updated_at: new Date().toISOString()
+          },
+          {
+            onConflict: 'client_id,provider'
+          }
+        )
+
+        console.log(
+          '[Zumrails] Saved Zum Rails userId to payment_provider_data',
+          {
+            userId,
+            clientId,
+            applicationId
+          }
+        )
+      }
+    }
 
     // Also update IBV request if it exists
     const { data: ibvRequest } = await supabase
@@ -105,7 +151,7 @@ export async function POST(request: NextRequest) {
       })
 
       fetchedData = await fetchZumrailsDataByRequestId(requestId)
-      
+
       if (fetchedData) {
         // Transform Zumrails response to IBVSummary format
         ibvSummary = transformZumrailsToIBVSummary(fetchedData, requestId)
@@ -151,11 +197,14 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if fetch fails - data might not be ready yet
       // Webhook will handle fetching when data becomes available
       fetchError = error
-      console.warn('[Zumrails] Failed to fetch data immediately (this is OK, webhook will retry)', {
-        requestId,
-        applicationId,
-        error: error?.message || error
-      })
+      console.warn(
+        '[Zumrails] Failed to fetch data immediately (this is OK, webhook will retry)',
+        {
+          requestId,
+          applicationId,
+          error: error?.message || error
+        }
+      )
     }
 
     return NextResponse.json({
@@ -172,4 +221,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

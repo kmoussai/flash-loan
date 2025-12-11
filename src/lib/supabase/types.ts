@@ -304,6 +304,15 @@ export interface Staff {
   created_at: string
 }
 
+export interface PaymentProviderData {
+  id: string
+  client_id: string
+  provider: 'accept_pay' | 'zumrails' | string
+  provider_data: Record<string, any>
+  created_at: string
+  updated_at: string | null
+}
+
 export interface Address {
   id: string
   client_id: string
@@ -644,6 +653,14 @@ export interface ReferenceInsert {
   relationship: string
 }
 
+export interface PaymentProviderDataInsert {
+  user_id: string
+  provider: 'accept_pay' | 'zumrails' | string
+  provider_ids?: Record<string, any>
+  provider_metadata?: Record<string, any> | null
+  is_active?: boolean
+}
+
 // ===========================
 // UPDATE TYPES
 // ===========================
@@ -736,6 +753,10 @@ export interface ReferenceUpdate {
   last_name?: string
   phone?: string
   relationship?: string
+}
+
+export interface PaymentProviderDataUpdate {
+  provider_data?: Record<string, any>
 }
 
 export interface IdDocumentInsert {
