@@ -27,6 +27,8 @@ interface ZumrailsConnectTokenResponse {
   result: {
     Token: string
     ExpirationUTC: string
+    CustomerId?: string // May be included in response
+    CompanyName?: string
   }
 }
 
@@ -144,21 +146,59 @@ export async function getZumrailsAuthToken(): Promise<{
 
 /**
  * Create a connect token for bank verification
+ * @param authToken - Zumrails authentication token
+ * @param userInfo - Optional user information to pre-fill the form
  */
 export async function createZumrailsConnectToken(
-  authToken: string
+  authToken: string,
+  userInfo?: {
+    firstName?: string
+    lastName?: string
+    email?: string
+    addressCity?: string
+    addressLine1?: string
+    addressProvince?: string
+    addressPostalCode?: string
+  }
 ): Promise<{ connectToken: string; expiresAt: string; customerId: string }> {
   const baseUrl =
     process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
-  const createTokenUrl = `${baseUrl}/api/connect/createtoken`
+  const createTokenUrl = `${baseUrl}/api/aggregationconnector/createtoken`
 
-  const payload = {
+  const payload: any = {
     ConnectTokenType: 'AddPaymentProfile',
     Configuration: {
       allowEft: true,
       allowInterac: true,
       allowVisaDirect: true,
       allowCreditCard: true
+    }
+  }
+
+  // Add user information to pre-fill the form if provided
+  // Note: If User object is included, Zum Rails requires all address fields to be present
+  // So we only include User object if we have all required address fields
+  if (userInfo && (userInfo.firstName || userInfo.lastName || userInfo.email)) {
+    const hasAllAddressFields = 
+      userInfo.addressCity && 
+      userInfo.addressLine1 && 
+      userInfo.addressProvince && 
+      userInfo.addressPostalCode
+
+    // Only include User object if we have all required address fields
+    // Otherwise, create token without User object (user will fill form manually)
+    if (hasAllAddressFields) {
+      payload.User = {}
+      if (userInfo.firstName) payload.User.firstName = userInfo.firstName
+      if (userInfo.lastName) payload.User.lastName = userInfo.lastName
+      if (userInfo.email) payload.User.email = userInfo.email
+      payload.User.addressCity = userInfo.addressCity
+      payload.User.addressLine1 = userInfo.addressLine1
+      payload.User.addressProvince = userInfo.addressProvince
+      payload.User.addressPostalCode = userInfo.addressPostalCode?.replace(/\s+/g, '')
+    } else {
+      // Log warning if address fields are missing but user info was provided
+      console.warn('[Zumrails] User info provided but missing required address fields. Creating token without User object.')
     }
   }
 
@@ -191,6 +231,12 @@ export async function createZumrailsConnectToken(
   } catch (error) {
     throw new Error('Failed to parse Zumrails connect token response')
   }
+  console.log('[Zumrails] Create token successful', { 
+    body: tokenData,
+    token: tokenData.result?.Token?.substring(0, 50) + '...', // Log first 50 chars of token
+    hasCustomerId: !!tokenData.result?.CustomerId,
+    customerId: tokenData.result?.CustomerId
+  })
 
   if (tokenData.isError || !tokenData.result?.Token) {
     throw new Error(
@@ -199,25 +245,45 @@ export async function createZumrailsConnectToken(
   }
 
   console.log('[Zumrails] Connect token created successfully', {
-    expiresAt: tokenData.result.ExpirationUTC
+    expiresAt: tokenData.result.ExpirationUTC,
+    hasCustomerId: !!tokenData.result.CustomerId
   })
-  const customerId = tokenData.result.Token.split('|')[2]
+  
+  // Try to get customerId from token response first (if included)
+  // Otherwise, get from auth token cache
+  let customerId = tokenData.result.CustomerId || authTokenCache?.customerId || ''
+  
+  if (!customerId) {
+    console.warn('[Zumrails] customerId not found in token response or cache, attempting to get from auth token')
+    // Fallback: get from auth token if not in cache or response
+    const { customerId: authCustomerId } = await getZumrailsAuthToken()
+    customerId = authCustomerId
+  }
+
+  if (!customerId) {
+    console.error('[Zumrails] Failed to get customerId - this may cause SDK issues')
+  }
 
   return {
     connectToken: tokenData.result.Token,
     expiresAt: tokenData.result.ExpirationUTC,
-    customerId
+    customerId: customerId || '' // Ensure we always return a string
   }
 }
 
 /**
  * Initialize Zumrails session - gets auth token and creates connect token
+ * @param userData - Optional user information to pre-fill the form
  */
 export async function initializeZumrailsSession(userData?: {
   firstName?: string
   lastName?: string
   email?: string
   phone?: string
+  addressCity?: string
+  addressLine1?: string
+  addressProvince?: string
+  addressPostalCode?: string
 }): Promise<{
   connectToken: string
   customerId: string
@@ -227,8 +293,11 @@ export async function initializeZumrailsSession(userData?: {
   // Step 1: Get authentication token (from cache or authenticate)
   const { token } = await getZumrailsAuthToken()
 
-  // Step 2: Create connect token
-  const { connectToken, expiresAt, customerId } = await createZumrailsConnectToken(token)
+  // Step 2: Create connect token with user information
+  const { connectToken, expiresAt, customerId } = await createZumrailsConnectToken(
+    token,
+    userData
+  )
 
   // Step 3: Build iframe URL
   const connectorBaseUrl =

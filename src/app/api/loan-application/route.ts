@@ -567,7 +567,7 @@ export async function POST(request: NextRequest) {
         p_street_name: body.streetName || null,
         p_apartment_number: body.apartmentNumber || null,
         p_city: body.city || null,
-        p_postal_code: body.postalCode || null,
+        p_postal_code: body.postalCode?.replace(/\s+/g, '') || null,
         p_moving_date: body.movingDate || null,
         p_residence_status: body.residenceStatus || null,
         p_gross_salary: body.grossSalary ? parseFloat(body.grossSalary) : null,
@@ -914,13 +914,37 @@ export async function POST(request: NextRequest) {
             { applicationId: txResult.application_id }
           )
 
+          // Build address line 1 from street components from request body
+          // Zum Rails requires addressLine1 to be non-empty if User object is included
+          let addressLine1: string | undefined = undefined
+          if (body.streetNumber || body.streetName) {
+            const streetParts = [
+              body.streetNumber,
+              body.streetName
+            ].filter(Boolean)
+            if (streetParts.length > 0) {
+              addressLine1 = streetParts.join(' ')
+              if (body.apartmentNumber) {
+                addressLine1 += `, Apt ${body.apartmentNumber}`
+              }
+            }
+          }
+
           // Use server helper to get token from cache or authenticate
+          // Use address data from request body instead of querying DB
           const { connectToken, customerId, iframeUrl, expiresAt } =
             await initializeZumrailsSession({
               firstName: clientData.first_name,
               lastName: clientData.last_name,
               phone: clientData.phone,
-              email: clientData.email
+              email: clientData.email,
+              // Include address fields from request body (required by Zum Rails when User object is provided)
+              ...(body.city && body.streetNumber && body.province && body.postalCode && {
+                addressCity: body.city,
+                addressLine1: addressLine1,
+                addressProvince: body.province,
+                addressPostalCode: body.postalCode.replace(/\s+/g, '')
+              })
             })
 
           const requestedAt = new Date().toISOString()
@@ -1014,7 +1038,8 @@ export async function POST(request: NextRequest) {
 
           ibvInitiationData = {
             customerId,
-            iframeUrl,
+            connectToken, // Include token for SDK approach
+            iframeUrl, // Keep for backward compatibility
           }
 
           console.log(

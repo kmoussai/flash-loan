@@ -76,7 +76,7 @@ const parseAddressComponents = (components: AddressComponent[]) => {
     streetName,
     city: locality,
     province,
-    postalCode: postalCode.toUpperCase(),
+    postalCode: postalCode.toUpperCase().replace(/\s+/g, ''),
     country
   }
 }
@@ -137,10 +137,21 @@ export default function AddressAutocomplete({
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    if (status === 'ready' || status === 'loading') return
+    // Check if Google Maps is already loaded
+    if (window.google?.maps?.places && status === 'idle') {
+      debugLog('Google Maps already loaded, setting status to ready')
+      setStatus('ready')
+      return
+    }
+
+    // Don't re-run if already ready or currently loading
+    if (status === 'ready' || status === 'loading') {
+      debugLog('Skipping initialization', { status })
+      return
+    }
 
     const resolvedKey = resolveApiKey(apiKey)
-    debugLog('Initializing', { hasApiKey: Boolean(resolvedKey), countries: countriesRef.current })
+    debugLog('Initializing', { hasApiKey: Boolean(resolvedKey), countries: countriesRef.current, currentStatus: status })
 
     if (!resolvedKey) {
       setStatus('error')
@@ -159,17 +170,32 @@ export default function AddressAutocomplete({
 
     loadGoogleMapsPlaces(resolvedKey, { language: 'en', region: primaryCountry.toUpperCase() })
       .then(() => {
-        if (cancelled) return
-        debugLog('Google Maps Places library loaded successfully')
-        setStatus('ready')
-        setErrorMessage(null)
+        if (cancelled) {
+          debugLog('Load cancelled, ignoring result')
+          return
+        }
+        // Double-check that Google Maps is actually available
+        if (window.google?.maps?.places) {
+          debugLog('Google Maps Places library loaded successfully')
+          setStatus('ready')
+          setErrorMessage(null)
+        } else {
+          debugLog('Google Maps loaded but Places library not available')
+          setStatus('error')
+          const message = 'Google Places library not available. Please refresh the page.'
+          setErrorMessage(message)
+          onErrorRef.current?.(message)
+        }
       })
       .catch(error => {
-        if (cancelled) return
+        if (cancelled) {
+          debugLog('Load cancelled, ignoring error')
+          return
+        }
         console.error('[AddressAutocomplete] Failed to load Google Maps:', error)
         debugLog('Google Maps Places library failed to load', error)
         setStatus('error')
-        const message = 'Unable to load Google Places right now.'
+        const message = error?.message || 'Unable to load Google Places right now. Please check your API key and try again.'
         setErrorMessage(message)
         onErrorRef.current?.(message)
       })
@@ -177,7 +203,7 @@ export default function AddressAutocomplete({
     return () => {
       cancelled = true
     }
-  }, [apiKey, status])
+  }, [apiKey]) // Removed 'status' from dependencies to prevent re-triggering
 
   useEffect(() => {
     if (status !== 'ready') {
@@ -195,50 +221,76 @@ export default function AddressAutocomplete({
       return
     }
 
-    debugLog('Attaching Google Places Autocomplete to input', { countries: countriesRef.current })
-
-    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-      types: ['address'],
-      componentRestrictions: { country: countriesRef.current },
-      fields: ['address_components', 'formatted_address']
-    })
-
-    autocompleteRef.current = autocomplete
-
-    const listener = autocomplete.addListener('place_changed', () => {
-      const place = autocomplete.getPlace() as PlaceDetailsResult
-
-      debugLog('Place changed event', {
-        hasAddressComponents: Boolean(place.address_components),
-        formattedAddress: place.formatted_address
-      })
-
-      if (!place.address_components) {
-        const message = 'Unable to retrieve full address details.'
-        setErrorMessage(message)
-        onErrorRef.current?.(message)
+    // Small delay to ensure input is fully rendered and accessible
+    let listener: any = null
+    const initTimeout = setTimeout(() => {
+      if (!inputRef.current) {
+        debugLog('Input ref lost during initialization delay')
         return
       }
 
-      const parsed = parseAddressComponents(place.address_components)
-      const formattedValue = place.formatted_address ?? inputRef.current?.value ?? ''
+      debugLog('Attaching Google Places Autocomplete to input', { countries: countriesRef.current })
 
-      setQuery(formattedValue)
-      if (inputRef.current) {
-        inputRef.current.value = formattedValue
+      try {
+        const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+          types: ['address'],
+          componentRestrictions: { country: countriesRef.current },
+          fields: ['address_components', 'formatted_address']
+        })
+
+        autocompleteRef.current = autocomplete
+
+        listener = autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace() as PlaceDetailsResult
+
+          debugLog('Place changed event', {
+            hasAddressComponents: Boolean(place.address_components),
+            formattedAddress: place.formatted_address
+          })
+
+          if (!place.address_components) {
+            const message = 'Unable to retrieve full address details.'
+            setErrorMessage(message)
+            onErrorRef.current?.(message)
+            return
+          }
+
+          const parsed = parseAddressComponents(place.address_components)
+          const formattedValue = place.formatted_address ?? inputRef.current?.value ?? ''
+
+          setQuery(formattedValue)
+          if (inputRef.current) {
+            inputRef.current.value = formattedValue
+          }
+          setErrorMessage(null)
+
+          onSelectRef.current?.({
+            ...parsed,
+            raw: place
+          })
+        })
+      } catch (error) {
+        console.error('[AddressAutocomplete] Error initializing autocomplete:', error)
+        setStatus('error')
+        const message = 'Failed to initialize address autocomplete'
+        setErrorMessage(message)
+        onErrorRef.current?.(message)
       }
-      setErrorMessage(null)
-
-      onSelectRef.current?.({
-        ...parsed,
-        raw: place
-      })
-    })
+    }, 50) // Small delay to ensure DOM is ready
 
     return () => {
-      debugLog('Cleaning up autocomplete listener')
-      listener.remove()
-      autocompleteRef.current = null
+      clearTimeout(initTimeout)
+      if (listener) {
+        try {
+          debugLog('Cleaning up autocomplete listener')
+          listener.remove()
+        } catch (error) {
+          debugLog('Error cleaning up autocomplete listener', error)
+        }
+      }
+      if (autocompleteRef.current) {
+        autocompleteRef.current = null
+      }
     }
   }, [status])
 

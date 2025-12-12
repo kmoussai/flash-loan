@@ -69,7 +69,22 @@ export default function MicroLoanApplicationPage() {
     return defaults
   })
 
-  const [currentStep, setCurrentStep] = useState(1)
+  const [currentStep, setCurrentStep] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('microLoanCurrentStep')
+      if (saved) {
+        try {
+          const step = parseInt(saved, 10)
+          if (step >= 1 && step <= 5) {
+            return step
+          }
+        } catch {
+          // Invalid step, use default
+        }
+      }
+    }
+    return 1
+  })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showIBV, setShowIBV] = useState(false)
   const [ibvVerified, setIbvVerified] = useState(false)
@@ -97,6 +112,9 @@ export default function MicroLoanApplicationPage() {
   const [applicationId, setApplicationId] = useState<string | null>(null)
   const [isPrefilling, setIsPrefilling] = useState(false)
   const [serverIbvIframeUrl, setServerIbvIframeUrl] = useState<string | null>(
+    null
+  )
+  const [serverIbvConnectToken, setServerIbvConnectToken] = useState<string | null>(
     null
   )
   const [serverIbvProvider, setServerIbvProvider] = useState<string | null>(
@@ -231,6 +249,13 @@ export default function MicroLoanApplicationPage() {
       localStorage.setItem('microLoanFormData', JSON.stringify(formData))
     }
   }, [formData])
+
+  // Save current step to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('microLoanCurrentStep', currentStep.toString())
+    }
+  }, [currentStep])
 
   const updateFormData: QuickApplyUpdateHandler = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -461,7 +486,7 @@ export default function MicroLoanApplicationPage() {
           apartmentNumber: formData.apartmentNumber || null,
           city: formData.city,
           province: formData.province,
-          postalCode: formData.postalCode,
+          postalCode: formData.postalCode?.replace(/\s+/g, '') || '',
           country: formData.country,
           movingDate: formData.movingDate,
           rentCost: formData.rentCost || null,
@@ -502,17 +527,19 @@ export default function MicroLoanApplicationPage() {
       setApplicationReferenceNumber(referenceNumber)
       setApplicationId(applicationIdFromResponse)
 
-      // If server initiated IBV and we have an iframe URL, set up for Step 5
+      // If server initiated IBV and we have an iframe URL or connect token, set up for Step 5
       if (ibvData?.required) {
         const iframeUrl = ibvData.iframeUrl || ibvData.startUrl
+        const connectToken = ibvData.connectToken // Zum Rails SDK token (preferred)
         const provider = ibvData.provider || 'zumrails'
-        if (iframeUrl) {
-          setServerIbvIframeUrl(iframeUrl)
+        if (iframeUrl || connectToken) {
+          setServerIbvIframeUrl(iframeUrl || null)
+          setServerIbvConnectToken(connectToken || null)
           setServerIbvProvider(provider)
           // Move to Step 5 for IBV verification
           setCurrentStep(5)
         } else {
-          // IBV required but no URL available, mark as submitted
+          // IBV required but no URL/token available, mark as submitted
           setIsSubmitted(true)
         }
       } else {
@@ -601,31 +628,31 @@ export default function MicroLoanApplicationPage() {
       case 1:
         // Validate all required fields and age (must be at least 18)
         const hasAllFields =
-          formData.firstName &&
-          formData.lastName &&
-          formData.email &&
-          formData.phone &&
-          formData.dateOfBirth
+          formData.firstName?.trim() &&
+          formData.lastName?.trim() &&
+          formData.email?.trim() &&
+          formData.phone?.trim() &&
+          formData.dateOfBirth?.trim()
         if (!hasAllFields) return false
 
         // Validate age if date of birth is provided
-        if (formData.dateOfBirth) {
-          const ageValidation = validateMinimumAge(formData.dateOfBirth, 18)
+        if (formData.dateOfBirth?.trim()) {
+          const ageValidation = validateMinimumAge(formData.dateOfBirth.trim(), 18)
           return ageValidation.isValid
         }
         return false
       case 2:
         return (
-          formData.streetNumber &&
-          formData.streetName &&
-          formData.city &&
-          formData.province &&
-          formData.postalCode &&
-          formData.country &&
-          formData.movingDate
+          formData.streetNumber?.trim() &&
+          formData.streetName?.trim() &&
+          formData.city?.trim() &&
+          formData.province?.trim() &&
+          formData.postalCode?.trim() &&
+          formData.country?.trim() &&
+          formData.movingDate?.trim()
         )
       case 3:
-        return formData.loanAmount
+        return formData.loanAmount?.trim()
       case 4:
         return formData.confirmInformation
       case 5:
@@ -638,7 +665,14 @@ export default function MicroLoanApplicationPage() {
       default:
         return false
     }
-  }, [formData])
+  }, [
+    formData,
+    currentStep,
+    ibvVerified,
+    ibvSubmissionOverride,
+    inveriteRequestGuid,
+    inveriteConnection
+  ])
 
   // If form is submitted, show success message
   if (isSubmitted) {
@@ -833,9 +867,10 @@ export default function MicroLoanApplicationPage() {
           )}
 
           {/* Step 5: Bank Verification */}
-          {currentStep === 5 && serverIbvIframeUrl && (
+          {currentStep === 5 && (serverIbvIframeUrl || serverIbvConnectToken) && (
             <Step5BankVerification
-              iframeUrl={serverIbvIframeUrl}
+              iframeUrl={serverIbvIframeUrl || undefined}
+              connectToken={serverIbvConnectToken || undefined}
               ibvProvider={(serverIbvProvider as any) || 'zumrails'}
               applicationId={applicationId}
               onVerificationSuccess={({ provider, connection }) => {

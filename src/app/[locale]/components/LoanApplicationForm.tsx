@@ -417,7 +417,7 @@ export default function LoanApplicationForm() {
         apartmentNumber: formData.apartmentNumber,
         city: formData.city,
         province: formData.province,
-        postalCode: formData.postalCode,
+        postalCode: formData.postalCode?.replace(/\s+/g, '') || '',
         movingDate: formData.movingDate,
         rentCost: formData.rentCost,
         

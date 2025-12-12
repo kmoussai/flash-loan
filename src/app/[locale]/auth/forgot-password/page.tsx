@@ -26,23 +26,11 @@ export default function ForgotPasswordPage() {
     setLoading(true)
 
     try {
-      // Get the base URL - use environment variable if available, otherwise detect from window
-      let baseUrl: string
-      
-      if (process.env.NEXT_PUBLIC_SITE_URL) {
-        baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      } else if (typeof window !== 'undefined') {
-        baseUrl = window.location.origin
-      } else {
-        // Fallback for SSR
-        baseUrl = 'http://localhost:3000'
-      }
-      
-      // Ensure baseUrl doesn't have trailing slash
-      baseUrl = baseUrl.replace(/\/$/, '')
+      // Get the base URL - prefer NEXT_PUBLIC_SITE_URL if set, otherwise use window.location.origin
+      // window.location.origin is most reliable for client-side components as it reflects the actual origin
+      const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, '')
       
       // Construct redirect URL with locale support
-      // Format: http://localhost:3000/en/auth/reset-password or http://localhost:3000/fr/auth/reset-password
       const redirectUrl = `${baseUrl}/${locale}/auth/reset-password`
       
       console.log('[Password Reset] Redirect URL:', redirectUrl)

@@ -53,14 +53,33 @@ export const loadGoogleMapsPlaces = (
       const existingScript = document.getElementById(GOOGLE_SCRIPT_ID) as HTMLScriptElement | null
 
       if (existingScript) {
-        existingScript.addEventListener('load', () => {
+        // Script already exists - check if it's already loaded
+        if (window.google?.maps?.places) {
+          resolve(window.google)
+          return
+        }
+
+        // Script exists but not loaded yet - poll for it
+        let pollCount = 0
+        const maxPolls = 50 // Poll for up to 5 seconds
+        
+        const checkLoaded = () => {
           if (window.google?.maps?.places) {
             resolve(window.google)
+          } else if (pollCount < maxPolls) {
+            pollCount++
+            setTimeout(checkLoaded, 100)
           } else {
-            reject(new Error('Google Maps loaded without Places library'))
+            googleMapsPromise = null
+            reject(new Error('Google Maps failed to load within timeout'))
           }
-        })
+        }
 
+        // Start polling immediately
+        checkLoaded()
+        
+        // Also listen for load/error events as backup
+        existingScript.addEventListener('load', checkLoaded)
         existingScript.addEventListener('error', () => {
           googleMapsPromise = null
           reject(new Error('Failed to load Google Maps script'))
@@ -74,20 +93,46 @@ export const loadGoogleMapsPlaces = (
       script.src = buildScriptSrc(apiKey, options)
       script.async = true
       script.defer = true
-      script.addEventListener('load', () => {
+      
+      // Google Maps API loads asynchronously and may not fire 'load' event reliably
+      // We need to poll for window.google to be available
+      let pollCount = 0
+      const maxPolls = 100 // Poll for up to 10 seconds (100 * 100ms)
+      let pollingStarted = false
+      
+      const checkGoogleMaps = () => {
         if (window.google?.maps?.places) {
+          googleMapsPromise = null // Reset so it can be loaded again if needed
           resolve(window.google)
+        } else if (pollCount < maxPolls) {
+          pollCount++
+          setTimeout(checkGoogleMaps, 100)
         } else {
           googleMapsPromise = null
-          reject(new Error('Google Maps loaded without Places library'))
+          reject(new Error('Google Maps failed to load within timeout. Check your API key and network connection.'))
+        }
+      }
+      
+      script.addEventListener('load', () => {
+        // Script loaded, start polling if not already started
+        if (!pollingStarted) {
+          pollingStarted = true
+          checkGoogleMaps()
         }
       })
+      
       script.addEventListener('error', () => {
         googleMapsPromise = null
-        reject(new Error('Failed to load Google Maps script'))
+        reject(new Error('Failed to load Google Maps script. Check your API key and network connection.'))
       })
 
       document.head.appendChild(script)
+      
+      // Start polling immediately (script might load very quickly or load event might not fire)
+      if (!pollingStarted) {
+        pollingStarted = true
+        checkGoogleMaps()
+      }
     })
   }
 
