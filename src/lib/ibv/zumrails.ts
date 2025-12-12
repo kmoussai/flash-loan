@@ -1,3 +1,32 @@
+/**
+ * Zum Rails Integration Helpers
+ * 
+ * To use Zum Rails Connect with token (recommended approach):
+ * 
+ * 1. Get a connect token from your backend:
+ *    const { connectToken } = await initializeZumrailsSession({ firstName, lastName, email })
+ * 
+ * 2. In your React component, create a container div and initialize the SDK:
+ * 
+ *    useEffect(() => {
+ *      if (connectToken) {
+ *        initializeZumrailsSdk(connectToken, 'zumrails-container', {
+ *          onSuccess: (data) => {
+ *            // Handle success - data contains userId, requestId, etc.
+ *          },
+ *          onError: (error) => {
+ *            // Handle error
+ *          }
+ *        })
+ *      }
+ *    }, [connectToken])
+ * 
+ * 3. In your JSX, add the container:
+ *    <div id="zumrails-container" className="h-[600px] w-full"></div>
+ * 
+ * The SDK will automatically create and manage the iframe with the token.
+ */
+
 export type ZumrailsVerificationStatus =
   | 'pending'
   | 'verified'
@@ -21,6 +50,22 @@ export const ZUMRAILS_ORIGIN_REGEX = /https:\/\/.*\.zumrails\.com/
 // Base URL for Zumrails connector (sandbox)
 export const ZUMRAILS_CONNECTOR_BASE_URL =
   'https://connector-sandbox.aggregation.zumrails.com'
+
+// Zum Rails SDK URLs (Connector SDK for Data Aggregation)
+// Sandbox: https://cdn.aggregation.zumrails.com/sandbox/connector.js
+// Production: https://cdn.aggregation.zumrails.com/production/connector.js
+export const ZUMRAILS_SDK_SANDBOX_URL = 
+  process.env.NEXT_PUBLIC_ZUMRAILS_SDK_URL || 
+  'https://cdn.aggregation.zumrails.com/sandbox/connector.js'
+export const ZUMRAILS_SDK_PRODUCTION_URL = 
+  process.env.NEXT_PUBLIC_ZUMRAILS_SDK_URL || 
+  'https://cdn.aggregation.zumrails.com/production/connector.js'
+
+// Get the appropriate SDK URL based on environment
+export function getZumrailsSdkUrl(): string {
+  const isProduction = process.env.NEXT_PUBLIC_ZUMRAILS_ENV === 'production'
+  return isProduction ? ZUMRAILS_SDK_PRODUCTION_URL : ZUMRAILS_SDK_SANDBOX_URL
+}
 
 // Get iframe config with customer ID
 export function getZumrailsIframeConfig(
@@ -57,6 +102,10 @@ export async function initializeZumrailsSession(userData?: {
   lastName?: string
   email?: string
   phone?: string
+  addressCity?: string
+  addressLine1?: string
+  addressProvince?: string
+  addressPostalCode?: string
 }): Promise<{ connectToken: string; customerId: string; iframeUrl?: string }> {
   try {
     console.log('[Zumrails] Initializing session with user data:', userData)
@@ -326,4 +375,155 @@ function extractCustomerIdFromUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined
   const urlParams = new URLSearchParams(window.location.search)
   return urlParams.get('customerid') || undefined
+}
+
+/**
+ * Load Zum Rails SDK script dynamically
+ */
+export function loadZumrailsSdk(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('SDK can only be loaded in browser'))
+      return
+    }
+
+    // Check if SDK is already loaded
+    // The SDK exposes itself as ZumRailsConnector (per documentation)
+    if ((window as any).ZumRailsConnector) {
+      resolve()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = getZumrailsSdkUrl()
+    script.id = 'zumrailsconnector' // Match the ID from the documentation
+    script.async = true
+    script.type = 'text/javascript'
+    script.onload = () => {
+      // Check for ZumRailsConnector (per documentation)
+      if ((window as any).ZumRailsConnector) {
+        resolve()
+      } else {
+        reject(new Error('Zum Rails SDK failed to load - ZumRailsConnector global object not found'))
+      }
+    }
+    script.onerror = () => {
+      reject(new Error('Failed to load Zum Rails SDK'))
+    }
+    document.head.appendChild(script)
+  })
+}
+
+/**
+ * Initialize Zum Rails Connector SDK with token
+ * This will create and manage the iframe automatically
+ * @param connectToken - The token received from /api/aggregationconnector/createtoken
+ * @param containerId - Optional: The ID of the container element where the iframe should be rendered.
+ *                      If not provided, the SDK will create its own container.
+ * @param callbacks - Event callbacks for SDK events
+ * @param options - Optional configuration options for the connector
+ */
+export async function initializeZumrailsSdk(
+  connectToken: string,
+  containerId?: string,
+  callbacks?: {
+    onLoad?: () => void
+    onSuccess?: (requestid: string, cardid: string, extrafield1: string, extrafield2: string, userid: string, clientuserid: string) => void
+    onError?: (error: string) => void
+    onConnectorClosed?: () => void
+    onStepChanged?: (data: { step: string; data: any }) => void
+  },
+  options?: {
+    accountselector?: boolean
+    testinstitution?: boolean
+    backbutton?: boolean
+    closebutton?: boolean
+    extrafield1?: string
+    extrafield2?: string
+    cardidforreconnect?: string
+  }
+): Promise<void> {
+  if (typeof window === 'undefined') {
+    throw new Error('SDK can only be initialized in browser')
+  }
+
+  // Load SDK if not already loaded
+  await loadZumrailsSdk()
+
+  // Check for SDK global variable (ZumRailsConnector per documentation)
+  const ZumRailsConnector = (window as any).ZumRailsConnector
+  if (!ZumRailsConnector) {
+    throw new Error('Zum Rails SDK not available - ZumRailsConnector global object not found')
+  }
+
+  // Build initialization config according to documentation
+  // Documentation: https://docs.zumrails.com/data-aggregation/how-it-works
+  console.log('[Zumrails SDK] Initializing with token:', {
+    tokenLength: connectToken?.length,
+    tokenPreview: connectToken?.substring(0, 50) + '...'
+  })
+  
+  const config: any = {
+    token: connectToken,
+    options: {
+      accountselector: options?.accountselector ?? true,
+      testinstitution: options?.testinstitution ?? true,
+      backbutton: options?.backbutton ?? true,
+      closebutton: options?.closebutton ?? true,
+      ...(options?.extrafield1 && { extrafield1: options.extrafield1 }),
+      ...(options?.extrafield2 && { extrafield2: options.extrafield2 }),
+      ...(options?.cardidforreconnect && { cardidforreconnect: options.cardidforreconnect })
+    },
+    onLoad: () => {
+      console.log('[Zumrails SDK] Iframe loaded')
+      callbacks?.onLoad?.()
+    },
+    onSuccess: (
+      requestid: string,
+      cardid: string,
+      extrafield1: string,
+      extrafield2: string,
+      userid: string,
+      clientuserid: string
+    ) => {
+      console.log('[Zumrails SDK] Success:', {
+        requestid,
+        cardid,
+        extrafield1,
+        extrafield2,
+        userid,
+        clientuserid
+      })
+      // Pass parameters as separate arguments per documentation
+      callbacks?.onSuccess?.(requestid, cardid, extrafield1, extrafield2, userid, clientuserid)
+    },
+    onError: (error: string) => {
+      console.error('[Zumrails SDK] Error:', error)
+      callbacks?.onError?.(error)
+    },
+    onConnectorClosed: () => {
+      console.log('[Zumrails SDK] Connector closed by user')
+      callbacks?.onConnectorClosed?.()
+    },
+    onStepChanged: (data: { step: string; data: any }) => {
+      console.log('[Zumrails SDK] Step changed:', data)
+      callbacks?.onStepChanged?.(data)
+    }
+  }
+
+  // Add containerId if provided - this makes the SDK render inline instead of as a modal
+  // The containerId should be the ID of the DOM element where the SDK should render
+  if (containerId) {
+    // Try both top-level and in options (SDK might accept it in either place)
+    config.containerId = containerId
+    // Also try adding it to options as some SDKs require it there
+    if (!config.options.containerId) {
+      config.options.containerId = containerId
+    }
+  }
+
+  // Initialize the SDK with the token
+  // If containerId is provided, SDK will render inline in that container
+  // If not provided, SDK will render as a modal
+  ZumRailsConnector.init(config)
 }
