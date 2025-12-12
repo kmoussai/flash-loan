@@ -138,6 +138,9 @@ class AcceptPayClient {
     endpoint: string,
     options: AcceptPayRequestOptions = {}
   ): Promise<T> {
+    // Accept Pay calls are disabled
+    throw new Error('Accept Pay API calls are currently disabled')
+    
     const { method = 'GET', body, headers = {}, requireAuth = true } = options
 
     const url = endpoint.startsWith('http')
