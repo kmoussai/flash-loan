@@ -867,11 +867,10 @@ export default function MicroLoanApplicationPage() {
           )}
 
           {/* Step 5: Bank Verification */}
-          {currentStep === 5 && (serverIbvIframeUrl || serverIbvConnectToken) && (
+          {currentStep === 5 && serverIbvIframeUrl && (
             <Step5BankVerification
-              iframeUrl={serverIbvIframeUrl || undefined}
-              connectToken={serverIbvConnectToken || undefined}
-              ibvProvider={(serverIbvProvider as any) || 'zumrails'}
+              iframeUrl={serverIbvIframeUrl}
+              ibvProvider={(serverIbvProvider as 'zumrails' | 'inverite') || 'zumrails'}
               applicationId={applicationId}
               onVerificationSuccess={({ provider, connection }) => {
                 if (provider === 'inverite') {
