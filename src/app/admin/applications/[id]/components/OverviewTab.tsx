@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Button from '@/src/app/[locale]/components/Button'
+import StatCard from '../../../components/StatCard'
 import { PaymentFrequency } from '@/src/types'
 import GenerateContractModal from './GenerateContractModal'
 import type { ApplicationWithDetails } from '../types'
@@ -80,41 +81,36 @@ const OverviewTab = ({
   return (
     <div className='space-y-3'>
       <div className='grid gap-3 md:grid-cols-3'>
-        <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-3'>
-          <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
-            Loan Amount
-          </label>
-          <p className='mt-1 text-xl font-bold text-gray-900'>
-            {formatCurrency(application.loan_amount)}
-          </p>
-        </div>
-        <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-3'>
-          <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
-            Income Source
-          </label>
-          <p className='mt-1 text-sm font-bold capitalize text-gray-900'>
-            {application.income_source
+        <StatCard
+          label='Loan Amount'
+          value={formatCurrency(application.loan_amount)}
+          gradient='indigo'
+          valueSize='xl'
+        />
+        <StatCard
+          label='Income Source'
+          value={
+            application.income_source
               ? application.income_source.replace(/-/g, ' ')
-              : 'Not provided'}
-          </p>
-        </div>
-        <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-amber-50 to-orange-50 p-3'>
-          <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
-            Status
-          </label>
-          <p className='mt-1 text-sm font-bold text-gray-900'>
-            {getStatusLabel(application.application_status)}
-          </p>
-        </div>
+              : 'Not provided'
+          }
+          gradient='emerald'
+          valueSize='md'
+          capitalize
+        />
+        <StatCard
+          label='Status'
+          value={getStatusLabel(application.application_status)}
+          gradient='amber'
+          valueSize='md'
+        />
         {application.interest_rate && (
-          <div className='rounded-lg border border-gray-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-3'>
-            <label className='text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
-              Interest Rate
-            </label>
-            <p className='mt-1 text-sm font-bold text-gray-900'>
-              {application.interest_rate}%
-            </p>
-          </div>
+          <StatCard
+            label='Interest Rate'
+            value={`${application.interest_rate}%`}
+            gradient='teal'
+            valueSize='md'
+          />
         )}
         {/* {application.ibv_results?.aggregates?.total_deposits && (
           <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5'>
@@ -276,6 +272,7 @@ const OverviewTab = ({
         </div>
       </div>
 
+      {/* Contract Management - Show for pre-approved and beyond */}
       {(application.application_status === 'pre_approved' ||
         application.application_status === 'contract_pending' ||
         application.application_status === 'contract_signed' ||
@@ -302,8 +299,6 @@ const OverviewTab = ({
           </div>
         </div>
       )}
-
-      
     </div>
   )
 }

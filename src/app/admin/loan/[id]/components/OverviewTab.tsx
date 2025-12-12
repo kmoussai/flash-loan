@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import Button from '@/src/app/[locale]/components/Button'
+import StatCard from '../../../components/StatCard'
 import GenerateContractModal from '../../../applications/[id]/components/GenerateContractModal'
 import ContractViewer from '../../../components/ContractViewer'
 import type { LoanContract, ApplicationStatus } from '@/src/lib/supabase/types'
@@ -150,33 +151,27 @@ export default function OverviewTab({
   }
 
   return (
-    <div className='space-y-6'>
+    <div className='space-y-3'>
       {/* Quick Stats */}
-      <div className='grid gap-4 md:grid-cols-3'>
-        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-5'>
-          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
-            Principal
-          </label>
-          <p className='mt-2 text-3xl font-bold text-gray-900'>
-            {formatCurrency(loan.principal)}
-          </p>
-        </div>
-        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-5'>
-          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
-            Remaining Balance
-          </label>
-          <p className='mt-2 text-3xl font-bold text-gray-900'>
-            {formatCurrency(loan.remaining_balance)}
-          </p>
-        </div>
-        <div className='rounded-xl border border-gray-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5'>
-          <label className='text-xs font-semibold uppercase tracking-wide text-gray-600'>
-            Interest Rate
-          </label>
-          <p className='mt-2 text-3xl font-bold text-gray-900'>
-            {loan.interest_rate}%
-          </p>
-        </div>
+      <div className='grid gap-3 md:grid-cols-3'>
+        <StatCard
+          label='Principal'
+          value={formatCurrency(loan.principal)}
+          gradient='indigo'
+          valueSize='xl'
+        />
+        <StatCard
+          label='Remaining Balance'
+          value={formatCurrency(loan.remaining_balance)}
+          gradient='emerald'
+          valueSize='xl'
+        />
+        <StatCard
+          label='Interest Rate'
+          value={`${loan.interest_rate}%`}
+          gradient='amber'
+          valueSize='xl'
+        />
       </div>
 
       {/* Loan Info */}
