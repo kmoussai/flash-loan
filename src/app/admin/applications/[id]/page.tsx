@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
+import DetailPageLayout from '../../components/DetailPageLayout'
+import { ApplicationActions } from '../../components/ApplicationActions'
 import TransactionsModal from '../../components/TransactionsModal'
 import ContractViewer from '../../components/ContractViewer'
 import OverviewTab from './components/OverviewTab'
@@ -17,8 +19,6 @@ import type {
   PaymentFrequency
 } from '@/src/lib/supabase/types'
 import type { ApplicationWithDetails, IbvResults } from './types'
-import { Modal } from '@/src/app/components/Modal'
-import { RejectApplicationModal } from './components/RejectApplicationModal'
 import { parseLocalDate } from '@/src/lib/utils/date'
 
 export default function ApplicationDetailsPage() {
@@ -31,10 +31,6 @@ export default function ApplicationDetailsPage() {
   )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showApproveModal, setShowApproveModal] = useState(false)
-  const [showRejectModal, setShowRejectModal] = useState(false)
-  const [processing, setProcessing] = useState(false)
-  const [preApproveAmount, setPreApproveAmount] = useState<number | ''>('')
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [selectedAccountIndex, setSelectedAccountIndex] = useState<
     number | undefined
@@ -42,6 +38,10 @@ export default function ApplicationDetailsPage() {
   const [activeTab, setActiveTab] = useState<
     'overview' | 'ibv' | 'documents' | 'details' | 'timeline'
   >('overview')
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId as 'overview' | 'ibv' | 'documents' | 'details' | 'timeline')
+  }
   const [showContractViewer, setShowContractViewer] = useState(false)
   const [contract, setContract] = useState<LoanContract | null>(null)
   const [loadingContract, setLoadingContract] = useState(false)
@@ -128,52 +128,6 @@ export default function ApplicationDetailsPage() {
 
 
 
-  const handleApprove = async () => {
-    if (!applicationId) return
-
-    setProcessing(true)
-    try {
-      const payload: { loanAmount?: number } = {}
-      const numericAmount =
-        typeof preApproveAmount === 'string'
-          ? Number(preApproveAmount)
-          : preApproveAmount
-      if (Number.isFinite(numericAmount) && numericAmount! > 0) {
-        payload.loanAmount = Math.round((numericAmount as number) * 100) / 100
-      }
-      const response = await fetch(
-        `/api/admin/applications/${applicationId}/approve`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }
-      )
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to approve application')
-      }
-
-      const data = await response.json()
-      setProcessing(false)
-      setShowApproveModal(false)
-      alert('Application pre-approved and pending loan created.')
-
-      // Navigate to the newly created loan if present
-      if (data?.loan?.id) {
-        router.push(`/admin/loan/${data.loan.id}`)
-        return
-      }
-
-      // Refresh application details to show updated status
-      await fetchApplicationDetails()
-    } catch (err: any) {
-      console.error('Error approving application:', err)
-      setProcessing(false)
-      alert(`Error: ${err.message || 'Failed to approve application'}`)
-    }
-  }
 
 
   type ContractGenerationOptions = {
@@ -403,114 +357,64 @@ export default function ApplicationDetailsPage() {
   ]
 
   return (
-    <AdminDashboardLayout>
-      <div className='flex h-[calc(100vh-64px)] flex-col'>
-        {/* Header - Compact */}
-        <div className='flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2'>
-          <div className='flex items-center gap-2'>
-            <button
-              onClick={() => router.push('/admin/applications')}
-              className='flex h-6 w-6 items-center justify-center rounded border border-gray-300 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700'
-              title='Back to Applications'
+    <>
+    <DetailPageLayout
+      header={{
+        backHref: '/admin/applications',
+        backTitle: 'Back to Applications',
+        title: 'Application Details',
+        subtitle: application.id.slice(0, 8),
+        onRefresh: fetchApplicationDetails,
+        refreshLoading: loading,
+        status: application.application_status,
+        statusVariant: 'default',
+        size: 'sm',
+        rightContent: (
+          <div className='flex items-center gap-1.5'>
+            <ApplicationActions
+              applicationId={applicationId}
+              applicationStatus={application.application_status}
+              defaultLoanAmount={application.loan_amount}
+              onActionComplete={fetchApplicationDetails}
+              size='sm'
+            />
+            <svg
+              className='h-3.5 w-3.5 text-gray-400'
+              fill='none'
+              stroke='currentColor'
+              viewBox='0 0 24 24'
             >
-              <svg
-                className='h-3 w-3'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M15 19l-7-7 7-7'
-                />
-              </svg>
-            </button>
-            <div className='flex items-center gap-1.5'>
-              <h1 className='text-sm font-medium text-gray-700'>
-                Application Details
-              </h1>
-              <span className='text-[10px] text-gray-400'>•</span>
-              <span className='font-mono text-[10px] text-gray-500'>
-                {application.id.slice(0, 8)}
-              </span>
-            </div>
-          </div>
-
-          <div className='flex items-center gap-2'>
-            <button
-              onClick={fetchApplicationDetails}
-              disabled={loading}
-              className='flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50'
-              title='Refresh application details'
-            >
-              <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
-            </button>
-            {/* Client Info - Compact */}
-            <div className='flex items-center gap-1.5'>
-              <svg
-                className='h-3.5 w-3.5 text-gray-400'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
-                />
-              </svg>
-              {application.users?.id ? (
-                <button
-                  onClick={() =>
-                    router.push(`/admin/clients/${application.users?.id}`)
-                  }
-                  className='text-xs font-semibold text-gray-900 transition-colors hover:text-blue-600'
-                >
-                  {application.users?.first_name} {application.users?.last_name}
-                </button>
-              ) : (
-                <span className='text-xs font-semibold text-gray-900'>
-                  {application.users?.first_name} {application.users?.last_name}
-                </span>
-              )}
-            </div>
-            <span
-              className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${getStatusBadgeColor(application.application_status)}`}
-            >
-              {getStatusLabel(application.application_status)}
-            </span>
-          </div>
-        </div>
-
-        {/* Modern Tabs */}
-        <div className='border-b border-gray-200 bg-white px-4'>
-          <div className='flex items-center gap-0.5'>
-            {tabs.map(tab => (
+              <path
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                strokeWidth={2}
+                d='M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+              />
+            </svg>
+            {application.users?.id ? (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? 'text-indigo-600'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
+                onClick={() =>
+                  router.push(`/admin/clients/${application.users?.id}`)
+                }
+                className='text-xs font-semibold text-gray-900 transition-colors hover:text-blue-600'
               >
-                <span className='text-xs'>{tab.icon}</span>
-                <span>{tab.label}</span>
-                {activeTab === tab.id && (
-                  <span className='absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600'></span>
-                )}
+                {application.users?.first_name} {application.users?.last_name}
               </button>
-            ))}
+            ) : (
+              <span className='text-xs font-semibold text-gray-900'>
+                {application.users?.first_name} {application.users?.last_name}
+              </span>
+            )}
           </div>
-        </div>
-
-        {/* Tab Content - Scrollable */}
-        <div className='flex-1 overflow-hidden bg-gray-50'>
-          <div className='mx-auto h-full max-w-7xl px-4 py-3'>
+        )
+      }}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+      tabVariant='modern'
+      tabSize='sm'
+      contentMaxWidth='7xl'
+    >
             {/* Tab: Overview */}
             {activeTab === 'overview' && (
               <OverviewTab
@@ -518,11 +422,8 @@ export default function ApplicationDetailsPage() {
                 loadingContract={loadingContract}
                 onGenerateContract={options => handleGenerateContract(options)}
                 onViewContract={handleViewContract}
-                onOpenApproveModal={() => {
-                  setPreApproveAmount(application.loan_amount)
-                  setShowApproveModal(true)
-                }}
-                onOpenRejectModal={() => setShowRejectModal(true)}
+                onOpenApproveModal={() => {}}
+                onOpenRejectModal={() => {}}
               />
             )}
 
@@ -554,75 +455,9 @@ export default function ApplicationDetailsPage() {
             {activeTab === 'timeline' && (
               <TimelineTab application={application} />
             )}
-          </div>
-        </div>
+    </DetailPageLayout>
 
-        {/* Approve Modal */}
-        {showApproveModal && (
-          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
-            <div className='mx-4 w-full max-w-md rounded-lg border border-gray-200 bg-white p-6'>
-              <div className='mb-6'>
-                <h3 className='text-lg font-semibold text-gray-900'>
-                  Pre-Approve Application
-                </h3>
-                <p className='mt-2 text-sm text-gray-600'>
-                  Set the pre-approved amount. A pending loan will be created.
-                </p>
-                <div className='mt-4'>
-                  <label className='mb-1 block text-xs font-medium text-gray-700'>
-                    Amount (CAD)
-                  </label>
-                  <input
-                    type='number'
-                    min={1}
-                    step='0.01'
-                    value={preApproveAmount === '' ? '' : preApproveAmount}
-                    onChange={e => {
-                      const v = e.target.value
-                      setPreApproveAmount(v === '' ? '' : Number(v))
-                    }}
-                    className='w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500'
-                  />
-                  <p className='mt-1 text-[10px] text-gray-500'>
-                    Defaults to requested amount:{' '}
-                    {application
-                      ? new Intl.NumberFormat('en-CA', {
-                          style: 'currency',
-                          currency: 'CAD'
-                        }).format(application.loan_amount)
-                      : '-'}
-                  </p>
-                </div>
-              </div>
-              <div className='flex gap-3'>
-                <button
-                  onClick={() => setShowApproveModal(false)}
-                  disabled={processing}
-                  className='flex-1 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50'
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleApprove}
-                  disabled={processing}
-                  className='flex-1 rounded border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50'
-                >
-                  {processing ? 'Processing...' : 'Confirm Pre-Approval'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Reject Modal */}
-        <RejectApplicationModal
-          applicationId={applicationId}
-          open={showRejectModal}
-          onOpenChange={setShowRejectModal}
-          onRejected={fetchApplicationDetails}
-        />
-
-        <TransactionsModal
+      <TransactionsModal
           open={showTransactionsModal}
           onClose={() => {
             setShowTransactionsModal(false)
@@ -645,7 +480,6 @@ export default function ApplicationDetailsPage() {
             onDelete={handleDeleteContract}
           />
         )}
-      </div>
-    </AdminDashboardLayout>
+    </>
   )
 }
