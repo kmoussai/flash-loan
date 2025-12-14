@@ -67,7 +67,7 @@ export async function processNotificationEvents(
     for (const queuedEvent of events) {
       try {
         // Mark as processing
-        await supabase
+        await (supabase as any)
           .from(NOTIFICATION_EVENTS_TABLE)
           .update({
             status: 'processing',
@@ -81,7 +81,7 @@ export async function processNotificationEvents(
 
         // Update status based on result
         if (result.success) {
-          await supabase
+          await (supabase as any)
             .from(NOTIFICATION_EVENTS_TABLE)
             .update({
               status: 'completed',
@@ -96,7 +96,7 @@ export async function processNotificationEvents(
           const newStatus =
             newAttempts >= queuedEvent.max_attempts ? 'failed' : 'pending'
 
-          await supabase
+          await (supabase as any)
             .from(NOTIFICATION_EVENTS_TABLE)
             .update({
               status: newStatus,
@@ -125,7 +125,7 @@ export async function processNotificationEvents(
         const newStatus =
           newAttempts >= queuedEvent.max_attempts ? 'failed' : 'pending'
 
-        await supabase
+        await (supabase as any)
           .from(NOTIFICATION_EVENTS_TABLE)
           .update({
             status: newStatus,

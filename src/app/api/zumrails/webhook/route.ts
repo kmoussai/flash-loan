@@ -18,7 +18,6 @@ function verifyWebhookSignature(
   signature: string | null,
   secret: string
 ): boolean {
-  console.log('verifyWebhookSignature', payload, signature, secret)
   if (!signature) {
     return false
   }

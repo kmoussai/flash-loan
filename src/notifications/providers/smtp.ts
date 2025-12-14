@@ -124,6 +124,19 @@ export class SmtpEmailProvider implements EmailProvider {
         contentType: att.contentType,
       }))
 
+      // Build headers object, filtering out undefined values
+      const headers: Record<string, string> = {}
+      if (options.tags && options.tags.length > 0) {
+        headers['X-Email-Tags'] = options.tags.join(',')
+      }
+      if (options.metadata) {
+        Object.entries(options.metadata).forEach(([k, v]) => {
+          if (v) {
+            headers[`X-${k}`] = String(v)
+          }
+        })
+      }
+
       const result = await this.transporter.sendMail({
         from: `"${this.fromName}" <${this.fromEmail}>`,
         to,
@@ -134,21 +147,16 @@ export class SmtpEmailProvider implements EmailProvider {
         html: options.html,
         text: options.text || options.html.replace(/<[^>]*>/g, ''),
         attachments,
-        headers: {
-          'X-Email-Tags': options.tags?.join(',') || undefined,
-          ...Object.fromEntries(
-            Object.entries(options.metadata || {}).map(([k, v]) => [`X-${k}`, v])
-          ),
-        },
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
       })
 
       return {
         success: true,
-        messageId: result.messageId,
+        messageId: result.messageId || undefined,
         providerData: {
-          response: result.response,
-          accepted: result.accepted,
-          rejected: result.rejected,
+          response: result.response || undefined,
+          accepted: result.accepted || [],
+          rejected: result.rejected || [],
         },
       }
     } catch (error: any) {

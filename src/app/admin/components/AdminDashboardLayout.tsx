@@ -20,7 +20,7 @@ function AdminDashboardContent({
         }`}
       >
         <AdminTopBar />
-        <main className='flex-1 overflow-y-auto mt-16 p-4 lg:p-6'>{children}</main>
+        <main className='flex-1 overflow-auto mt-16 p-4 lg:p-6'>{children}</main>
       </div>
     </div>
   )

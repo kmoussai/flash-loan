@@ -34,7 +34,6 @@ export const handleContractSent: NotificationHandler = async (
     const emailContent = generateContractSentEmail({
       firstName: event.recipient.firstName || '',
       lastName: event.recipient.lastName || '',
-      email: event.recipient.email,
       contractNumber: contractNumber?.toString() || null,
       loanAmount: loanAmount ? parseFloat(loanAmount.toString()) : null,
       dashboardUrl,
