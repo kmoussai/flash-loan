@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isStaff } from '@/src/lib/supabase/admin-helpers'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { sendEmail } from '@/src/lib/email/smtp'
-import { generateDocumentRequestEmail, RequestedItem } from '@/src/lib/email/templates/document-request'
+import { RequestedItem } from '@/src/lib/email/templates/document-request'
 import { createNotification } from '@/src/lib/supabase'
+import {
+  emitNotificationEvent,
+  createNotificationEvent
+} from '@/src/notifications'
 import type { NotificationCategory } from '@/src/types'
 
 const EMPLOYMENT_DEFAULT_FORM_SCHEMA = {
@@ -203,7 +206,9 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}))
-    const legacyDocumentTypeIds: string[] = Array.isArray(body?.document_type_ids)
+    const legacyDocumentTypeIds: string[] = Array.isArray(
+      body?.document_type_ids
+    )
       ? body.document_type_ids
       : []
     const incomingRequests: any[] = Array.isArray(body?.requests)
@@ -213,11 +218,24 @@ export async function POST(
     const requestedBy: string | null =
       typeof body?.requested_by === 'string' ? body.requested_by : null
 
-    const allowedKinds = new Set(['document', 'address', 'reference', 'employment', 'bank', 'other'])
+    const allowedKinds = new Set([
+      'document',
+      'address',
+      'reference',
+      'employment',
+      'bank',
+      'other'
+    ])
 
     const normalizedRequests: Array<{
       document_type_id: string
-      request_kind: 'document' | 'address' | 'reference' | 'employment' | 'bank' | 'other'
+      request_kind:
+        | 'document'
+        | 'address'
+        | 'reference'
+        | 'employment'
+        | 'bank'
+        | 'other'
       form_schema: Record<string, any>
     }> = []
     const invalidRequestIndexes: number[] = []
@@ -239,11 +257,20 @@ export async function POST(
           : 'document'
 
       const requestKind = allowedKinds.has(rawKind)
-        ? (rawKind as 'document' | 'address' | 'reference' | 'employment' | 'bank' | 'other')
+        ? (rawKind as
+            | 'document'
+            | 'address'
+            | 'reference'
+            | 'employment'
+            | 'bank'
+            | 'other')
         : 'document'
 
       const providedFormSchema =
-        item && typeof item.form_schema === 'object' && item.form_schema !== null && !Array.isArray(item.form_schema)
+        item &&
+        typeof item.form_schema === 'object' &&
+        item.form_schema !== null &&
+        !Array.isArray(item.form_schema)
           ? (item.form_schema as Record<string, any>)
           : {}
 
@@ -253,10 +280,10 @@ export async function POST(
           : requestKind === 'employment'
             ? EMPLOYMENT_DEFAULT_FORM_SCHEMA
             : requestKind === 'reference'
-            ? REFERENCE_DEFAULT_FORM_SCHEMA
-            : requestKind === 'bank'
-            ? BANK_DEFAULT_FORM_SCHEMA
-            : {}
+              ? REFERENCE_DEFAULT_FORM_SCHEMA
+              : requestKind === 'bank'
+                ? BANK_DEFAULT_FORM_SCHEMA
+                : {}
 
       normalizedRequests.push({
         document_type_id: documentTypeId,
@@ -290,7 +317,8 @@ export async function POST(
     if (!normalizedRequests.length) {
       return NextResponse.json(
         {
-          error: 'No requests provided. Include either requests[] or document_type_ids[]'
+          error:
+            'No requests provided. Include either requests[] or document_type_ids[]'
         },
         { status: 400 }
       )
@@ -344,7 +372,10 @@ export async function POST(
       )
 
       filteredRequests = filteredRequests.filter(req => {
-        if (req.request_kind === 'document' && existingTypeIds.has(req.document_type_id)) {
+        if (
+          req.request_kind === 'document' &&
+          existingTypeIds.has(req.document_type_id)
+        ) {
           skippedDocumentTypeIds.push(req.document_type_id)
           return false
         }
@@ -396,7 +427,9 @@ export async function POST(
     const groupId = (groupRow as any).id as string
 
     // Check if any bank requests are being created - if so, also request spécimen document
-    const hasBankRequest = filteredRequests.some(req => req.request_kind === 'bank')
+    const hasBankRequest = filteredRequests.some(
+      req => req.request_kind === 'bank'
+    )
     let specimenDocumentTypeId: string | null = null
     let specimenAdded = false
 
@@ -432,7 +465,9 @@ export async function POST(
           }
         }
       } else {
-        console.warn('[request-docs] Specimen document type (slug: specimen_check) not found. Bank request created without specimen document requirement.')
+        console.warn(
+          '[request-docs] Specimen document type (slug: specimen_check) not found. Bank request created without specimen document requirement.'
+        )
       }
     }
 
@@ -462,7 +497,9 @@ export async function POST(
     // Get client information for email
     const { data: appWithUser, error: userErr } = await admin
       .from('loan_applications' as any)
-      .select('users:client_id(id, first_name, last_name, email, preferred_language)')
+      .select(
+        'users:client_id(id, first_name, last_name, email, preferred_language)'
+      )
       .eq('id', loanApplicationId)
       .single()
 
@@ -475,27 +512,32 @@ export async function POST(
     const { getAppUrl } = await import('@/src/lib/config')
     const clientId = (appWithUser as any)?.users?.id as string | undefined
     const clientEmail = (appWithUser as any)?.users?.email as string | undefined
-    
+
     let dashboard_link: string | null = null
-    
+
     // Generate reusable authentication link using signed token
     if (clientId && clientEmail) {
       try {
         const { signAuthToken } = await import('@/src/lib/security/token')
-        
+
         // Determine expiry for token (default to 7 days if not provided, or use expiresAt)
-        const expMs = expiresAt ? new Date(expiresAt).getTime() : Date.now() + 7 * 24 * 60 * 60 * 1000
-        
+        const expMs = expiresAt
+          ? new Date(expiresAt).getTime()
+          : Date.now() + 7 * 24 * 60 * 60 * 1000
+
         // Create reusable signed token
         const authToken = signAuthToken(clientId, expMs)
-        
+
         // Build dashboard URL
         const dashboardUrl = `/${preferredLanguage}/client/dashboard?section=documents`
-        
+
         // Create reusable authentication link
         dashboard_link = `${getAppUrl()}/api/auth/authenticate?token=${encodeURIComponent(authToken)}&redirect_to=${encodeURIComponent(dashboardUrl)}`
       } catch (error: any) {
-        console.error('[POST /api/admin/loan-apps/:id/request-docs] Error generating auth token:', error)
+        console.error(
+          '[POST /api/admin/loan-apps/:id/request-docs] Error generating auth token:',
+          error
+        )
         // Fallback to dashboard link (user will need to log in manually)
         dashboard_link = `${getAppUrl()}/${preferredLanguage}/client/dashboard?section=documents`
       }
@@ -521,11 +563,13 @@ export async function POST(
       )
     }
 
-    const documentNames = (docTypes || []).map((dt: any) => dt.name).filter(Boolean)
+    const documentNames = (docTypes || [])
+      .map((dt: any) => dt.name)
+      .filter(Boolean)
 
     // Build requested items list for email (all kinds, not just documents)
     const requestedItems: RequestedItem[] = []
-    
+
     // Add documents
     documentNames.forEach(name => {
       requestedItems.push({
@@ -540,36 +584,41 @@ export async function POST(
         // Already added above
         return
       }
-      
+
       // Get label based on request kind
       let label = ''
       switch (req.request_kind) {
         case 'reference':
-          label = preferredLanguage === 'fr' 
-            ? 'Fournir les informations de référence' 
-            : 'Provide reference information'
+          label =
+            preferredLanguage === 'fr'
+              ? 'Fournir les informations de référence'
+              : 'Provide reference information'
           break
         case 'employment':
-          label = preferredLanguage === 'fr'
-            ? 'Fournir les informations d\'emploi'
-            : 'Provide employment information'
+          label =
+            preferredLanguage === 'fr'
+              ? "Fournir les informations d'emploi"
+              : 'Provide employment information'
           break
         case 'bank':
-          label = preferredLanguage === 'fr'
-            ? 'Fournir les informations bancaires'
-            : 'Provide bank information'
+          label =
+            preferredLanguage === 'fr'
+              ? 'Fournir les informations bancaires'
+              : 'Provide bank information'
           break
         case 'address':
-          label = preferredLanguage === 'fr'
-            ? 'Confirmer les informations d\'adresse'
-            : 'Confirm address information'
+          label =
+            preferredLanguage === 'fr'
+              ? "Confirmer les informations d'adresse"
+              : 'Confirm address information'
           break
         default:
-          label = preferredLanguage === 'fr'
-            ? 'Fournir les informations demandées'
-            : 'Provide requested information'
+          label =
+            preferredLanguage === 'fr'
+              ? 'Fournir les informations demandées'
+              : 'Provide requested information'
       }
-      
+
       requestedItems.push({
         kind: req.request_kind,
         label
@@ -579,38 +628,41 @@ export async function POST(
     const clientRecord = (appWithUser as any)?.users
     const clientIdForNotification = clientRecord?.id as string | undefined
 
-    if (clientIdForNotification) {
-      const notificationRequestIds = (inserted || []).map((r: any) => r.id as string).filter(Boolean)
-      const requestKinds = filteredRequests.map(req => req.request_kind)
+    // Prepare notification data (used both for database notification and email event)
+    const notificationRequestIds = (inserted || [])
+      .map((r: any) => r.id as string)
+      .filter(Boolean)
+    const requestKinds = filteredRequests.map(req => req.request_kind)
 
-      const kindLabels: Record<string, string> = {
-        document: documentNames.length
-          ? `Upload ${documentNames.join(', ')}`
-          : 'Upload requested documents',
-        reference: 'Provide reference details',
-        employment: 'Share employment information',
-        address: 'Confirm your address details',
-        other: 'Provide the requested information'
-      }
+    const kindLabels: Record<string, string> = {
+      document: documentNames.length
+        ? `Upload ${documentNames.join(', ')}`
+        : 'Upload requested documents',
+      reference: 'Provide reference details',
+      employment: 'Share employment information',
+      address: 'Confirm your address details',
+      other: 'Provide the requested information'
+    }
 
-      const uniqueKinds = Array.from(new Set(requestKinds))
-      const descriptionParts = uniqueKinds.map(kind => kindLabels[kind] || kindLabels.other)
-      const notificationCategory: NotificationCategory =
-        uniqueKinds.length === 1
-          ? (
-              uniqueKinds[0] === 'document'
-                ? 'document_request_created'
-                : uniqueKinds[0] === 'reference'
-                ? 'reference_request_created'
-                : uniqueKinds[0] === 'employment'
-                ? 'employment_request_created'
-                : uniqueKinds[0] === 'address'
+    const uniqueKinds = Array.from(new Set(requestKinds))
+    const descriptionParts = uniqueKinds.map(
+      kind => kindLabels[kind] || kindLabels.other
+    )
+    const notificationCategory: NotificationCategory =
+      uniqueKinds.length === 1
+        ? uniqueKinds[0] === 'document'
+          ? 'document_request_created'
+          : uniqueKinds[0] === 'reference'
+            ? 'reference_request_created'
+            : uniqueKinds[0] === 'employment'
+              ? 'employment_request_created'
+              : uniqueKinds[0] === 'address'
                 ? 'address_request_created'
                 : 'multi_request_created'
-            )
-          : 'multi_request_created';
+        : 'multi_request_created'
 
-      const notificationTitle = 'Action needed for your loan application';
+    if (clientIdForNotification) {
+      const notificationTitle = 'Action needed for your loan application'
       const notificationMessage =
         descriptionParts.length > 0
           ? `Please complete the following to keep things moving: ${descriptionParts.join('; ')}.`
@@ -638,32 +690,64 @@ export async function POST(
       )
     }
 
-    // Send email if we have client email and dashboard link and at least one requested item
+    // Emit notification event if we have client info and requested items
     let emailSent = false
     let emailError: string | null = null
-    
-    if (dashboard_link && appWithUser && (appWithUser as any)?.users?.email && requestedItems.length > 0) {
+
+    if (
+      dashboard_link &&
+      appWithUser &&
+      (appWithUser as any)?.users?.email &&
+      requestedItems.length > 0 &&
+      clientIdForNotification
+    ) {
       const clientEmail = (appWithUser as any).users.email
       const clientFirstName = (appWithUser as any).users.first_name || ''
       const clientLastName = (appWithUser as any).users.last_name || ''
-      const applicantName = `${clientFirstName} ${clientLastName}`.trim() || 'Valued Customer'
 
-      const emailContent = generateDocumentRequestEmail({
-        applicantName,
-        requestedItems,
-        uploadLink: dashboard_link,
-        preferredLanguage,
-        expiresAt: expiresAt || null
+      // Determine the event type based on request kinds
+      const uniqueKinds = Array.from(
+        new Set(requestedItems.map(item => item.kind))
+      )
+      const eventType =
+        uniqueKinds.length === 1 && uniqueKinds[0] === 'document'
+          ? 'document_request_created'
+          : 'document_request_created' // Use document_request_created as default for all request types
+
+      // Get the first request ID for the metadata (or use group ID)
+      const firstRequestId = notificationRequestIds?.[0] || groupId
+
+      // Emit notification event using the new event-driven system
+      const notificationEvent = createNotificationEvent(
+        eventType,
+        {
+          id: clientIdForNotification,
+          type: 'client',
+          email: clientEmail,
+          preferredLanguage: preferredLanguage as 'en' | 'fr',
+          firstName: clientFirstName || undefined,
+          lastName: clientLastName || undefined
+        },
+        {
+          requestId: firstRequestId,
+          loanApplicationId,
+          requestedItems,
+          uploadLink: dashboard_link,
+          expiresAt: expiresAt || null
+        },
+        {
+          category: notificationCategory,
+          sendEmail: true,
+          createNotification: false // Already created above
+        }
+      )
+      const immediate = true
+      const eventResult = await emitNotificationEvent(notificationEvent, {
+        immediate // Process immediately
       })
 
-      const emailResult = await sendEmail({
-        to: clientEmail,
-        subject: emailContent.subject,
-        html: emailContent.html
-      })
-
-      emailSent = emailResult.success
-      emailError = emailResult.error || null
+      emailSent = eventResult.success
+      emailError = eventResult.error || null
 
       if (emailSent) {
         // Update all requests in the group with magic_link_sent_at
@@ -680,14 +764,14 @@ export async function POST(
       ? Array.from(new Set(skippedDocumentTypeIds))
       : undefined
 
-      return NextResponse.json({
+    return NextResponse.json({
       ok: true,
       group_id: groupId,
       dashboard_link,
       request_ids: createdIds,
       skipped,
       email_sent: emailSent,
-      email_error: emailError || undefined,
+      email_error: emailError || undefined
     })
   } catch (e: any) {
     return NextResponse.json(
