@@ -164,10 +164,10 @@ export async function findLoanApplicationByRequestId(
     .eq('provider', 'zumrails')
     .eq('provider_data->>request_id', requestId)
     .maybeSingle()
-    console.log('[Zumrails Webhook] IBV request by request ID', {
-      ibvRequestByRequestId,
-      ibvError1
-    })
+  console.log('[Zumrails Webhook] IBV request by request ID', {
+    ibvRequestByRequestId,
+    ibvError1
+  })
 
   if (!ibvError1 && ibvRequestByRequestId) {
     ibvRequest = ibvRequestByRequestId
@@ -189,6 +189,61 @@ export async function findLoanApplicationByRequestId(
 
     // Also get IBV request if we don't have it yet
     if (!ibvRequest) {
+      const { data: ibvReq } = await supabase
+        .from('loan_application_ibv_requests')
+        .select('id, loan_application_id, status, provider_data')
+        .eq('loan_application_id', applicationId)
+        .eq('provider', 'zumrails')
+        .maybeSingle()
+
+      if (ibvReq) {
+        ibvRequest = ibvReq
+      }
+    }
+  }
+
+  return {
+    applicationId,
+    application,
+    ibvRequest
+  }
+}
+
+/**
+ * Find loan application by customer ID (for User/Transaction webhooks)
+ * Searches in provider_data for customerId
+ */
+export async function findLoanApplicationByCustomerId(
+  customerId: string
+): Promise<{
+  applicationId: string | null
+  application: any | null
+  ibvRequest: any | null
+}> {
+  const supabase = createServerSupabaseAdminClient()
+
+  let applicationId: string | null = null
+  let application: any = null
+  let ibvRequest: any = null
+
+  // Search in loan_applications by customerId in provider_data
+  // Try different field name variations
+  const { data: applications, error: appError } = await (supabase as any)
+    .from('loan_applications')
+    .select('id, ibv_provider_data, ibv_status')
+    .eq('ibv_provider', 'zumrails')
+    .or(
+      `ibv_provider_data->>customerId.eq.${customerId},ibv_provider_data->>customer_id.eq.${customerId},ibv_provider_data->>CustomerId.eq.${customerId}`
+    )
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (!appError && applications && applications.length > 0) {
+    application = applications[0]
+    applicationId = application.id
+
+    // Get IBV request if it exists (only if we have an applicationId)
+    if (applicationId) {
       const { data: ibvReq } = await supabase
         .from('loan_application_ibv_requests')
         .select('id, loan_application_id, status, provider_data')
@@ -329,56 +384,217 @@ export async function updateLoanApplicationIBVStatus(
 }
 
 // ===========================
-// Webhook Processors
+// Webhook Type-Specific Handlers
 // ===========================
 
 /**
- * Process User/Customer webhook
+ * Handle User/Customer webhook
+ * TODO: Implementation needed
  */
-export function processUserWebhook(webhook: ZumrailsUserWebhook): {
-  shouldUpdate: boolean
-  status?: 'verified' | 'failed' | 'cancelled' | 'processing'
-} {
-  //   const data = webhook.Data
-  //   const event = webhook.Event
+async function handleUserWebhook(
+  webhook: ZumrailsUserWebhook
+): Promise<ProcessWebhookResult> {
+  // TODO: Implement User/Customer webhook handling
+  console.log('[Zumrails Webhook] User webhook received (not implemented)', {
+    type: webhook.Type,
+    event: webhook.Event
+  })
 
-  return { shouldUpdate: false }
+  return {
+    processed: true,
+    applicationId: null,
+    updated: false,
+    message: 'User webhook received but handler not yet implemented'
+  }
 }
 
 /**
- * Process Insights webhook
- * Insights Completed usually indicates verification/data aggregation is complete
+ * Handle Insights webhook
+ * Insights webhooks indicate completion/failure of data aggregation
  */
-export function processInsightsWebhook(webhook: ZumrailsInsightsWebhook): {
-  shouldUpdate: boolean
-  status?: 'verified' | 'failed' | 'processing'
-} {
+async function handleInsightsWebhook(
+  webhook: ZumrailsInsightsWebhook
+): Promise<ProcessWebhookResult> {
   const event = webhook.Event
+  const requestId = webhook.Data.RequestId
 
-  if (event === 'Completed') {
-    // Insights completed - verification/data aggregation is done
-    return { shouldUpdate: true, status: 'verified' }
-  } else if (event === 'Failed') {
-    return { shouldUpdate: true, status: 'failed' }
+  if (!requestId) {
+    return {
+      processed: false,
+      applicationId: null,
+      updated: false,
+      message: 'No request ID found in Insights webhook payload'
+    }
   }
 
-  return { shouldUpdate: false }
+  // Find application by request ID
+  const result = await findLoanApplicationByRequestId(requestId)
+  console.log('[Zumrails Webhook] Insights webhook - search by request ID', {
+    requestId,
+    found: !!result.applicationId
+  })
+
+  const { applicationId, application, ibvRequest } = result
+
+  if (!applicationId) {
+    console.log(
+      '[Zumrails Webhook] No matching application found - likely timing issue',
+      {
+        requestId,
+        message:
+          'Request ID not yet stored in database. This may be a timing issue - webhook arrived before frontend updated the request ID.'
+      }
+    )
+
+    return {
+      processed: false,
+      applicationId: null,
+      updated: false,
+      shouldRetry: true,
+      message: `No matching application found for request ID: ${requestId}. This may be a timing issue - webhook may have arrived before request ID was stored.`
+    }
+  }
+
+  // Determine status based on event
+  let status: 'verified' | 'failed' | 'processing' | undefined
+  if (event === 'Completed') {
+    status = 'verified'
+  } else if (event === 'Failed') {
+    status = 'failed'
+  }
+
+  if (!status) {
+    return {
+      processed: true,
+      applicationId,
+      updated: false,
+      message: `Insights webhook event '${event}' received but no status update needed`
+    }
+  }
+
+  // For Insights "Completed" webhooks, fetch the actual data from Zumrails
+  if (event === 'Completed' && requestId) {
+    try {
+      console.log(
+        '[Zumrails Webhook] Fetching data from Zumrails API for request ID',
+        requestId
+      )
+
+      // Fetch data from Zumrails API
+      const fetchedData = await fetchZumrailsDataByRequestId(requestId)
+
+      // Transform Zumrails response to IBVSummary format
+      const ibvSummary = transformZumrailsToIBVSummary(fetchedData, requestId)
+
+      // Update application with fetched data
+      const supabase = createServerSupabaseAdminClient()
+      const currentProviderData =
+        (application?.ibv_provider_data as any) || {}
+
+      // Update provider_data with fetched information
+      const updatedProviderData = createIbvProviderData('zumrails', {
+        ...currentProviderData,
+        request_id: requestId,
+        account_info: fetchedData,
+        fetched_at: new Date().toISOString()
+      })
+
+      // Update loan application with fetched data
+      // Store both raw data and transformed IBVSummary
+      const { error: updateError } = await (supabase.from('loan_applications') as any)
+        .update({
+          ibv_status: 'verified',
+          ibv_provider_data: updatedProviderData,
+          ibv_results: ibvSummary, // Store transformed IBVSummary
+          ibv_verified_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', applicationId)
+
+      if (updateError) {
+        console.error(
+          '[Zumrails Webhook] Failed to update application with fetched data',
+          updateError
+        )
+        throw updateError
+      }
+
+      // Also update IBV request if it exists
+      if (ibvRequest?.id) {
+        const { error: ibvUpdateError } = await (
+          supabase.from('loan_application_ibv_requests') as any
+        )
+          .update({
+            status: 'verified' as any,
+            results: ibvSummary, // Store transformed IBVSummary
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', ibvRequest.id)
+
+        if (ibvUpdateError) {
+          console.error(
+            '[Zumrails Webhook] Failed to update IBV request',
+            ibvUpdateError
+          )
+        }
+      }
+
+      console.log(
+        '[Zumrails Webhook] Successfully fetched and updated data',
+        {
+          applicationId,
+          requestId
+        }
+      )
+    } catch (error: any) {
+      console.error(
+        '[Zumrails Webhook] Failed to fetch data from Zumrails API',
+        error
+      )
+      // Continue with status update even if fetch fails
+      // The status will still be updated to 'verified'
+    }
+  }
+
+  // Update application status
+  await updateLoanApplicationIBVStatus(
+    applicationId,
+    status,
+    ibvRequest?.id
+  )
+
+  return {
+    processed: true,
+    applicationId,
+    updated: true,
+    message: `Application updated with status: ${status}${
+      event === 'Completed' && requestId
+        ? ' and data fetched from Zumrails API'
+        : ''
+    }`
+  }
 }
 
 /**
- * Process Transaction webhook
+ * Handle Transaction webhook
+ * TODO: Implementation needed
  */
-export function processTransactionWebhook(
+async function handleTransactionWebhook(
   webhook: ZumrailsTransactionWebhook
-): {
-  shouldUpdate: boolean
-  status?: 'verified' | 'failed'
-} {
-  // Transaction webhooks might indicate payment/verification status
-  //   const data = webhook.Data
-  //   const status = data.Status || data.status
+): Promise<ProcessWebhookResult> {
+  // TODO: Implement Transaction webhook handling
+  console.log('[Zumrails Webhook] Transaction webhook received (not implemented)', {
+    type: webhook.Type,
+    event: webhook.Event, webhook
+  })
 
-  return { shouldUpdate: false }
+  return {
+    processed: true,
+    applicationId: null,
+    updated: false,
+    message: 'Transaction webhook received but handler not yet implemented'
+  }
 }
 
 // ===========================
@@ -394,72 +610,31 @@ export interface ProcessWebhookResult {
 }
 
 /**
- * Generic webhook processor
- * Routes to appropriate handler based on webhook type
+ * Main webhook dispatcher
+ * Routes webhooks to type-specific handlers based on webhook type
+ * Each handler is responsible for its own ID extraction and application lookup
  */
 export async function processZumrailsWebhook(
   webhook: ZumrailsWebhook
 ): Promise<ProcessWebhookResult> {
-  // Extract request ID (primary identifier - unique per IBV session)
-  const requestId = extractRequestId(webhook)
-
-  if (!requestId) {
-    return {
-      processed: false,
-      applicationId: null,
-      updated: false,
-      message: 'No request ID found in webhook payload'
-    }
-  }
-
-  // Find matching loan application by request ID only
-  const result = await findLoanApplicationByRequestId(requestId)
-  console.log('[Zumrails Webhook] Search by request ID', {
-    requestId,
-    found: !!result.applicationId
+  console.log('[Zumrails Webhook] Dispatching webhook', {
+    type: webhook.Type,
+    event: webhook.Event,
+    eventGeneratedAt: webhook.EventGeneratedAt
   })
 
-  const { applicationId, application, ibvRequest } = result
-
-  if (!applicationId) {
-    console.log('[Zumrails Webhook] No matching application found - likely timing issue', {
-      requestId,
-      message: 'Request ID not yet stored in database. This may be a timing issue - webhook arrived before frontend updated the request ID.'
-    })
-    
-    // Return shouldRetry flag to indicate webhook should be retried
-    // This handles the case where the webhook arrives before the frontend
-    // calls /api/zumrails/update-request-id to store the request_id
-    return {
-      processed: false,
-      applicationId: null,
-      updated: false,
-      shouldRetry: true, // Signal that this is a retryable timing issue
-      message: `No matching application found for request ID: ${requestId}. This may be a timing issue - webhook may have arrived before request ID was stored.`
-    }
-  }
-
-  // Route to appropriate processor based on webhook type
-  let processResult: {
-    shouldUpdate: boolean
-    status?: 'verified' | 'failed' | 'cancelled' | 'processing'
-  } = { shouldUpdate: false }
-
+  // Route to appropriate handler based on webhook type
+  // Each handler handles its own ID extraction and application lookup
   switch (webhook.Type) {
     case 'User':
     case 'Customer':
-      processResult = processUserWebhook(webhook as ZumrailsUserWebhook)
-      break
+      return handleUserWebhook(webhook as ZumrailsUserWebhook)
 
     case 'Insights':
-      processResult = processInsightsWebhook(webhook as ZumrailsInsightsWebhook)
-      break
+      return handleInsightsWebhook(webhook as ZumrailsInsightsWebhook)
 
     case 'Transaction':
-      processResult = processTransactionWebhook(
-        webhook as ZumrailsTransactionWebhook
-      )
-      break
+      return handleTransactionWebhook(webhook as ZumrailsTransactionWebhook)
 
     default:
       console.log(
@@ -468,111 +643,9 @@ export async function processZumrailsWebhook(
       )
       return {
         processed: true,
-        applicationId,
+        applicationId: null,
         updated: false,
         message: `Webhook type ${webhook.Type} received but not processed`
       }
-  }
-
-  // Update application if needed
-  if (processResult.shouldUpdate && processResult.status) {
-    // For Insights "Completed" webhooks, fetch the actual data from Zumrails
-    if (
-      webhook.Type === 'Insights' &&
-      (webhook as ZumrailsInsightsWebhook).Event === 'Completed' &&
-      requestId
-    ) {
-      try {
-        console.log(
-          '[Zumrails Webhook] Fetching data from Zumrails API for request ID',
-          requestId
-        )
-
-        // Fetch data from Zumrails API
-        const fetchedData = await fetchZumrailsDataByRequestId(requestId)
-
-        // Transform Zumrails response to IBVSummary format
-        const ibvSummary = transformZumrailsToIBVSummary(fetchedData, requestId)
-
-        // Update application with fetched data
-        const supabase = createServerSupabaseAdminClient()
-        const currentProviderData =
-          (application?.ibv_provider_data as any) || {}
-
-        // Update provider_data with fetched information
-        const updatedProviderData = createIbvProviderData('zumrails', {
-          ...currentProviderData,
-          request_id: requestId,
-          account_info: fetchedData,
-          fetched_at: new Date().toISOString()
-        })
-
-        // Update loan application with fetched data
-        // Store both raw data and transformed IBVSummary
-        await (supabase.from('loan_applications') as any)
-          .update({
-            ibv_status: 'verified',
-            ibv_provider_data: updatedProviderData,
-            ibv_results: ibvSummary, // Store transformed IBVSummary
-            ibv_verified_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', applicationId)
-
-        // Also update IBV request if it exists
-        if (ibvRequest?.id) {
-          await (supabase.from('loan_application_ibv_requests') as any)
-            .update({
-              status: 'verified' as any,
-              results: ibvSummary, // Store transformed IBVSummary
-              completed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', ibvRequest.id)
-        }
-
-        console.log(
-          '[Zumrails Webhook] Successfully fetched and updated data',
-          {
-            applicationId,
-            requestId
-          }
-        )
-      } catch (error: any) {
-        console.error(
-          '[Zumrails Webhook] Failed to fetch data from Zumrails API',
-          error
-        )
-        // Continue with status update even if fetch fails
-        // The status will still be updated to 'verified'
-      }
-    }
-
-    // Update application status
-    await updateLoanApplicationIBVStatus(
-      applicationId,
-      processResult.status,
-      ibvRequest?.id
-    )
-
-    return {
-      processed: true,
-      applicationId,
-      updated: true,
-      message: `Application updated with status: ${processResult.status}${
-        webhook.Type === 'Insights' &&
-        (webhook as ZumrailsInsightsWebhook).Event === 'Completed' &&
-        requestId
-          ? ' and data fetched from Zumrails API'
-          : ''
-      }`
-    }
-  }
-
-  return {
-    processed: true,
-    applicationId,
-    updated: false,
-    message: 'Webhook received but no update needed'
   }
 }

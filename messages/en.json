@@ -798,6 +798,8 @@
     "Relationship": "Relationship",
     "Notes": "Notes",
     "No_Information_Provided": "No information provided",
-    "Submitted_Information": "Submitted Information"
+    "Submitted_Information": "Submitted Information",
+    "Change_Password": "Change Password",
+    "Change_Password_Description": "Update your account password for better security."
   }
 }

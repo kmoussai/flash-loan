@@ -3,6 +3,7 @@ import type {
   ContractStatus,
   DocumentRequestStatus
 } from '@/src/lib/supabase/types'
+import { parseLocalDate } from '@/src/lib/utils/date'
 
 const applicationStatusClasses: Record<ApplicationStatus, string> = {
   pending: 'bg-blue-100 text-blue-700',
@@ -65,7 +66,7 @@ export function formatDate(
   try {
     return new Intl.DateTimeFormat(locale, {
       dateStyle: 'medium'
-    }).format(new Date(value))
+    }).format(parseLocalDate(value))
   } catch (error) {
     console.error('Error formatting date', error)
     return fallback

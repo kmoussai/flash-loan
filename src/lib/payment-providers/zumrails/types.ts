@@ -396,3 +396,132 @@ export interface ZumRailsProviderData {
   // Full API response
   raw_response?: ZumRailsGetTransactionResponse['result']
 }
+
+// ===========================
+// Filter Transactions Types
+// ===========================
+
+/**
+ * Filter transactions request
+ */
+export interface ZumRailsFilterTransactionsRequest {
+  TransactionMethod?: TransactionMethod
+  ZumRailsType?: ZumRailsType
+  TransactionStatus?: ZumRailsTransactionStatus
+  CreatedAtFrom?: string // YYYY-MM-DD format
+  CreatedAtTo?: string // YYYY-MM-DD format
+  UserId?: string
+  WalletId?: string
+  FundingSourceId?: string
+  BatchNumber?: number // Batch ID from processBatchFile response
+  Pagination?: {
+    PageNumber?: number
+    ItemsPerPage?: number
+  }
+}
+
+/**
+ * Filter transactions response
+ */
+export interface ZumRailsFilterTransactionsResponse {
+  statusCode: number
+  message: string
+  isError: boolean
+  result?: {
+    Items: Array<ZumRailsGetTransactionResponse['result']>
+    TotalCount: number
+    PageNumber: number
+    ItemsPerPage: number
+    TotalPages: number
+  }
+}
+
+// ===========================
+// Batch Transaction Types
+// ===========================
+
+/**
+ * Batch transaction validation request (Canada - EFT/Interac)
+ */
+export interface ZumRailsValidateBatchRequest {
+  TransactionType: 'AccountsReceivable' | 'AccountsPayable'
+  WalletId?: string
+  FundingSourceId?: string
+  Bytes: string // Base64 encoded CSV file
+}
+
+/**
+ * Batch transaction validation response (Canada)
+ */
+export interface ZumRailsValidateBatchResponse {
+  statusCode: number
+  message: string
+  isError: boolean
+  result?: {
+    InvalidTransactions: string
+    ValidTransactions: number
+    Status: string
+    TotalAmount: number
+    Transactions: Array<{
+      AccountNumber: string
+      Amount: number
+      Comment: string
+      CompanyName: string
+      CustomerId: string | null
+      FirstName: string
+      InstitutionNumber: string
+      LastName: string
+      Memo: string
+      Status: string
+      TransitNumber: string
+    }>
+  }
+}
+
+/**
+ * Batch transaction process request (Canada - EFT/Interac)
+ */
+export interface ZumRailsProcessBatchRequest {
+  FileName: string
+  SkipFileAlreadyProcessedInLast24Hours: boolean
+  WithdrawSumTotalFromFundingSource: boolean
+  Bytes: string // Base64 encoded CSV file
+  FundingSourceId?: string
+  WalletId?: string
+  TransactionType: 'AccountsReceivable' | 'AccountsPayable'
+  TransactionMethod: 'Eft' | 'Interac'
+}
+
+/**
+ * Batch transaction process response (Canada)
+ */
+export interface ZumRailsProcessBatchResponse {
+  statusCode: number
+  message: string
+  isError: boolean
+  result?: number // Batch ID
+}
+
+/**
+ * Batch transaction upload request (US - ACH)
+ */
+export interface ZumRailsUploadBatchUsRequest {
+  FileName: string
+  SkipFileAlreadyProcessedInLast24Hours: boolean
+  WithdrawSumTotalFromFundingSource: boolean
+  Bytes: string // Base64 encoded CSV file
+  FundingSourceId?: string
+  WalletId?: string
+  TransactionType: 'AccountsReceivable' | 'AccountsPayable'
+  TransactionMethod: 'Ach'
+}
+
+/**
+ * Batch transaction upload response (US)
+ */
+export interface ZumRailsUploadBatchUsResponse {
+  statusCode: number
+  message: string
+  isError: boolean
+  result?: string // Batch ID or empty string
+}

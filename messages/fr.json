@@ -796,6 +796,8 @@
     "Relationship": "Relation",
     "Notes": "Notes",
     "No_Information_Provided": "Aucune information fournie",
-    "Submitted_Information": "Informations soumises"
+    "Submitted_Information": "Informations soumises",
+    "Change_Password": "Changer le mot de passe",
+    "Change_Password_Description": "Mettez à jour le mot de passe de votre compte pour une meilleure sécurité."
   }
 }
