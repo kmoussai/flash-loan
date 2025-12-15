@@ -25,6 +25,8 @@ export async function GET(
     }
 
     const supabase = await createServerSupabaseClient()
+    const searchParams = request.nextUrl.searchParams
+    const paymentStatusFilter = searchParams.get('status')
     
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -83,11 +85,22 @@ export async function GET(
 
     // Fetch payment history for this loan
     // RLS ensures users only see payments for their own loans
-    const { data: payments, error: paymentsError } = await supabase
+    // By default, exclude cancelled payments unless explicitly requested via ?status=cancelled
+    let paymentsQuery = supabase
       .from('loan_payments')
       .select('*')
       .eq('loan_id', loanId)
-      .order('payment_date', { ascending: false })
+
+    if (paymentStatusFilter) {
+      paymentsQuery = paymentsQuery.eq('status', paymentStatusFilter)
+    } else {
+      paymentsQuery = paymentsQuery.neq('status', 'cancelled')
+    }
+
+    const { data: payments, error: paymentsError } = await paymentsQuery.order(
+      'payment_date',
+      { ascending: false }
+    )
 
     if (paymentsError) {
       console.error('Error fetching payments:', paymentsError)

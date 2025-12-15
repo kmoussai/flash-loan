@@ -34,24 +34,22 @@ const UPDATEABLE_STATUSES: PaymentStatus[] = ['pending', 'cancelled']
  *
  * This function:
  * 1. Fetches all existing payments for the loan
- * 2. Identifies future payments that can be updated (pending/cancelled, not deferred/manual/etc.)
- * 3. Updates existing payments that match breakdown items
- * 4. Creates new payments for breakdown items without existing payments
- * 5. Cancels extra future payments that aren't in the breakdown
+ * 2. Identifies future payments that can be changed (pending/cancelled, not deferred/manual/etc.)
+ * 3. Cancels those existing future payments (keeps their rows for history & webhooks)
+ * 4. Inserts NEW payment rows based on the recalculated breakdown
+ * 5. Leaves past and preserved-status payments (paid/confirmed/failed/etc.) untouched
+ *
+ * Important: we never update existing future payments in-place. Instead we:
+ * - Mark them as cancelled
+ * - Insert new rows with the recalculated schedule
+ *
+ * This avoids reusing payment IDs, which is important for webhook matching
+ * (ZumRails transactions store loan_payment_id and expect it not to change semantics).
  *
  * @param loanId - The loan ID
  * @param breakdown - Array of payment breakdown items from recalculation
  * @param startDate - Optional: Only update payments on or after this date (ISO date string)
  * @returns Result object with success status, updated/inserted/cancelled counts, and any errors
- *
- * @example
- * ```typescript
- * const breakdown = recalculatePaymentSchedule({...}).recalculatedBreakdown
- * const result = await updateLoanPaymentsFromBreakdown(loanId, breakdown)
- * if (result.success) {
- *   console.log(`Updated ${result.updatedCount} payments, created ${result.insertedCount} new payments`)
- * }
- * ```
  */
 export async function updateLoanPaymentsFromBreakdown(
   loanId: string,
@@ -141,10 +139,8 @@ export async function updateLoanPaymentsFromBreakdown(
       )
     })
 
-    // Match by index: after filtering preserved statuses, match payments to breakdown by position
-    // First updateable payment = first breakdown item, second = second, etc.
-    const paymentsToUpdate: Array<{ id: string; update: LoanPaymentUpdate }> =
-      []
+    // Match by index: after filtering preserved statuses, match payments to breakdown by position.
+    // Instead of updating in place, we will cancel matched payments and insert new ones.
     const paymentsToCancel: string[] = []
     const paymentsToInsert: LoanPaymentInsert[] = []
 
@@ -159,22 +155,21 @@ export async function updateLoanPaymentsFromBreakdown(
       const breakdownItem = breakdown[i]
 
       if (payment && breakdownItem) {
-        // Update existing payment with breakdown data
-        paymentsToUpdate.push({
-          id: payment.id,
-          update: {
-            payment_date: breakdownItem.dueDate,
-            amount: roundCurrency(breakdownItem.amount),
-            interest: roundCurrency(breakdownItem.interest),
-            principal: roundCurrency(breakdownItem.principal),
-            remaining_balance: roundCurrency(breakdownItem.remainingBalance),
-            payment_number: breakdownItem.paymentNumber,
-            status: 'pending',
-            notes: '' // Preserve existing notes
-          }
+        // Existing payment will be cancelled and replaced with a new one
+        paymentsToCancel.push(payment.id)
+        paymentsToInsert.push({
+          loan_id: loanId,
+          payment_date: breakdownItem.dueDate,
+          amount: roundCurrency(breakdownItem.amount),
+          interest: roundCurrency(breakdownItem.interest),
+          principal: roundCurrency(breakdownItem.principal),
+          remaining_balance: roundCurrency(breakdownItem.remainingBalance),
+          payment_number: breakdownItem.paymentNumber,
+          status: 'pending',
+          notes: 'Recalculated payment (replaces previous scheduled payment)'
         })
       } else if (payment && !breakdownItem) {
-        // More payments than breakdown items - cancel extra payments
+        // More payments than breakdown items - cancel extra payments (but keep rows)
         paymentsToCancel.push(payment.id)
       } else if (!payment && breakdownItem) {
         // More breakdown items than payments - insert new payments
@@ -193,28 +188,13 @@ export async function updateLoanPaymentsFromBreakdown(
     }
 
     // Execute updates in batches
-    // Update existing payments
-    for (const { id, update } of paymentsToUpdate) {
-      const { error: updateError } = await (
-        supabase.from('loan_payments') as any
-      )
-        .update(update)
-        .eq('id', id)
 
-      if (updateError) {
-        errors.push(`Failed to update payment ${id}: ${updateError.message}`)
-        console.error(`Error updating payment ${id}:`, updateError)
-      } else {
-        updatedCount++
-      }
-    }
-
-    // Cancel extra payments
+    // Cancel existing future payments (mark as cancelled, do not delete rows)
     if (paymentsToCancel.length > 0) {
       const { error: cancelError } = await (
         supabase.from('loan_payments') as any
       )
-        .delete()
+        .update({ status: 'cancelled' })
         .in('id', paymentsToCancel)
 
       if (cancelError) {

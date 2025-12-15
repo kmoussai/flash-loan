@@ -118,7 +118,9 @@ async function getLoanPaymentsWithoutTransactions(
     (paymentsWithTransactions || []).map((pt: any) => pt.loan_payment_id)
   )
 
-  // Step 2: Get all loan payments (excluding cancelled and rebate payments)
+  // Step 2: Get all loan payments that are eligible for ZumRails transactions
+  // We only consider payments with status = 'pending' to avoid creating transactions
+  // for deferred/manual/failed/rejected/cancelled/etc. payments.
   // We'll fetch more than limit to account for filtering
   // Include loan contracts to get bank account information
   let query = supabase
@@ -140,7 +142,7 @@ async function getLoanPaymentsWithoutTransactions(
         )
       )
     `)
-    .not('status', 'in', '(cancelled,rebate)')
+    .eq('status', 'pending')
     .eq('loans.status', 'active') // Only include payments from active loans
 
   // Filter by loan_id if provided
@@ -611,13 +613,14 @@ export async function syncLoanPaymentsToZumRails(options: {
       // Step 5: Create payment_transaction records for matched transactions
       for (const tx of validTransactions) {
         const zumRailsTx = matchedTransactions.get(tx.loanPaymentId)
-        
+
         if (zumRailsTx) {
           try {
             // Create payment_transaction record
             const providerData: ZumRailsProviderData = {
               transaction_id: zumRailsTx.Id,
               client_transaction_id: tx.loanPaymentId,
+              batch_number: batchNumber,
               zumrails_type: zumRailsTx.ZumRailsType || 'AccountsReceivable',
               transaction_method: zumRailsTx.TransactionMethod || 'Eft',
               transaction_status: zumRailsTx.TransactionStatus || 'Scheduled',
