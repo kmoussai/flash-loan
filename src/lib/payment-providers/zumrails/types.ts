@@ -34,9 +34,10 @@ export type TransactionMethodUS =
 export type TransactionMethod = TransactionMethodCanada | TransactionMethodUS
 
 // Zum Rails Transaction Status
-export type ZumRailsTransactionStatus = 
+export type ZumRailsTransactionStatus =
   | 'InProgress'
   | 'Completed'
+  | 'Succeeded'
   | 'Failed'
   | 'Cancelled'
   | 'Scheduled'
@@ -359,6 +360,8 @@ export interface ZumRailsProviderData {
   // Transaction identifiers
   transaction_id: string
   client_transaction_id?: string
+  // Optional batch identifier (for batch-created transactions)
+  batch_number?: number
   
   // Transaction details
   zumrails_type: ZumRailsType
