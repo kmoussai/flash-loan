@@ -498,12 +498,37 @@ export async function initializeZumrailsSdk(
       callbacks?.onLoad?.()
     },
     onSuccess: (
-     connection: ZumrailsConnection
+      requestid: string,
+      cardid: string,
+      extrafield1: string,
+      extrafield2: string,
+      userid: string,
+      clientuserid: string
     ) => {
-      console.log('[Zumrails SDK] Success:', {
-       connection
+      console.log('[Zumrails SDK] Success callback called with:', {
+        requestid,
+        cardid,
+        extrafield1,
+        extrafield2,
+        userid,
+        clientuserid
       })
-      // Pass parameters as separate arguments per documentation
+      
+      // Map SDK parameters to ZumrailsConnection object
+      const connection: ZumrailsConnection = {
+        requestId: requestid, // Primary identifier for webhook matching
+        verificationStatus: 'verified',
+        ...(cardid && { cardId: cardid }),
+        ...(userid && { userId: userid }),
+        // Legacy fields for backward compatibility
+        ...(userid && { customerId: userid }),
+        token: requestid, // token maps to requestId for compatibility
+        ...(cardid && { connectToken: cardid })
+      }
+      
+      console.log('[Zumrails SDK] Mapped connection object:', connection)
+      
+      // Pass connection object to callback
       callbacks?.onSuccess?.(connection)
     },
     onError: (error: string) => {
@@ -516,6 +541,40 @@ export async function initializeZumrailsSdk(
     },
     onStepChanged: (data: { step: string; data: any }) => {
       console.log('[Zumrails SDK] Step changed:', data)
+      
+      // Handle CONNECTIONSUCCESSFULLYCOMPLETED step event
+      // The SDK might use onStepChanged instead of onSuccess in some cases
+      if (data.step === 'CONNECTIONSUCCESSFULLYCOMPLETED' || data.step === 'Success') {
+        const stepData = data.data || {}
+        const requestid = stepData.requestid || stepData.requestId
+        const cardid = stepData.cardid || stepData.cardId
+        const userid = stepData.userid || stepData.userId
+        const clientuserid = stepData.clientuserid || stepData.clientUserId
+        
+        if (requestid) {
+          console.log('[Zumrails SDK] Connection completed via onStepChanged:', {
+            requestid,
+            cardid,
+            userid,
+            clientuserid
+          })
+          
+          // Map to ZumrailsConnection object
+          const connection: ZumrailsConnection = {
+            requestId: requestid,
+            verificationStatus: 'verified',
+            ...(cardid && { cardId: cardid }),
+            ...(userid && { userId: userid }),
+            ...(userid && { customerId: userid }),
+            token: requestid,
+            ...(cardid && { connectToken: cardid })
+          }
+          
+          // Call onSuccess callback if available
+          callbacks?.onSuccess?.(connection)
+        }
+      }
+      
       callbacks?.onStepChanged?.(data)
     }
   }
