@@ -63,62 +63,90 @@ export interface IbvVerificationCallbacks {
   onVerificationCancel: () => void
 }
 
-export function createIbvVerificationCallbacks(
-  options: {
-    applicationId: string | null
-    setZumrailsRequestId: (requestId: string | null) => void
-    setIbvVerified: (verified: boolean) => void
-    setIbvSubmissionOverride: (override: 'pending' | 'failed' | null) => void
-    setIsVerifying: (verifying: boolean) => void
-    setIsSubmitted: (submitted: boolean) => void
-    hasSubmittedApplication: boolean
-  }
-): IbvVerificationCallbacks {
-  const onVerificationSuccess: IbvVerificationCallbacks['onVerificationSuccess'] = (connection) => {
-    const zumrailsConn = connection
-
-    // Update request ID and connection data in database
-    if (options.applicationId && zumrailsConn.requestId) {
-      fetch('/api/zumrails/update-request-id', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+export function createIbvVerificationCallbacks(options: {
+  applicationId: string | null
+  setZumrailsRequestId: (requestId: string | null) => void
+  setIbvVerified: (verified: boolean) => void
+  setIbvSubmissionOverride: (override: 'pending' | 'failed' | null) => void
+  setIsVerifying: (verifying: boolean) => void
+  setIsSubmitted: (submitted: boolean) => void
+  hasSubmittedApplication: boolean
+}): IbvVerificationCallbacks {
+  const onVerificationSuccess: IbvVerificationCallbacks['onVerificationSuccess'] =
+    connection => {
+      const zumrailsConn = connection
+      console.log('[useIbvVerificationHandler] Verification success callback called:', {
+        connection: zumrailsConn,
+        hasRequestId: !!zumrailsConn.requestId,
+        requestId: zumrailsConn.requestId,
+        applicationId: options.applicationId
+      })
+      
+      // Update request ID and connection data in database
+      if (options.applicationId && zumrailsConn.requestId) {
+        console.log('[useIbvVerificationHandler] Updating request ID in database:', {
           applicationId: options.applicationId,
           requestId: zumrailsConn.requestId,
           cardId: zumrailsConn.cardId,
           userId: zumrailsConn.userId
         })
-      }).catch(error => {
-        console.error('[Zumrails] Failed to update request ID:', error)
-      })
+        fetch('/api/zumrails/update-request-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            applicationId: options.applicationId,
+            requestId: zumrailsConn.requestId,
+            cardId: zumrailsConn.cardId,
+            userId: zumrailsConn.userId
+          })
+        }).then(response => {
+          if (response.ok) {
+            console.log('[useIbvVerificationHandler] Successfully updated request ID in database')
+          } else {
+            console.error('[useIbvVerificationHandler] Failed to update request ID, status:', response.status)
+          }
+          return response
+        }).catch(error => {
+          console.error('[useIbvVerificationHandler] Failed to update request ID:', error)
+        })
+      } else {
+        console.warn('[useIbvVerificationHandler] Cannot update request ID - missing applicationId or requestId:', {
+          hasApplicationId: !!options.applicationId,
+          hasRequestId: !!zumrailsConn.requestId
+        })
+      }
+
+      // Store request ID
+      if (zumrailsConn.requestId) {
+        console.log('[useIbvVerificationHandler] Setting zumrailsRequestId:', zumrailsConn.requestId)
+        options.setZumrailsRequestId(zumrailsConn.requestId)
+      } else {
+        console.error('[useIbvVerificationHandler] WARNING: connection.requestId is missing!', zumrailsConn)
+      }
+
+      options.setIbvVerified(true)
+      options.setIbvSubmissionOverride(null)
+      options.setIsVerifying(false)
+      // Show success step immediately after verification success
+      if (options.hasSubmittedApplication || options.applicationId) {
+        options.setIsSubmitted(true)
+      }
     }
 
-    // Store request ID
-    if (zumrailsConn.requestId) {
-      options.setZumrailsRequestId(zumrailsConn.requestId)
+  const onVerificationError: IbvVerificationCallbacks['onVerificationError'] =
+    () => {
+      options.setIbvVerified(false)
+      options.setIsVerifying(false)
+      options.setIbvSubmissionOverride('failed')
+      console.log('Bank verification failed. Please try again.')
     }
 
-    options.setIbvVerified(true)
-    options.setIbvSubmissionOverride(null)
-    options.setIsVerifying(false)
-    // Show success step immediately after verification success
-    if (options.hasSubmittedApplication || options.applicationId) {
-      options.setIsSubmitted(true)
+  const onVerificationCancel: IbvVerificationCallbacks['onVerificationCancel'] =
+    () => {
+      options.setIsVerifying(false)
+      options.setIbvVerified(false)
+      options.setIbvSubmissionOverride(null)
     }
-  }
-
-  const onVerificationError: IbvVerificationCallbacks['onVerificationError'] = () => {
-    options.setIbvVerified(false)
-    options.setIsVerifying(false)
-    options.setIbvSubmissionOverride('failed')
-    console.log('Bank verification failed. Please try again.')
-  }
-
-  const onVerificationCancel: IbvVerificationCallbacks['onVerificationCancel'] = () => {
-    options.setIsVerifying(false)
-    options.setIbvVerified(false)
-    options.setIbvSubmissionOverride(null)
-  }
 
   return {
     onVerificationSuccess,
@@ -126,4 +154,3 @@ export function createIbvVerificationCallbacks(
     onVerificationCancel
   }
 }
-
