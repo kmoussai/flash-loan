@@ -148,6 +148,7 @@ export async function getZumrailsAuthToken(): Promise<{
  * Create a connect token for bank verification
  * @param authToken - Zumrails authentication token
  * @param userInfo - Optional user information to pre-fill the form
+ * @param clientUserId - Optional client/user ID from our system to associate with the token
  */
 export async function createZumrailsConnectToken(
   authToken: string,
@@ -159,50 +160,51 @@ export async function createZumrailsConnectToken(
     addressLine1?: string
     addressProvince?: string
     addressPostalCode?: string
+    clientUserId?: string
+    language?: string
   }
 ): Promise<{ connectToken: string; expiresAt: string; customerId: string }> {
   const baseUrl =
     process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
-  const createTokenUrl = `${baseUrl}/api/aggregationconnector/createtoken`
+  const createTokenUrl = `${baseUrl}/api/connect/createtoken`
+  // api/connect/createToken
 
   const payload: any = {
     ConnectTokenType: 'AddPaymentProfile',
     Configuration: {
       allowEft: true,
-      allowInterac: true,
-      allowVisaDirect: true,
-      allowCreditCard: true
+      allowInterac: false,
+      allowVisaDirect: false,
+      allowCreditCard: false,
+      ...(userInfo?.clientUserId && { clientUserId: userInfo.clientUserId }), // Add our system ID to track the connection
+      ...(userInfo?.firstName && { firstName: userInfo.firstName }),
+      ...(userInfo?.lastName && { lastName: userInfo.lastName }),
+      ...(userInfo?.email && { email: userInfo.email }),
+      ...(userInfo?.language && { language: userInfo.language }), // Add preferred language
+      ...(userInfo && {
+        User: {
+          ...(userInfo.firstName && { firstName: userInfo.firstName }),
+          ...(userInfo.lastName && { lastName: userInfo.lastName }),
+          ...(userInfo.email && { email: userInfo.email }),
+          ...(userInfo.addressCity && { addressCity: userInfo.addressCity }),
+          ...(userInfo.addressLine1 && { addressLine1: userInfo.addressLine1 }),
+          ...(userInfo.addressProvince && {
+            addressProvince: userInfo.addressProvince
+          }),
+          ...(userInfo.addressPostalCode && {
+            addressPostalCode: userInfo.addressPostalCode
+          })
+        }
+      })
     }
   }
 
-  // Add user information to pre-fill the form if provided
-  // Note: If User object is included, Zum Rails requires all address fields to be present
-  // So we only include User object if we have all required address fields
-  if (userInfo && (userInfo.firstName || userInfo.lastName || userInfo.email)) {
-    const hasAllAddressFields = 
-      userInfo.addressCity && 
-      userInfo.addressLine1 && 
-      userInfo.addressProvince && 
-      userInfo.addressPostalCode
-
-    // Only include User object if we have all required address fields
-    // Otherwise, create token without User object (user will fill form manually)
-    if (hasAllAddressFields) {
-      payload.User = {}
-      if (userInfo.firstName) payload.User.firstName = userInfo.firstName
-      if (userInfo.lastName) payload.User.lastName = userInfo.lastName
-      if (userInfo.email) payload.User.email = userInfo.email
-      payload.User.addressCity = userInfo.addressCity
-      payload.User.addressLine1 = userInfo.addressLine1
-      payload.User.addressProvince = userInfo.addressProvince
-      payload.User.addressPostalCode = userInfo.addressPostalCode?.replace(/\s+/g, '')
-    } else {
-      // Log warning if address fields are missing but user info was provided
-      console.warn('[Zumrails] User info provided but missing required address fields. Creating token without User object.')
-    }
-  }
-
-  console.log('[Zumrails] Creating connect token...', { url: createTokenUrl })
+  console.log('[Zumrails] Creating connect token...', {
+    url: createTokenUrl,
+    hasClientUserId: !!userInfo?.clientUserId,
+    clientUserId: userInfo?.clientUserId || undefined,
+    language: userInfo?.language || undefined
+  })
 
   const response = await fetch(createTokenUrl, {
     method: 'POST',
@@ -231,7 +233,7 @@ export async function createZumrailsConnectToken(
   } catch (error) {
     throw new Error('Failed to parse Zumrails connect token response')
   }
-  console.log('[Zumrails] Create token successful', { 
+  console.log('[Zumrails] Create token successful', {
     body: tokenData,
     token: tokenData.result?.Token?.substring(0, 50) + '...', // Log first 50 chars of token
     hasCustomerId: !!tokenData.result?.CustomerId,
@@ -248,20 +250,25 @@ export async function createZumrailsConnectToken(
     expiresAt: tokenData.result.ExpirationUTC,
     hasCustomerId: !!tokenData.result.CustomerId
   })
-  
+
   // Try to get customerId from token response first (if included)
   // Otherwise, get from auth token cache
-  let customerId = tokenData.result.CustomerId || authTokenCache?.customerId || ''
-  
+  let customerId =
+    tokenData.result.CustomerId || authTokenCache?.customerId || ''
+
   if (!customerId) {
-    console.warn('[Zumrails] customerId not found in token response or cache, attempting to get from auth token')
+    console.warn(
+      '[Zumrails] customerId not found in token response or cache, attempting to get from auth token'
+    )
     // Fallback: get from auth token if not in cache or response
     const { customerId: authCustomerId } = await getZumrailsAuthToken()
     customerId = authCustomerId
   }
 
   if (!customerId) {
-    console.error('[Zumrails] Failed to get customerId - this may cause SDK issues')
+    console.error(
+      '[Zumrails] Failed to get customerId - this may cause SDK issues'
+    )
   }
 
   return {
@@ -274,6 +281,7 @@ export async function createZumrailsConnectToken(
 /**
  * Initialize Zumrails session - gets auth token and creates connect token
  * @param userData - Optional user information to pre-fill the form
+ * @param clientUserId - Optional client/user ID from our system to associate with the token
  */
 export async function initializeZumrailsSession(userData?: {
   firstName?: string
@@ -284,6 +292,8 @@ export async function initializeZumrailsSession(userData?: {
   addressLine1?: string
   addressProvince?: string
   addressPostalCode?: string
+  clientUserId?: string
+  language?: string
 }): Promise<{
   connectToken: string
   customerId: string
@@ -293,11 +303,9 @@ export async function initializeZumrailsSession(userData?: {
   // Step 1: Get authentication token (from cache or authenticate)
   const { token } = await getZumrailsAuthToken()
 
-  // Step 2: Create connect token with user information
-  const { connectToken, expiresAt, customerId } = await createZumrailsConnectToken(
-    token,
-    userData
-  )
+  // Step 2: Create connect token with user information and client user ID
+  const { connectToken, expiresAt, customerId } =
+    await createZumrailsConnectToken(token, userData)
 
   // Step 3: Build iframe URL
   const connectorBaseUrl =
