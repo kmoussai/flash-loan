@@ -21,6 +21,7 @@ const customJestConfig = {
     '/node_modules/',
     '/.next/',
     '\\.d\\.ts$', // Ignore TypeScript declaration files
+    '/helpers/', // Ignore helper directories
   ],
   collectCoverageFrom: [
     'src/lib/loan/**/*.{ts,tsx}',
@@ -32,4 +33,3 @@ const customJestConfig = {
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
 module.exports = createJestConfig(customJestConfig)
-
