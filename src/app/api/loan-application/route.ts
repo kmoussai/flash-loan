@@ -932,19 +932,23 @@ export async function POST(request: NextRequest) {
 
           // Use server helper to get token from cache or authenticate
           // Use address data from request body instead of querying DB
+          // Pass application ID as clientUserId to track the connection in Zumrails
           const { connectToken, customerId, iframeUrl, expiresAt } =
             await initializeZumrailsSession({
               firstName: clientData.first_name,
               lastName: clientData.last_name,
               phone: clientData.phone,
               email: clientData.email,
+              
               // Include address fields from request body (required by Zum Rails when User object is provided)
               ...(body.city && body.streetNumber && body.province && body.postalCode && {
                 addressCity: body.city,
                 addressLine1: addressLine1,
                 addressProvince: body.province,
                 addressPostalCode: body.postalCode.replace(/\s+/g, '')
-              })
+              }),
+              clientUserId: txResult.application_id.toString(), // Pass application ID as clientUserId
+              language: clientData.preferred_language || 'en' // Pass preferred language
             })
 
           const requestedAt = new Date().toISOString()

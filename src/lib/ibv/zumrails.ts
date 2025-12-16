@@ -34,9 +34,11 @@ export type ZumrailsVerificationStatus =
   | 'cancelled'
 
 export interface ZumrailsConnection {
-  requestId: string // Primary identifier - requestid from CONNECTIONSUCCESSFULLYCOMPLETED (required)
-  cardId?: string // cardid from CONNECTIONSUCCESSFULLYCOMPLETED
   userId?: string // userid from CONNECTIONSUCCESSFULLYCOMPLETED
+  requestId: string // Primary identifier - requestid from CONNECTIONSUCCESSFULLYCOMPLETED (required)
+  clientUserId?: string // clientuserid from CONNECTIONSUCCESSFULLYCOMPLETED
+
+  cardId?: string // cardid from CONNECTIONSUCCESSFULLYCOMPLETED
   customerId?: string // Optional - legacy/compatibility (can be userId)
   token?: string // Legacy - kept for backward compatibility (maps to requestId)
   refreshToken?: string
@@ -56,10 +58,10 @@ export const ZUMRAILS_CONNECTOR_BASE_URL =
 // Production: https://cdn.aggregation.zumrails.com/production/connector.js
 export const ZUMRAILS_SDK_SANDBOX_URL = 
   process.env.NEXT_PUBLIC_ZUMRAILS_SDK_URL || 
-  'https://cdn.aggregation.zumrails.com/sandbox/connector.js'
+  'https://sandbox-cdn.zumrails.com/sandbox/zumsdk.js'
 export const ZUMRAILS_SDK_PRODUCTION_URL = 
   process.env.NEXT_PUBLIC_ZUMRAILS_SDK_URL || 
-  'https://cdn.aggregation.zumrails.com/production/connector.js'
+  'https://cdn.zumrails.com/production/zumsdk.js'
 
 // Get the appropriate SDK URL based on environment
 export function getZumrailsSdkUrl(): string {
@@ -388,23 +390,23 @@ export function loadZumrailsSdk(): Promise<void> {
     }
 
     // Check if SDK is already loaded
-    // The SDK exposes itself as ZumRailsConnector (per documentation)
-    if ((window as any).ZumRailsConnector) {
+    // The SDK exposes itself as ZumRailsSDK (per documentation)
+    if ((window as any).ZumRailsSDK) {
       resolve()
       return
     }
 
     const script = document.createElement('script')
     script.src = getZumrailsSdkUrl()
-    script.id = 'zumrailsconnector' // Match the ID from the documentation
+    script.id = 'ZumRailsSDK' // Match the ID from the documentation
     script.async = true
     script.type = 'text/javascript'
     script.onload = () => {
-      // Check for ZumRailsConnector (per documentation)
-      if ((window as any).ZumRailsConnector) {
+      // Check for ZumRailsSDK (per documentation)
+      if ((window as any).ZumRailsSDK) {
         resolve()
       } else {
-        reject(new Error('Zum Rails SDK failed to load - ZumRailsConnector global object not found'))
+        reject(new Error('Zum Rails SDK failed to load - ZumRailsSDK global object not found'))
       }
     }
     script.onerror = () => {
@@ -428,7 +430,7 @@ export async function initializeZumrailsSdk(
   containerId?: string,
   callbacks?: {
     onLoad?: () => void
-    onSuccess?: (requestid: string, cardid: string, extrafield1: string, extrafield2: string, userid: string, clientuserid: string) => void
+    onSuccess?: (connection: ZumrailsConnection) => void
     onError?: (error: string) => void
     onConnectorClosed?: () => void
     onStepChanged?: (data: { step: string; data: any }) => void
@@ -450,21 +452,38 @@ export async function initializeZumrailsSdk(
   // Load SDK if not already loaded
   await loadZumrailsSdk()
 
-  // Check for SDK global variable (ZumRailsConnector per documentation)
-  const ZumRailsConnector = (window as any).ZumRailsConnector
-  if (!ZumRailsConnector) {
-    throw new Error('Zum Rails SDK not available - ZumRailsConnector global object not found')
+  // Check for SDK global variable (ZumRailsSDK per documentation)
+  const ZumRailsSDK = (window as any).ZumRailsSDK
+  if (!ZumRailsSDK) {
+    throw new Error('Zum Rails SDK not available - ZumRailsSDK global object not found')
+  }
+
+  // Validate token before initializing
+  if (!connectToken || typeof connectToken !== 'string' || connectToken.trim().length === 0) {
+    throw new Error('Invalid connectToken: token must be a non-empty string')
   }
 
   // Build initialization config according to documentation
   // Documentation: https://docs.zumrails.com/data-aggregation/how-it-works
+  const trimmedToken = connectToken.trim()
+  
+  // Log token details for debugging (but don't log full token in production)
   console.log('[Zumrails SDK] Initializing with token:', {
-    tokenLength: connectToken?.length,
-    tokenPreview: connectToken?.substring(0, 50) + '...'
+    tokenLength: trimmedToken.length,
+    tokenPreview: trimmedToken.substring(0, 50) + '...',
+    tokenEnd: '...' + trimmedToken.substring(trimmedToken.length - 20),
+    tokenStartsWith: trimmedToken.substring(0, 10),
+    timestamp: new Date().toISOString()
   })
   
+  // Verify token looks like a JWT (3 parts separated by dots) or similar format
+  // This helps catch obvious formatting issues early
+  if (trimmedToken.split('.').length !== 3 && !trimmedToken.includes('.')) {
+    console.warn('[Zumrails SDK] Token format looks unusual - expected JWT-like format with dots')
+  }
+  
   const config: any = {
-    token: connectToken,
+    token: trimmedToken,
     options: {
       accountselector: options?.accountselector ?? true,
       testinstitution: options?.testinstitution ?? true,
@@ -479,26 +498,16 @@ export async function initializeZumrailsSdk(
       callbacks?.onLoad?.()
     },
     onSuccess: (
-      requestid: string,
-      cardid: string,
-      extrafield1: string,
-      extrafield2: string,
-      userid: string,
-      clientuserid: string
+     connection: ZumrailsConnection
     ) => {
       console.log('[Zumrails SDK] Success:', {
-        requestid,
-        cardid,
-        extrafield1,
-        extrafield2,
-        userid,
-        clientuserid
+       connection
       })
       // Pass parameters as separate arguments per documentation
-      callbacks?.onSuccess?.(requestid, cardid, extrafield1, extrafield2, userid, clientuserid)
+      callbacks?.onSuccess?.(connection)
     },
     onError: (error: string) => {
-      console.error('[Zumrails SDK] Error:', error)
+      console.error('[Zumrails SDK] Error:', {error, trimmedToken})
       callbacks?.onError?.(error)
     },
     onConnectorClosed: () => {
@@ -525,5 +534,5 @@ export async function initializeZumrailsSdk(
   // Initialize the SDK with the token
   // If containerId is provided, SDK will render inline in that container
   // If not provided, SDK will render as a modal
-  ZumRailsConnector.init(config)
+  ZumRailsSDK.init(config)
 }
