@@ -82,39 +82,8 @@ export function createIbvVerificationCallbacks(options: {
         applicationId: options.applicationId
       })
       
-      // Update request ID and connection data in database
-      if (options.applicationId && zumrailsConn.requestId) {
-        console.log('[useIbvVerificationHandler] Updating request ID in database:', {
-          applicationId: options.applicationId,
-          requestId: zumrailsConn.requestId,
-          cardId: zumrailsConn.cardId,
-          userId: zumrailsConn.userId
-        })
-        fetch('/api/zumrails/update-request-id', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            applicationId: options.applicationId,
-            requestId: zumrailsConn.requestId,
-            cardId: zumrailsConn.cardId,
-            userId: zumrailsConn.userId
-          })
-        }).then(response => {
-          if (response.ok) {
-            console.log('[useIbvVerificationHandler] Successfully updated request ID in database')
-          } else {
-            console.error('[useIbvVerificationHandler] Failed to update request ID, status:', response.status)
-          }
-          return response
-        }).catch(error => {
-          console.error('[useIbvVerificationHandler] Failed to update request ID:', error)
-        })
-      } else {
-        console.warn('[useIbvVerificationHandler] Cannot update request ID - missing applicationId or requestId:', {
-          hasApplicationId: !!options.applicationId,
-          hasRequestId: !!zumrailsConn.requestId
-        })
-      }
+      // Note: Request ID and userId are now handled by the User Connected webhook
+      // No need to call update-request-id endpoint anymore
 
       // Store request ID
       if (zumrailsConn.requestId) {

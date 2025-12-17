@@ -49,15 +49,23 @@ export default function AuthCallbackHandler() {
         }
 
         if (data.session && data.user) {
+          // Check if password change is required (user came from magic link with requires_password_change)
+          const requiresPasswordChange = data.user.user_metadata?.requires_password_change === true
+          
           // Clean up the hash from URL
           const newUrl = window.location.pathname + window.location.search
           window.history.replaceState(null, '', newUrl)
 
           // Check if there's a redirect_to in the URL or default to dashboard documents
           const urlParams = new URLSearchParams(window.location.search)
-          const redirectTo =
+          let redirectTo =
             urlParams.get('redirect_to') ||
             `/${locale}/client/dashboard?section=documents`
+
+          // If password change is required, redirect to change-password page with magic link flag
+          if (requiresPasswordChange) {
+            redirectTo = `/${locale}/client/dashboard/change-password?from_magic_link=true`
+          }
 
           // Redirect to the intended destination
           router.push(redirectTo)

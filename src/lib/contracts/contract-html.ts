@@ -186,7 +186,7 @@ export async function createContractHTML(
   const signatureName = contractData.client_signature_data?.signature_name || ''
   const personalService = true
   const businessService = false
-  const payeeName = 'Accept Pay Global (Payee)'
+  const payeeName = 'Zūm Rails Inc'
 
   const borrowerFullName =
     [borrowerFirst, borrowerLast].filter(Boolean).join(' ').trim() || 'N/A'

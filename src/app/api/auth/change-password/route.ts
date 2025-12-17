@@ -4,7 +4,7 @@ import { createServerSupabaseClient, createServerSupabaseAdminClient } from '@/s
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { newPassword } = body
+    const { newPassword, fromMagicLink } = body
 
     if (!newPassword || newPassword.length < 6) {
       return NextResponse.json(
@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     const adminClient = createServerSupabaseAdminClient()
 
     // Update password and clear password change requirement
+    // When fromMagicLink is true, we're setting a password (not changing), so no need to verify current password
     // Email is already confirmed when account was created, so no need to confirm again
     const { error: updateError } = await adminClient.auth.admin.updateUserById(
       user.id,
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Password changed successfully'
+      message: fromMagicLink ? 'Password set successfully' : 'Password changed successfully'
     })
 
   } catch (error: any) {

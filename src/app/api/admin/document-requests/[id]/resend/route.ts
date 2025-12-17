@@ -3,7 +3,7 @@ import { isStaff, sendDocumentRequestMagicLink } from '@/src/lib/supabase/admin-
 
 // POST /api/admin/document-requests/:id/resend
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {

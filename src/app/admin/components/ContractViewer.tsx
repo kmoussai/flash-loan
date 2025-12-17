@@ -270,7 +270,7 @@ export default function ContractViewer({
     const signatureDateStaff = formatDate(contractData.staff_signed_at)
     const personalService = true
     const businessService = false
-    const payeeName = ' Zūm Rails Inc'
+    const payeeName = 'Zūm Rails Inc'
 
     const borrowerFullName =
       [terms.first_name, terms.last_name].filter(Boolean).join(' ').trim() ||

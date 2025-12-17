@@ -149,6 +149,8 @@ export async function getZumrailsAuthToken(): Promise<{
  * @param authToken - Zumrails authentication token
  * @param userInfo - Optional user information to pre-fill the form
  * @param clientUserId - Optional client/user ID from our system to associate with the token
+ * @param extraField1 - Optional extra field 1 (typically application_id)
+ * @param extraField2 - Optional extra field 2 (typically loan_application_ibv_request id)
  */
 export async function createZumrailsConnectToken(
   authToken: string,
@@ -162,7 +164,9 @@ export async function createZumrailsConnectToken(
     addressPostalCode?: string
     clientUserId?: string
     language?: string
-  }
+  },
+  extraField1?: string,
+  extraField2?: string
 ): Promise<{ connectToken: string; expiresAt: string; customerId: string }> {
   const baseUrl =
     process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
@@ -181,6 +185,9 @@ export async function createZumrailsConnectToken(
       ...(userInfo?.lastName && { lastName: userInfo.lastName }),
       ...(userInfo?.email && { email: userInfo.email }),
       ...(userInfo?.language && { language: userInfo.language }), // Add preferred language
+      // Add extra fields for webhook matching
+      ...(extraField1 && { ExtraField1: extraField1 }), // Typically application_id
+      ...(extraField2 && { ExtraField2: extraField2 }), // Typically loan_application_ibv_request id
       ...(userInfo && {
         User: {
           ...(userInfo.firstName && { firstName: userInfo.firstName }),
@@ -203,7 +210,9 @@ export async function createZumrailsConnectToken(
     url: createTokenUrl,
     hasClientUserId: !!userInfo?.clientUserId,
     clientUserId: userInfo?.clientUserId || undefined,
-    language: userInfo?.language || undefined
+    language: userInfo?.language || undefined,
+    extraField1: extraField1 || undefined,
+    extraField2: extraField2 || undefined
   })
 
   const response = await fetch(createTokenUrl, {
@@ -281,20 +290,25 @@ export async function createZumrailsConnectToken(
 /**
  * Initialize Zumrails session - gets auth token and creates connect token
  * @param userData - Optional user information to pre-fill the form
- * @param clientUserId - Optional client/user ID from our system to associate with the token
+ * @param applicationId - Optional application ID to pass as ExtraField1
+ * @param ibvRequestId - Optional IBV request ID to pass as ExtraField2
  */
-export async function initializeZumrailsSession(userData?: {
-  firstName?: string
-  lastName?: string
-  email?: string
-  phone?: string
-  addressCity?: string
-  addressLine1?: string
-  addressProvince?: string
-  addressPostalCode?: string
-  clientUserId?: string
-  language?: string
-}): Promise<{
+export async function initializeZumrailsSession(
+  userData?: {
+    firstName?: string
+    lastName?: string
+    email?: string
+    phone?: string
+    addressCity?: string
+    addressLine1?: string
+    addressProvince?: string
+    addressPostalCode?: string
+    clientUserId?: string
+    language?: string
+  },
+  applicationId?: string,
+  ibvRequestId?: string
+): Promise<{
   connectToken: string
   customerId: string
   iframeUrl: string
@@ -303,9 +317,9 @@ export async function initializeZumrailsSession(userData?: {
   // Step 1: Get authentication token (from cache or authenticate)
   const { token } = await getZumrailsAuthToken()
 
-  // Step 2: Create connect token with user information and client user ID
+  // Step 2: Create connect token with user information, client user ID, and extra fields
   const { connectToken, expiresAt, customerId } =
-    await createZumrailsConnectToken(token, userData)
+    await createZumrailsConnectToken(token, userData, applicationId, ibvRequestId)
 
   // Step 3: Build iframe URL
   const connectorBaseUrl =

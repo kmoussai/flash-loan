@@ -16,9 +16,11 @@ export const pathnames = {
   '/dashboard': '/dashboard',
   '/client/dashboard': '/client/dashboard',
   '/client/dashboard/change-password': '/client/dashboard/change-password',
+  '/client/dashboard/change-password?from_magic_link=true': '/client/dashboard/change-password?from_magic_link=true',
   '/auth/signin': '/auth/signin',
   '/auth/forgot-password': '/auth/forgot-password',
   '/auth/reset-password': '/auth/reset-password',
   '/admin/dashboard': '/admin/dashboard',
+
 } satisfies Pathnames<typeof locales>
 

@@ -1,37 +1,32 @@
 /**
  * Loan Payment Sync Helper
- * 
+ *
  * Processes loan payments that don't have corresponding payment_transactions.
  * Creates ZumRails transactions and updates loan_payments with transaction information.
- * 
+ *
  * This function is designed to be called from a cron job to sync pending payments.
- * 
+ *
  * Usage example (in a cron job API route):
  * ```typescript
  * import { syncLoanPaymentsToZumRails } from '@/src/lib/payment-providers/zumrails'
- * 
+ *
  * export async function GET(request: NextRequest) {
  *   const result = await syncLoanPaymentsToZumRails({ limit: 50 })
  *   return NextResponse.json(result)
  * }
  * ```
- * 
+ *
  * Requirements:
- * - ZUMRAILS_WALLET_ID environment variable must be set (or pass walletId option)
+ * - ZUMRAILS_FUNDING_SRC environment variable must be set (or fundingSourceId in payment_provider_data)
  * - payment_provider_data table must have userId for each client
- * - fundingSourceId must be available (from IBV data or payment_provider_data)
+ * - fundingSourceId must be available (from env, IBV data, or payment_provider_data)
  */
 
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import {
-  createBatchTransactionsWithValidation,
-  transactionsToCSV,
-  filterZumRailsTransactions,
-  type BatchTransactionInput
-} from './transactions'
+import { createCollectionTransaction } from './transactions/create'
 import type { ZumRailsProviderData } from './types'
 
-// Static wallet ID (as per requirements)
+// Static wallet ID (optional - not used when funding source is provided)
 const STATIC_WALLET_ID = process.env.ZUMRAILS_WALLET_ID || ''
 
 interface LoanPaymentWithLoan {
@@ -40,15 +35,17 @@ interface LoanPaymentWithLoan {
   amount: number
   payment_date: string
   status: string
-  loans: {
-    id: string
-    user_id: string
-    status: string
-  } | Array<{
-    id: string
-    user_id: string
-    status: string
-  }>
+  loans:
+    | {
+        id: string
+        user_id: string
+        status: string
+      }
+    | Array<{
+        id: string
+        user_id: string
+        status: string
+      }>
 }
 
 interface LoanPaymentWithClientData {
@@ -58,6 +55,7 @@ interface LoanPaymentWithClientData {
   paymentDate: string
   clientId: string
   userId: string
+  fundingSourceId?: string
   firstName: string
   lastName: string
   institutionNumber: string
@@ -91,7 +89,7 @@ async function getLoanPaymentsWithoutTransactions(
 ): Promise<LoanPaymentWithLoan[]> {
   // Since Supabase doesn't support LEFT JOIN with NOT EXISTS easily,
   // we'll use a two-step approach: get all payments and filter out those with transactions
-  
+
   // Step 1: Get payment IDs that have active (non-cancelled) transactions
   let transactionQuery = supabase
     .from('payment_transactions')
@@ -105,10 +103,14 @@ async function getLoanPaymentsWithoutTransactions(
     transactionQuery = transactionQuery.eq('loan_id', loanId)
   }
 
-  const { data: paymentsWithTransactions, error: transactionsError } = await transactionQuery
+  const { data: paymentsWithTransactions, error: transactionsError } =
+    await transactionQuery
 
   if (transactionsError) {
-    console.error('[LoanPaymentSync] Error fetching payment transactions:', transactionsError)
+    console.error(
+      '[LoanPaymentSync] Error fetching payment transactions:',
+      transactionsError
+    )
     throw transactionsError
   }
 
@@ -125,7 +127,8 @@ async function getLoanPaymentsWithoutTransactions(
   // Include loan contracts to get bank account information
   let query = supabase
     .from('loan_payments')
-    .select(`
+    .select(
+      `
       id,
       loan_id,
       amount,
@@ -141,7 +144,8 @@ async function getLoanPaymentsWithoutTransactions(
           contract_terms
         )
       )
-    `)
+    `
+    )
     .eq('status', 'pending')
     .eq('loans.status', 'active') // Only include payments from active loans
 
@@ -155,21 +159,25 @@ async function getLoanPaymentsWithoutTransactions(
     .limit(limit * 3) // Get more to account for filtering
 
   if (allPaymentsError) {
-    console.error('[LoanPaymentSync] Error fetching all loan payments:', allPaymentsError)
+    console.error(
+      '[LoanPaymentSync] Error fetching all loan payments:',
+      allPaymentsError
+    )
     throw allPaymentsError
   }
 
   // Step 3: Filter payments that don't have active (non-cancelled) transactions
   // This includes payments with no transactions AND payments with only cancelled transactions
-  const paymentsWithoutTransactions = (allPayments || [])
-    .filter((payment: any) => {
+  const paymentsWithoutTransactions = (allPayments || []).filter(
+    (payment: any) => {
       // Filter out payments that already have active (non-cancelled) transactions
       if (paymentIdsWithActiveTransactions.has(payment.id)) {
         return false
       }
-      
+
       return true
-    }) as LoanPaymentWithLoan[]
+    }
+  ) as LoanPaymentWithLoan[]
 
   return paymentsWithoutTransactions.slice(0, limit)
 }
@@ -189,7 +197,10 @@ async function getPaymentProviderData(
     .maybeSingle()
 
   if (error) {
-    console.error('[LoanPaymentSync] Error fetching payment provider data:', error)
+    console.error(
+      '[LoanPaymentSync] Error fetching payment provider data:',
+      error
+    )
     return null
   }
 
@@ -199,7 +210,7 @@ async function getPaymentProviderData(
 /**
  * Generate a consistent transaction comment that includes loan payment ID for matching
  * Format: "Loan payment | loan:{loanId} | payment:{loanPaymentId}"
- * 
+ *
  * @param loanId - The loan ID
  * @param loanPaymentId - The loan payment ID (used for matching)
  * @returns Formatted comment string
@@ -209,46 +220,9 @@ function generateComment(loanId: string, loanPaymentId: string): string {
 }
 
 /**
- * Extract loan payment ID from transaction comment
- * Supports both old and new comment formats for backward compatibility
- * 
- * @param comment - The transaction comment from ZumRails
- * @returns The loan payment ID if found, null otherwise
- */
-function extractLoanPaymentIdFromComment(comment: string | null | undefined): string | null {
-  if (!comment) {
-    return null
-  }
-
-  // New format: "Loan payment | loan:{loanId} | payment:{loanPaymentId}"
-  // Match "payment:" followed by UUID or alphanumeric string
-  const newFormatMatch = comment.match(/payment:([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|[a-zA-Z0-9_-]+)/i)
-  if (newFormatMatch && newFormatMatch[1]) {
-    return newFormatMatch[1]
-  }
-
-  // Old format: "Loan payment for loan {loanId}, payment {loanPaymentId}"
-  // Match "payment " followed by UUID or alphanumeric string
-  const oldFormatMatch = comment.match(/payment\s+([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|[a-zA-Z0-9_-]+)/i)
-  if (oldFormatMatch && oldFormatMatch[1]) {
-    return oldFormatMatch[1]
-  }
-
-  // Fallback: try to find any UUID in the comment (last resort)
-  const uuidMatch = comment.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
-  if (uuidMatch && uuidMatch[1]) {
-    return uuidMatch[1]
-  }
-
-  return null
-}
-
-/**
  * Get client data from loan contract including bank account information
  */
-function getClientDataFromContract(
-  loan: any
-): {
+function getClientDataFromContract(loan: any): {
   firstName: string
   lastName: string
   email?: string
@@ -257,10 +231,10 @@ function getClientDataFromContract(
   accountNumber?: string
 } | null {
   // Get loan contract (can be array or single object)
-  const contracts = Array.isArray(loan.loan_contracts) 
-    ? loan.loan_contracts 
-    : loan.loan_contracts 
-      ? [loan.loan_contracts] 
+  const contracts = Array.isArray(loan.loan_contracts)
+    ? loan.loan_contracts
+    : loan.loan_contracts
+      ? [loan.loan_contracts]
       : []
 
   // Get the most recent signed contract
@@ -280,14 +254,16 @@ function getClientDataFromContract(
   const contractTerms = contract.contract_terms as any
 
   // Get client name from contract terms (borrower information)
-  const firstName = contractTerms?.borrower?.firstName || 
-                    contractTerms?.borrower?.first_name || 
-                    contractTerms?.borrowerName?.split(' ')[0] || 
-                    ''
-  const lastName = contractTerms?.borrower?.lastName || 
-                   contractTerms?.borrower?.last_name || 
-                   contractTerms?.borrowerName?.split(' ').slice(1).join(' ') || 
-                   ''
+  const firstName =
+    contractTerms?.borrower?.firstName ||
+    contractTerms?.borrower?.first_name ||
+    contractTerms?.borrowerName?.split(' ')[0] ||
+    ''
+  const lastName =
+    contractTerms?.borrower?.lastName ||
+    contractTerms?.borrower?.last_name ||
+    contractTerms?.borrowerName?.split(' ').slice(1).join(' ') ||
+    ''
 
   return {
     firstName: firstName || '',
@@ -306,6 +282,8 @@ async function getFundingSourceId(
   supabase: any,
   clientId: string
 ): Promise<string | null> {
+  if (process.env.ZUMRAILS_FUNDING_SRC)
+    return Promise.resolve(process.env.ZUMRAILS_FUNDING_SRC)
   // Try to get from payment_provider_data first
   const providerData = await getPaymentProviderData(supabase, clientId)
   if (providerData?.fundingSourceId) {
@@ -355,7 +333,8 @@ async function createPaymentTransaction(
     client_transaction_id: loanPaymentId,
     zumrails_type: zumRailsResponse.result.ZumRailsType || 'AccountsReceivable',
     transaction_method: zumRailsResponse.result.TransactionMethod || 'Eft',
-    transaction_status: zumRailsResponse.result.TransactionStatus || 'InProgress',
+    transaction_status:
+      zumRailsResponse.result.TransactionStatus || 'InProgress',
     amount: zumRailsResponse.result.Amount || amount,
     currency: zumRailsResponse.result.Currency || 'CAD',
     created_at: zumRailsResponse.result.CreatedAt || new Date().toISOString(),
@@ -378,29 +357,34 @@ async function createPaymentTransaction(
   })
 
   if (error) {
-    console.error('[LoanPaymentSync] Error creating payment transaction:', error)
+    console.error(
+      '[LoanPaymentSync] Error creating payment transaction:',
+      error
+    )
     throw error
   }
 }
 
 /**
  * Main function to sync loan payments to ZumRails
- * 
+ *
  * @param options Configuration options
  * @param options.limit Maximum number of payments to process in one run
- * @param options.walletId Wallet ID to use (defaults to STATIC_WALLET_ID)
+ * @param options.walletId Wallet ID to use (optional - not used when funding source is provided)
+ * @param options.loanId Optional loan ID to filter payments for a specific loan
  * @returns Sync result with statistics
  */
-export async function syncLoanPaymentsToZumRails(options: {
-  limit?: number
-  walletId?: string
-  loanId?: string
-} = {}): Promise<SyncResult> {
+export async function syncLoanPaymentsToZumRails(
+  options: {
+    limit?: number
+    walletId?: string
+    loanId?: string
+  } = {}
+): Promise<SyncResult> {
   const { limit = 100, walletId = STATIC_WALLET_ID, loanId } = options
 
-  if (!walletId) {
-    throw new Error('Wallet ID is required. Set ZUMRAILS_WALLET_ID environment variable or pass walletId option.')
-  }
+  // Note: walletId is optional - ZumRails requires either WalletId OR FundingSourceId, not both
+  // We're using FundingSourceId from env or payment_provider_data
 
   const supabase = createServerSupabaseAdminClient()
   const result: SyncResult = {
@@ -413,10 +397,16 @@ export async function syncLoanPaymentsToZumRails(options: {
 
   try {
     // Get loan payments without transactions
-    const loanPayments = await getLoanPaymentsWithoutTransactions(supabase, limit, loanId)
+    const loanPayments = await getLoanPaymentsWithoutTransactions(
+      supabase,
+      limit,
+      loanId
+    )
     result.processed = loanPayments.length
 
-    console.log(`[LoanPaymentSync] Found ${loanPayments.length} loan payments to process`)
+    console.log(
+      `[LoanPaymentSync] Found ${loanPayments.length} loan payments to process`
+    )
 
     // Step 1: Collect all valid transactions with required data
     const validTransactions: LoanPaymentWithClientData[] = []
@@ -424,10 +414,10 @@ export async function syncLoanPaymentsToZumRails(options: {
     for (const loanPayment of loanPayments) {
       try {
         // Handle nested loan structure from Supabase query
-        const loan = Array.isArray(loanPayment.loans) 
-          ? loanPayment.loans[0] 
+        const loan = Array.isArray(loanPayment.loans)
+          ? loanPayment.loans[0]
           : loanPayment.loans
-        
+
         if (!loan || !loan.user_id) {
           result.failed++
           result.errors.push({
@@ -450,6 +440,11 @@ export async function syncLoanPaymentsToZumRails(options: {
           continue
         }
 
+        // Get funding source ID
+        const fundingSourceId =
+          providerData.fundingSourceId ||
+          (await getFundingSourceId(supabase, clientId))
+
         // Get client data from loan contract including bank account
         const clientData = getClientDataFromContract(loan)
         if (!clientData) {
@@ -462,7 +457,11 @@ export async function syncLoanPaymentsToZumRails(options: {
         }
 
         // Validate bank account data
-        if (!clientData.institutionNumber || !clientData.branchNumber || !clientData.accountNumber) {
+        if (
+          !clientData.institutionNumber ||
+          !clientData.branchNumber ||
+          !clientData.accountNumber
+        ) {
           result.failed++
           result.errors.push({
             loanPaymentId: loanPayment.id,
@@ -493,6 +492,7 @@ export async function syncLoanPaymentsToZumRails(options: {
           paymentDate,
           clientId,
           userId: providerData.userId,
+          fundingSourceId: fundingSourceId || undefined,
           firstName: clientData.firstName,
           lastName: clientData.lastName,
           institutionNumber: clientData.institutionNumber,
@@ -513,194 +513,116 @@ export async function syncLoanPaymentsToZumRails(options: {
       }
     }
 
-    // Step 2: Convert to batch CSV format
+    // Step 2: Process transactions one by one
     if (validTransactions.length === 0) {
       console.log('[LoanPaymentSync] No valid transactions to process')
       return result
     }
 
-    console.log(`[LoanPaymentSync] Processing ${validTransactions.length} transactions in batch`)
+    console.log(
+      `[LoanPaymentSync] Processing ${validTransactions.length} transactions individually`
+    )
 
-    const batchTransactions: BatchTransactionInput[] = validTransactions.map(tx => ({
-      firstName: tx.firstName,
-      lastName: tx.lastName,
-      institutionNumber: tx.institutionNumber,
-      branchNumber: tx.branchNumber,
-      accountNumber: tx.accountNumber,
-      amountInCents: Math.round(tx.amount * 100), // Convert to cents
-      transactionComment: generateComment(tx.loanId, tx.loanPaymentId),
-      memo: 'FLASH LOAN INC',
-      scheduledDate: tx.paymentDate,
-      emailId: tx.email,
-      clientUserId: tx.userId
-    }))
+    // Process each transaction individually
+    for (const tx of validTransactions) {
+      try {
+        // Get funding source ID for this transaction
+        const fundingSourceId =
+          tx.fundingSourceId ||
+          (await getFundingSourceId(supabase, tx.clientId))
 
-    const csvContent = transactionsToCSV(batchTransactions)
-    const fileName = `loan-payments-${Date.now()}.csv`
-
-    // Step 3: Process batch
-    try {
-      const batchResult = await createBatchTransactionsWithValidation(csvContent, {
-        fileName,
-        transactionType: 'AccountsReceivable',
-        transactionMethod: 'Eft',
-        walletId: walletId,
-        skipFileAlreadyProcessedInLast24Hours: true,
-        withdrawSumTotalFromFundingSource: false
-      })
-
-      if (!batchResult.success) {
-        // Batch validation or processing failed
-        result.failed += validTransactions.length
-        result.errors.push({
-          loanPaymentId: 'batch',
-          error: batchResult.error || 'Batch processing failed'
-        })
-        console.error('[LoanPaymentSync] Batch processing failed:', batchResult.error)
-        return result
-      }
-
-      // Step 4: Match transactions back to loan payments
-      // Extract batch number from processing result
-      const batchNumber = batchResult.processing?.result
-      
-      if (!batchNumber) {
-        console.error('[LoanPaymentSync] No batch number returned from processing')
-        result.failed += validTransactions.length
-        result.errors.push({
-          loanPaymentId: 'batch',
-          error: 'Batch processing succeeded but no batch number returned'
-        })
-        return result
-      }
-
-      console.log(`[LoanPaymentSync] Batch processed successfully with batch number: ${batchNumber}`)
-
-      // Query transactions created in this batch using BatchNumber filter
-      const filterResult = await filterZumRailsTransactions({
-        WalletId: walletId,
-        BatchNumber: batchNumber,
-        ZumRailsType: 'AccountsReceivable',
-        Pagination: {
-          PageNumber: 1,
-          ItemsPerPage: 100
-        }
-      })
-
-      const zumRailsTransactions = filterResult.result?.Items || []
-
-      console.log(`[LoanPaymentSync] Found ${zumRailsTransactions.length} ZumRails transactions in batch ${batchNumber}`)
-      console.log(`[LoanPaymentSync] Trying to match ${validTransactions.length} loan payments`)
-
-      // Simple matching: Match transactions by loan payment ID from transaction comment
-      const matchedTransactions = new Map<string, any>()
-      
-      // Create a map of loan payment IDs for quick lookup
-      const loanPaymentIdSet = new Set(validTransactions.map(tx => tx.loanPaymentId))
-      
-      // Match ZumRails transactions by extracting loan payment ID from comment
-      for (const zumTx of zumRailsTransactions) {
-        const extractedLoanPaymentId = extractLoanPaymentIdFromComment(zumTx.Comment)
-        
-        if (extractedLoanPaymentId && loanPaymentIdSet.has(extractedLoanPaymentId)) {
-          matchedTransactions.set(extractedLoanPaymentId, zumTx)
-          console.log(`[LoanPaymentSync] ✓ Matched transaction ${zumTx.Id} to loan payment ${extractedLoanPaymentId}`)
-        }
-      }
-
-      console.log(`[LoanPaymentSync] Matched ${matchedTransactions.size} out of ${validTransactions.length} loan payments`)
-
-      // Step 5: Create payment_transaction records for matched transactions
-      for (const tx of validTransactions) {
-        const zumRailsTx = matchedTransactions.get(tx.loanPaymentId)
-
-        if (zumRailsTx) {
-          try {
-            // Create payment_transaction record
-            const providerData: ZumRailsProviderData = {
-              transaction_id: zumRailsTx.Id,
-              client_transaction_id: tx.loanPaymentId,
-              batch_number: batchNumber,
-              zumrails_type: zumRailsTx.ZumRailsType || 'AccountsReceivable',
-              transaction_method: zumRailsTx.TransactionMethod || 'Eft',
-              transaction_status: zumRailsTx.TransactionStatus || 'Scheduled',
-              amount: zumRailsTx.Amount || tx.amount,
-              currency: zumRailsTx.Currency || 'CAD',
-              created_at: zumRailsTx.CreatedAt || new Date().toISOString(),
-              memo: zumRailsTx.Memo,
-              comment: generateComment(tx.loanId, tx.loanPaymentId),
-              scheduled_start_date: tx.paymentDate,
-              user: zumRailsTx.User,
-              wallet: zumRailsTx.Wallet,
-              funding_source: zumRailsTx.FundingSource,
-              raw_response: zumRailsTx
-            }
-
-            const { error } = await supabase
-              .from('payment_transactions')
-              .insert({
-                provider: 'zumrails',
-                transaction_type: 'collection',
-                loan_id: tx.loanId,
-                loan_payment_id: tx.loanPaymentId,
-                amount: tx.amount,
-                status: 'initiated', // Will be updated by webhook
-                provider_data: providerData as any
-              } as any)
-
-            if (error) {
-              console.error(`[LoanPaymentSync] Error creating payment transaction for ${tx.loanPaymentId}:`, error)
-              result.failed++
-              result.errors.push({
-                loanPaymentId: tx.loanPaymentId,
-                error: `Failed to create payment_transaction: ${error.message}`
-              })
-            } else {
-              result.created++
-              console.log(
-                `[LoanPaymentSync] Created transaction for payment ${tx.loanPaymentId}: ${zumRailsTx.Id}`
-              )
-            }
-          } catch (error: any) {
-            result.failed++
-            result.errors.push({
-              loanPaymentId: tx.loanPaymentId,
-              error: error.message || String(error)
-            })
-            console.error(
-              `[LoanPaymentSync] Error creating payment transaction for ${tx.loanPaymentId}:`,
-              error
-            )
-          }
-        } else {
-          // Transaction not matched - log detailed information for debugging
+        if (!fundingSourceId) {
           result.failed++
-          const errorMsg = `Transaction created in batch but could not be matched. Expected comment: "${generateComment(tx.loanId, tx.loanPaymentId)}". Found ${zumRailsTransactions.length} transactions in batch, ${matchedTransactions.size} matched.`
           result.errors.push({
             loanPaymentId: tx.loanPaymentId,
-            error: errorMsg
+            error: `No funding source ID found for client ${tx.clientId}`
           })
           console.warn(
-            `[LoanPaymentSync] Could not match transaction for payment ${tx.loanPaymentId}`,
-            {
-              expectedComment: generateComment(tx.loanId, tx.loanPaymentId),
-              loanPaymentId: tx.loanPaymentId,
-              amount: tx.amount,
-              scheduledDate: tx.paymentDate,
-              totalTransactionsInBatch: zumRailsTransactions.length,
-              matchedCount: matchedTransactions.size,
-              availableComments: zumRailsTransactions.map(t => t.Comment).filter(Boolean)
-            }
+            `[LoanPaymentSync] Skipping payment ${tx.loanPaymentId}: No funding source ID`
+          )
+          continue
+        }
+
+        // Create individual transaction
+        console.log(
+          `[LoanPaymentSync] Creating transaction for payment ${tx.loanPaymentId}...`
+        )
+
+        const transactionResponse = await createCollectionTransaction({
+          userId: tx.userId,
+          fundingSourceId: fundingSourceId,
+          amount: tx.amount,
+          memo: 'FLASH LOAN INC',
+          comment: generateComment(tx.loanId, tx.loanPaymentId),
+          scheduledStartDate: tx.paymentDate,
+          clientTransactionId: tx.loanPaymentId
+          // Note: walletId is not included - ZumRails requires either WalletId OR FundingSourceId, not both
+        })
+
+        // Create payment_transaction record immediately after successful creation
+        const providerData: ZumRailsProviderData = {
+          transaction_id: transactionResponse.result.Id,
+          client_transaction_id: tx.loanPaymentId,
+          zumrails_type:
+            transactionResponse.result.ZumRailsType || 'AccountsReceivable',
+          transaction_method:
+            transactionResponse.result.TransactionMethod || 'Eft',
+          transaction_status:
+            transactionResponse.result.TransactionStatus || 'Scheduled',
+          amount: transactionResponse.result.Amount || tx.amount,
+          currency:
+            transactionResponse.result.Currency === 'CAD' ||
+            transactionResponse.result.Currency === 'USD'
+              ? transactionResponse.result.Currency
+              : 'CAD',
+          created_at:
+            transactionResponse.result.CreatedAt || new Date().toISOString(),
+          memo: transactionResponse.result.Memo,
+          comment: generateComment(tx.loanId, tx.loanPaymentId),
+          scheduled_start_date: tx.paymentDate,
+          user: transactionResponse.result.User,
+          wallet: transactionResponse.result.Wallet,
+          // FundingSource is not available in CreateTransactionResponse, will be populated by webhook
+          raw_response: transactionResponse.result as any
+        }
+
+        const { error } = await supabase.from('payment_transactions').insert({
+          provider: 'zumrails',
+          transaction_type: 'collection',
+          loan_id: tx.loanId,
+          loan_payment_id: tx.loanPaymentId,
+          amount: tx.amount,
+          status: 'initiated', // Will be updated by webhook
+          provider_data: providerData as any
+        } as any)
+
+        if (error) {
+          console.error(
+            `[LoanPaymentSync] Error creating payment transaction for ${tx.loanPaymentId}:`,
+            error
+          )
+          result.failed++
+          result.errors.push({
+            loanPaymentId: tx.loanPaymentId,
+            error: `Failed to create payment_transaction: ${error.message}`
+          })
+        } else {
+          result.created++
+          console.log(
+            `[LoanPaymentSync] ✓ Created transaction ${transactionResponse.result.Id} for payment ${tx.loanPaymentId}`
           )
         }
+      } catch (error: any) {
+        result.failed++
+        result.errors.push({
+          loanPaymentId: tx.loanPaymentId,
+          error: error.message || String(error)
+        })
+        console.error(
+          `[LoanPaymentSync] Error creating transaction for payment ${tx.loanPaymentId}:`,
+          error
+        )
       }
-    } catch (error: any) {
-      result.failed += validTransactions.length
-      result.errors.push({
-        loanPaymentId: 'batch',
-        error: error.message || String(error)
-      })
-      console.error('[LoanPaymentSync] Batch processing error:', error)
     }
 
     console.log(
