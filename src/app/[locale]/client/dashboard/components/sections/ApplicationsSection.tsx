@@ -53,28 +53,41 @@ export default function ApplicationsSection({
   )
 
   return (
-    <section className='space-y-6'>
+    <section className='space-y-6 sm:space-y-8'>
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h2 className='text-lg font-semibold text-gray-900'>
+          <h2 className='text-lg font-semibold text-gray-900 sm:text-xl'>
             {t('Applications_Title')}
           </h2>
-          <p className='text-sm text-gray-600'>{t('Applications_Subtitle')}</p>
+          <p className='mt-1 text-sm text-gray-600'>
+            {t('Applications_Subtitle')}
+          </p>
         </div>
       </div>
 
       <div className='space-y-4'>
         {!hasApplications && (
-          <div className='rounded-lg border border-dashed border-gray-200 bg-background-secondary p-8 text-center'>
-            <p className='text-sm text-gray-600'>{t('No_Applications_Long')}</p>
+          <div className='rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-8 text-center sm:p-12'>
+            <p className='text-sm text-gray-600 sm:text-base'>
+              {t('No_Applications_Long')}
+            </p>
             <Link
               href='/quick-apply'
-              className='hover:text-primary/80 mt-4 inline-flex items-center text-sm font-semibold text-primary'
+              className='mt-6 inline-flex items-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary/90 hover:shadow-md active:scale-95'
             >
               {t('Start_Your_First_Application')}
-              <span aria-hidden className='ml-2'>
-                &rarr;
-              </span>
+              <svg
+                xmlns='http://www.w3.org/2000/svg'
+                viewBox='0 0 20 20'
+                fill='currentColor'
+                className='ml-2 h-4 w-4'
+              >
+                <path
+                  fillRule='evenodd'
+                  d='M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z'
+                  clipRule='evenodd'
+                />
+              </svg>
             </Link>
           </div>
         )}
@@ -82,16 +95,16 @@ export default function ApplicationsSection({
         {formattedApplications.map(application => (
           <article
             key={application.id}
-            className='rounded-lg bg-background-secondary p-6 shadow-sm'
+            className='group rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200/80 transition-all hover:shadow-md hover:ring-gray-300/80 sm:p-8'
           >
-            <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
-              <div className='space-y-1'>
-                <p className='text-sm font-medium text-gray-500'>
+            <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
+              <div className='flex-1 space-y-2'>
+                <p className='text-xs font-medium text-gray-500 sm:text-sm'>
                   {t('Application_Number', {
                     id: application.id.slice(0, 8).toUpperCase()
                   })}
                 </p>
-                <p className='text-2xl font-semibold text-gray-900'>
+                <p className='text-2xl font-bold text-gray-900 sm:text-3xl'>
                   {formatCurrency(
                     locale,
                     application.loan_amount,
@@ -107,8 +120,13 @@ export default function ApplicationsSection({
                     )
                   })}
                 </p>
+                <div className='pt-2'>
+                  <p className='text-sm text-gray-600'>
+                    {application.incomeSourceLabel}
+                  </p>
+                </div>
               </div>
-              <div className='flex flex-col items-start gap-3 sm:items-end'>
+              <div className='flex flex-row items-start gap-3 sm:flex-col sm:items-end'>
                 <span className={application.statusClass}>
                   {application.statusLabel}
                 </span>
@@ -122,11 +140,6 @@ export default function ApplicationsSection({
                     })}
                   </span>
                 )}
-              </div>
-            </div>
-            <div className='mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-              <div className='text-sm text-gray-600'>
-                {application.incomeSourceLabel}
               </div>
             </div>
           </article>

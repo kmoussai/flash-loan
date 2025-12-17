@@ -51,13 +51,15 @@ export async function cancelLoanZumRailsTransactions(
   }
 
   try {
-    // Get all ZumRails transactions for this loan
+    // Get all ZumRails transactions for this loan that are not already cancelled or failed
+    // We check both database status and ZumRails transaction_status to catch all cancellable transactions
     const { data: transactions, error } = await supabase
       .from('payment_transactions')
-      .select('id, loan_payment_id, provider_data')
+      .select('id, loan_payment_id, provider_data, status')
       .eq('loan_id', loanId)
       .eq('provider', 'zumrails')
-      .in('status', ['initiated', 'pending', 'processing'])
+      .not('status', 'eq', 'cancelled')
+      .not('status', 'eq', 'failed') // Get all non-cancelled/non-failed transactions
 
     if (error) {
       result.success = false
@@ -66,15 +68,30 @@ export async function cancelLoanZumRailsTransactions(
     }
 
     if (!transactions || transactions.length === 0) {
+      console.log(`[ScheduleRecalculation] No transactions found for loan ${loanId} to cancel`)
       return result // No transactions to cancel
     }
 
-    // Filter to only cancellable transactions
+    console.log(`[ScheduleRecalculation] Found ${transactions.length} transaction(s) for loan ${loanId}`)
+
+    // Filter to only cancellable transactions based on ZumRails transaction_status
     const cancellableTransactions = (transactions as CancellableTransaction[]).filter(
       (tx) => {
         const status = tx.provider_data?.transaction_status as ZumRailsTransactionStatus | undefined
-        return isCancellableStatus(status)
+        const isCancellable = isCancellableStatus(status)
+        
+        if (!isCancellable && status) {
+          console.log(
+            `[ScheduleRecalculation] Transaction ${tx.id} has non-cancellable status: ${status}, skipping`
+          )
+        }
+        
+        return isCancellable
       }
+    )
+
+    console.log(
+      `[ScheduleRecalculation] ${cancellableTransactions.length} transaction(s) are cancellable out of ${transactions.length} total`
     )
 
     // Cancel each transaction
@@ -87,28 +104,32 @@ export async function cancelLoanZumRailsTransactions(
         // Step 1: Attempt to cancel the transaction in ZumRails API
         if (zumRailsTransactionId) {
           try {
+            console.log(
+              `[ScheduleRecalculation] Attempting to cancel ZumRails transaction ${zumRailsTransactionId} for payment_transaction ${transaction.id}`
+            )
             const cancelResult = await cancelZumRailsTransaction(zumRailsTransactionId)
             
             if (!cancelResult.success) {
               // Log warning but continue - we'll still mark it as cancelled in our DB
+              // This is expected for transactions that are already completed or cannot be cancelled
               console.warn(
-                `[ScheduleRecalculation] Failed to cancel ZumRails transaction ${zumRailsTransactionId}: ${cancelResult.message}`
+                `[ScheduleRecalculation] ZumRails API could not cancel transaction ${zumRailsTransactionId}: ${cancelResult.message}. Will mark as cancelled in database anyway.`
               )
               // Continue to mark as cancelled in our database anyway
             } else {
               console.log(
-                `[ScheduleRecalculation] Successfully cancelled ZumRails transaction ${zumRailsTransactionId}`
+                `[ScheduleRecalculation] ✓ Successfully cancelled ZumRails transaction ${zumRailsTransactionId}`
               )
             }
           } catch (apiError: any) {
             console.warn(
-              `[ScheduleRecalculation] Error calling ZumRails cancel API for ${zumRailsTransactionId}: ${apiError.message}`
+              `[ScheduleRecalculation] Error calling ZumRails cancel API for ${zumRailsTransactionId}: ${apiError.message}. Will mark as cancelled in database anyway.`
             )
             // Continue to mark as cancelled in our database anyway
           }
         } else {
           console.warn(
-            `[ScheduleRecalculation] No ZumRails transaction_id found for payment_transaction ${transaction.id}`
+            `[ScheduleRecalculation] No ZumRails transaction_id found in provider_data for payment_transaction ${transaction.id}. Transaction may not have been created in ZumRails yet. Will mark as cancelled in database.`
           )
         }
 

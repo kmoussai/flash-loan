@@ -543,23 +543,104 @@ export async function syncLoanPaymentsToZumRails(
           continue
         }
 
-        // Create individual transaction
+        // RACE CONDITION PREVENTION: Insert a "reservation" record FIRST to prevent concurrent duplicates
+        // This ensures that if two processes try to create transactions for the same payment,
+        // only one will succeed in inserting the reservation, preventing duplicate ZumRails transactions
         console.log(
           `[LoanPaymentSync] Creating transaction for payment ${tx.loanPaymentId}...`
         )
 
-        const transactionResponse = await createCollectionTransaction({
-          userId: tx.userId,
-          fundingSourceId: fundingSourceId,
+        // Step 1: Try to insert a reservation record first (with placeholder data)
+        // This acts as a lock to prevent concurrent duplicate creation
+        const reservationData: any = {
+          client_transaction_id: tx.loanPaymentId,
+          zumrails_type: 'AccountsReceivable',
+          transaction_method: 'Eft',
+          transaction_status: 'Scheduled',
           amount: tx.amount,
-          memo: 'FLASH LOAN INC',
+          currency: 'CAD',
+          created_at: new Date().toISOString(),
           comment: generateComment(tx.loanId, tx.loanPaymentId),
-          scheduledStartDate: tx.paymentDate,
-          clientTransactionId: tx.loanPaymentId
-          // Note: walletId is not included - ZumRails requires either WalletId OR FundingSourceId, not both
-        })
+          scheduled_start_date: tx.paymentDate,
+          reservation: true // Flag to indicate this is a reservation, not a completed transaction
+        }
 
-        // Create payment_transaction record immediately after successful creation
+        const { data: insertedRecord, error: insertError } = await (supabase
+          .from('payment_transactions') as any)
+          .insert({
+            provider: 'zumrails',
+            transaction_type: 'collection',
+            loan_id: tx.loanId,
+            loan_payment_id: tx.loanPaymentId,
+            amount: tx.amount,
+            status: 'initiated', // Will be updated by webhook
+            provider_data: reservationData
+          })
+          .select()
+          .single()
+
+        // If insert fails due to duplicate (unique constraint violation), skip this payment
+        if (insertError) {
+          // Check if it's a duplicate key error (PostgreSQL error code 23505)
+          if (insertError.code === '23505' || insertError.message?.includes('duplicate') || insertError.message?.includes('unique')) {
+            console.warn(
+              `[LoanPaymentSync] Payment ${tx.loanPaymentId} already has a transaction (duplicate detected), skipping...`
+            )
+            // This is not a failure - another process already created the transaction
+            continue
+          }
+          
+          // Other errors are actual failures
+          console.error(
+            `[LoanPaymentSync] Error creating payment transaction reservation for ${tx.loanPaymentId}:`,
+            insertError
+          )
+          result.failed++
+          result.errors.push({
+            loanPaymentId: tx.loanPaymentId,
+            error: `Failed to create payment_transaction reservation: ${insertError.message}`
+          })
+          continue
+        }
+
+        // Step 2: Now create the ZumRails transaction (we have the lock)
+        // Use loan_payment_id as idempotency key to prevent duplicates at ZumRails level
+        // This works in conjunction with our database constraint
+        let transactionResponse
+        try {
+          transactionResponse = await createCollectionTransaction({
+            userId: tx.userId,
+            fundingSourceId: fundingSourceId,
+            amount: tx.amount,
+            memo: 'FLASH LOAN INC',
+            comment: generateComment(tx.loanId, tx.loanPaymentId),
+            scheduledStartDate: tx.paymentDate,
+            clientTransactionId: tx.loanPaymentId,
+            idempotencyKey: tx.loanPaymentId // Use loan_payment_id as idempotency key
+            // Note: walletId is not included - ZumRails requires either WalletId OR FundingSourceId, not both
+          })
+        } catch (zumRailsError: any) {
+          // If ZumRails creation fails, delete the reservation record
+          if (insertedRecord?.id) {
+            await (supabase
+              .from('payment_transactions') as any)
+              .delete()
+              .eq('id', insertedRecord.id)
+          }
+          
+          result.failed++
+          result.errors.push({
+            loanPaymentId: tx.loanPaymentId,
+            error: `Failed to create ZumRails transaction: ${zumRailsError.message || String(zumRailsError)}`
+          })
+          console.error(
+            `[LoanPaymentSync] Error creating ZumRails transaction for payment ${tx.loanPaymentId}:`,
+            zumRailsError
+          )
+          continue
+        }
+
+        // Step 3: Update the reservation record with actual ZumRails transaction data
         const providerData: ZumRailsProviderData = {
           transaction_id: transactionResponse.result.Id,
           client_transaction_id: tx.loanPaymentId,
@@ -586,25 +667,24 @@ export async function syncLoanPaymentsToZumRails(
           raw_response: transactionResponse.result as any
         }
 
-        const { error } = await supabase.from('payment_transactions').insert({
-          provider: 'zumrails',
-          transaction_type: 'collection',
-          loan_id: tx.loanId,
-          loan_payment_id: tx.loanPaymentId,
-          amount: tx.amount,
-          status: 'initiated', // Will be updated by webhook
-          provider_data: providerData as any
-        } as any)
+        const { error: updateError } = await (supabase
+          .from('payment_transactions') as any)
+          .update({
+            provider_data: providerData as any
+          })
+          .eq('id', insertedRecord?.id)
 
-        if (error) {
+        if (updateError) {
           console.error(
-            `[LoanPaymentSync] Error creating payment transaction for ${tx.loanPaymentId}:`,
-            error
+            `[LoanPaymentSync] Error updating payment transaction for ${tx.loanPaymentId}:`,
+            updateError
           )
+          // Transaction was created in ZumRails but we couldn't update the record
+          // This is a partial failure - the transaction exists in ZumRails
           result.failed++
           result.errors.push({
             loanPaymentId: tx.loanPaymentId,
-            error: `Failed to create payment_transaction: ${error.message}`
+            error: `Failed to update payment_transaction with ZumRails data: ${updateError.message}`
           })
         } else {
           result.created++

@@ -59,14 +59,17 @@ export async function getZumrailsAuthToken(): Promise<{
     }
   }
 
-  const username = process.env.ZUMRAILS_USERNAME
-  const password = process.env.ZUMRAILS_PASSWORD
-  const baseUrl =
-    process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
+  // Get configuration from database (with env var fallback)
+  const { getZumRailsConfig } = await import('@/src/lib/supabase/config-helpers')
+  const config = await getZumRailsConfig()
+
+  const username = config.username
+  const password = config.password
+  const baseUrl = config.apiBaseUrl
 
   if (!username || !password) {
     throw new Error(
-      'ZUMRAILS_USERNAME and ZUMRAILS_PASSWORD must be configured'
+      'ZumRails username and password must be configured. Please set them in the admin configurations page or via ZUMRAILS_USERNAME and ZUMRAILS_PASSWORD environment variables.'
     )
   }
 
@@ -168,8 +171,10 @@ export async function createZumrailsConnectToken(
   extraField1?: string,
   extraField2?: string
 ): Promise<{ connectToken: string; expiresAt: string; customerId: string }> {
-  const baseUrl =
-    process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
+  // Get base URL from config (with env var fallback)
+  const { getZumRailsConfig } = await import('@/src/lib/supabase/config-helpers')
+  const config = await getZumRailsConfig()
+  const baseUrl = config.apiBaseUrl
   const createTokenUrl = `${baseUrl}/api/connect/createtoken`
   // api/connect/createToken
 
@@ -351,9 +356,10 @@ export async function fetchZumrailsDataByRequestId(
   // Authenticate with Zumrails
   const { token } = await getZumrailsAuthToken()
 
-  // Call Zumrails API to fetch information by request ID
-  const baseUrl =
-    process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
+  // Get base URL from config (with env var fallback)
+  const { getZumRailsConfig } = await import('@/src/lib/supabase/config-helpers')
+  const config = await getZumRailsConfig()
+  const baseUrl = config.apiBaseUrl
   const fetchUrl = `${baseUrl}/api/aggregation/GetInformationByRequestId/${requestId}`
 
   console.log('[Zumrails] Fetching data by request ID', {
