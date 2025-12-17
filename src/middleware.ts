@@ -69,7 +69,6 @@ const publicApiRoutes = [
   '/api/loan-application',
   '/api/public',
   '/api/auth',
-  '/api/zumrails/update-request-id',
   '/api/webhook'
 ]
 

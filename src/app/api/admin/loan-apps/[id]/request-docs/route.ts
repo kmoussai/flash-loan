@@ -509,7 +509,7 @@ export async function POST(
 
     // Build authenticated dashboard link instead of token-based upload-documents link
     const createdIds = (inserted || []).map((r: any) => r.id)
-    const { getAppUrl } = await import('@/src/lib/config')
+      const { getAppUrl } = await import('@/src/lib/config')
     const clientId = (appWithUser as any)?.users?.id as string | undefined
     const clientEmail = (appWithUser as any)?.users?.email as string | undefined
 

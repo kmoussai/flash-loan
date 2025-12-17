@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from '@/src/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/src/lib/supabase/client'
 import Button from '@/src/app/[locale]/components/Button'
 
 export default function ChangePasswordPage() {
   const t = useTranslations('')
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -17,30 +19,47 @@ export default function ChangePasswordPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [fromMagicLink, setFromMagicLink] = useState(false)
 
   useEffect(() => {
-    // Check if user is authenticated
+    // Check if user is authenticated and if coming from magic link
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/auth/signin')
         return
       }
+      
+      // Check if coming from magic link (via URL param or user metadata)
+      const fromMagicLinkParam = searchParams.get('from_magic_link') === 'true'
+      const requiresPasswordChange = user.user_metadata?.requires_password_change === true
+      setFromMagicLink(fromMagicLinkParam || requiresPasswordChange)
+      
       setCheckingAuth(false)
     }
     checkAuth()
-  }, [router, supabase])
+  }, [router, supabase, searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    // Validation
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setError(t('All_Fields_Required') || 'All fields are required')
-      setLoading(false)
-      return
+    // Validation - different rules for magic link vs regular password change
+    if (fromMagicLink) {
+      // From magic link: only need new password and confirmation
+      if (!newPassword || !confirmPassword) {
+        setError(t('All_Fields_Required') || 'All fields are required')
+        setLoading(false)
+        return
+      }
+    } else {
+      // Regular password change: need current password too
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        setError(t('All_Fields_Required') || 'All fields are required')
+        setLoading(false)
+        return
+      }
     }
 
     if (newPassword.length < 6) {
@@ -55,14 +74,13 @@ export default function ChangePasswordPage() {
       return
     }
 
-    if (currentPassword === newPassword) {
+    if (!fromMagicLink && currentPassword === newPassword) {
       setError(t('New_Password_Must_Be_Different') || 'New password must be different from current password')
       setLoading(false)
       return
     }
 
     try {
-      // Verify current password by attempting to sign in
       const { data: { user } } = await supabase.auth.getUser()
       if (!user || !user.email) {
         setError(t('Authentication_Error') || 'Authentication error. Please sign in again.')
@@ -70,26 +88,30 @@ export default function ChangePasswordPage() {
         return
       }
 
-      // Try to sign in with current password to verify it
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword
-      })
+      // Only verify current password if NOT coming from magic link
+      if (!fromMagicLink) {
+        // Try to sign in with current password to verify it
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: currentPassword
+        })
 
-      if (signInError) {
-        setError(t('Current_Password_Incorrect') || 'Current password is incorrect')
-        setLoading(false)
-        return
+        if (signInError) {
+          setError(t('Current_Password_Incorrect') || 'Current password is incorrect')
+          setLoading(false)
+          return
+        }
       }
 
-      // Change password via API
+      // Change/set password via API
       const response = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          newPassword
+          newPassword,
+          fromMagicLink: fromMagicLink
         })
       })
 
@@ -193,10 +215,16 @@ export default function ChangePasswordPage() {
             </svg>
           </div>
           <h1 className='mb-2 text-2xl font-bold text-gray-900'>
-            {t('Change_Password_Required') || 'Password Change Required'}
+            {fromMagicLink 
+              ? (t('Set_Password') || 'Set Your Password')
+              : (t('Change_Password_Required') || 'Password Change Required')
+            }
           </h1>
           <p className='text-sm text-gray-600'>
-            {t('Change_Password_Required_Message') || 'For security reasons, you must change your password before accessing your dashboard.'}
+            {fromMagicLink
+              ? (t('Set_Password_Message') || 'Please set a password for your account to continue.')
+              : (t('Change_Password_Required_Message') || 'For security reasons, you must change your password before accessing your dashboard.')
+            }
           </p>
         </div>
 
@@ -207,24 +235,26 @@ export default function ChangePasswordPage() {
             </div>
           )}
 
-          <div>
-            <label
-              htmlFor='currentPassword'
-              className='mb-2 block text-sm font-medium text-gray-700'
-            >
-              {t('Current_Password') || 'Current Password'}
-            </label>
-            <input
-              id='currentPassword'
-              type='password'
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              required
-              className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-primary focus:outline-none focus:ring-2'
-              placeholder={t('Enter_Current_Password') || 'Enter your current password'}
-              autoComplete='current-password'
-            />
-          </div>
+          {!fromMagicLink && (
+            <div>
+              <label
+                htmlFor='currentPassword'
+                className='mb-2 block text-sm font-medium text-gray-700'
+              >
+                {t('Current_Password') || 'Current Password'}
+              </label>
+              <input
+                id='currentPassword'
+                type='password'
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                required
+                className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-primary focus:outline-none focus:ring-2'
+                placeholder={t('Enter_Current_Password') || 'Enter your current password'}
+                autoComplete='current-password'
+              />
+            </div>
+          )}
 
           <div>
             <label
@@ -277,8 +307,8 @@ export default function ChangePasswordPage() {
             disabled={loading}
           >
             {loading
-              ? t('Changing') || 'Changing...'
-              : t('Change_Password') || 'Change Password'}
+              ? (fromMagicLink ? (t('Setting') || 'Setting...') : (t('Changing') || 'Changing...'))
+              : (fromMagicLink ? (t('Set_Password') || 'Set Password') : (t('Change_Password') || 'Change Password'))}
           </Button>
         </form>
       </div>

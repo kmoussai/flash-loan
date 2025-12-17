@@ -9,28 +9,40 @@ export interface ZumrailsWebhookBase {
   Data: Record<string, any>
 }
 
+export interface ZumrailsUser {
+  Id: string
+  CreatedAt: string
+  AccountType: 'Personal' | 'Business'
+  Name: string
+  FirstName: string
+  LastName: string
+  CompanyName: string | null
+  PhoneNumber: string
+  Currency: string
+  ShippingSameAsBilling: boolean
+  Email: string
+  BankAccountInformation: any
+  Customer: any
+  Addresses: []
+  TransactionMethodsAvailable: any
+  TransactionMethodsAvailableDescription: null
+  CreditCardInformation: null
+  InteracCustomerId: null
+  InteracAliasId: null
+  ClientUserId: string
+  ExtraField1: string
+  ExtraField2: string | null
+  AggregationRequestId: string
+  FiservDdpRecipientUserId: string | null
+  IdType: null
+  IdNumber: null
+  IdState: null
+  BusinessTaxId: null
+}
 export interface ZumrailsUserWebhook extends ZumrailsWebhookBase {
   Type: 'User' | 'Customer'
-  Event: 'Created' | 'Updated' | 'StatusChange'
-  Data: {
-    UserId?: string
-    CustomerId?: string
-    Id?: string
-    Status?: string
-    status?: string
-    VerificationStatus?: string
-    verificationStatus?: string
-    ConnectionStatus?: string
-    connectionStatus?: string
-    PaymentProfiles?: any[]
-    paymentProfiles?: any[]
-    ConnectedAccount?: boolean
-    connectedAccount?: boolean
-    HasConnectedAccount?: boolean
-    IsVerified?: boolean
-    isVerified?: boolean
-    [key: string]: any
-  }
+  Event: 'Created' | 'Updated' | 'StatusChange' | 'Connected'
+  Data: ZumrailsUser
 }
 
 export interface ZumrailsInsightsWebhook extends ZumrailsWebhookBase {

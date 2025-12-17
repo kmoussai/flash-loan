@@ -372,13 +372,6 @@ export function addZumrailsListener(
   }
 }
 
-// Helper function to extract customer ID from URL
-function extractCustomerIdFromUrl(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-  const urlParams = new URLSearchParams(window.location.search)
-  return urlParams.get('customerid') || undefined
-}
-
 /**
  * Load Zum Rails SDK script dynamically
  */

@@ -80,7 +80,7 @@ export async function createZumRailsTransaction(
  */
 export async function createCollectionTransaction(params: {
   userId: string
-  walletId: string
+  walletId?: string
   fundingSourceId?: string
   amount: number
   memo: string
@@ -108,8 +108,8 @@ export async function createCollectionTransaction(params: {
  */
 export async function createDisbursementTransaction(params: {
   userId: string
-  walletId: string
-  fundingSourceId: string
+  walletId?: string
+  fundingSourceId?: string
   amount: number
   memo: string
   comment?: string

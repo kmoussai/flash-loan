@@ -52,15 +52,40 @@ export default function AuthCallbackPage({
           }
 
           if (data.session && data.user) {
-            // Get the redirect_to from search params
-            const redirectTo = searchParams.get('redirect_to') || `/${locale}/client/dashboard?section=documents`
+            // Check if password change is required (user came from magic link with requires_password_change)
+            const requiresPasswordChange = data.user.user_metadata?.requires_password_change === true
+            
+            // Get the redirect_to from search params (should be full URL now)
+            let redirectTo = searchParams.get('redirect_to') || `${window.location.origin}/${locale}/client/dashboard?section=documents`
+            
+            // If redirect_to is a relative path, convert it to full URL
+            if (redirectTo.startsWith('/')) {
+              redirectTo = `${window.location.origin}${redirectTo}`
+            }
+            
+            // If password change is required, redirect to change-password page with magic link flag
+            if (requiresPasswordChange) {
+              redirectTo = `${window.location.origin}/${locale}/client/dashboard/change-password?from_magic_link=true`
+            }
+            
+            console.log('[Auth Callback] Redirecting user after token verification:', {
+              userId: data.user.id,
+              requiresPasswordChange,
+              redirectTo,
+              currentOrigin: window.location.origin,
+              redirectToIsFullUrl: redirectTo.startsWith('http')
+            })
             
             // Clean up the hash from URL before redirecting
             window.history.replaceState(null, '', window.location.pathname + window.location.search)
             
-            // Redirect to the intended destination
-            router.push(redirectTo)
-            router.refresh()
+            // If redirectTo is a full URL, use window.location, otherwise use router.push
+            if (redirectTo.startsWith('http')) {
+              window.location.href = redirectTo
+            } else {
+              router.push(redirectTo)
+              router.refresh()
+            }
             return
           }
         }

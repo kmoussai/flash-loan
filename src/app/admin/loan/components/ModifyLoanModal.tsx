@@ -14,6 +14,17 @@ import {
   roundCurrency
 } from '@/src/lib/loan'
 import { getCanadianHolidays, parseLocalDate } from '@/src/lib/utils/date'
+
+/**
+ * Format a Date object to YYYY-MM-DD string in local timezone
+ * Avoids timezone issues that occur with toISOString()
+ */
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 import useSWR from 'swr'
 import { fetcher } from '@/lib/utils'
 import { formatCurrency, formatDate } from '../[id]/utils'
@@ -61,7 +72,13 @@ export default function ModifyLoanModal({
   const [paymentFrequency, setPaymentFrequency] =
     useState<PaymentFrequency>('monthly')
   const [numberOfPayments, setNumberOfPayments] = useState<number>(0)
-  const [startDate, setStartDate] = useState('')
+  // Initialize startDate to tomorrow by default
+  const [startDate, setStartDate] = useState(() => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(0, 0, 0, 0)
+    return formatLocalDate(tomorrow)
+  })
   const [paymentSchedule, setPaymentSchedule] = useState<
     PayementScheduleItem[]
   >([])
@@ -176,7 +193,7 @@ export default function ModifyLoanModal({
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     tomorrow.setHours(0, 0, 0, 0)
-    setStartDate(tomorrow.toISOString().split('T')[0])
+    setStartDate(formatLocalDate(tomorrow))
   }, [
     open,
     loan?.id,

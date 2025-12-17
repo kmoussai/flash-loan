@@ -431,6 +431,7 @@ export default function ApplicationDetailsPage() {
             {activeTab === 'ibv' && (
               <IbvTab
                 applicationId={applicationId}
+                clientId={application.users?.id}
                 onViewTransactions={accountIndex => {
                   setSelectedAccountIndex(accountIndex)
                   setShowTransactionsModal(true)
