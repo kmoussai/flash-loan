@@ -8,7 +8,7 @@ import type {
   ZumRailsCreateTransactionRequest,
   ZumRailsCreateTransactionResponse
 } from '../types'
-import { ZUMRAILS_API_BASE_URL } from './config'
+import { getZumRailsApiBaseUrl } from './config'
 
 /**
  * Create a Zum Rails transaction
@@ -20,7 +20,8 @@ export async function createZumRailsTransaction(
   // Get authentication token
   const { token } = await getZumrailsAuthToken()
 
-  const url = `${ZUMRAILS_API_BASE_URL}/api/transaction`
+  const baseUrl = await getZumRailsApiBaseUrl()
+  const url = `${baseUrl}/api/transaction`
 
   console.log('[ZumRails] Creating transaction', {
     url,

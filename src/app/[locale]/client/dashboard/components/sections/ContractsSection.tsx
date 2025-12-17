@@ -223,7 +223,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
     return (
       <li
         key={contract.id}
-        className='rounded-2xl border border-gray-200 bg-white p-6 shadow-sm'
+        className='rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm ring-1 ring-gray-200/50 transition-all hover:shadow-md hover:ring-gray-300/50 sm:p-8'
       >
         <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
           <div className='space-y-2'>
@@ -277,7 +277,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
               <button
                 type='button'
                 onClick={() => setViewerContract(contract)}
-                className='rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:text-gray-900'
+                className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all hover:border-gray-300 hover:bg-gray-50 hover:shadow-md active:scale-95'
               >
                 {t('Contract_View_Button')}
               </button>
@@ -286,7 +286,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                   type='button'
                   onClick={() => handleDownload(contract.id)}
                   disabled={downloadingId === contract.id}
-                  className='rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50'
+                  className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all hover:border-gray-300 hover:bg-gray-50 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-50'
                 >
                   {downloadingId === contract.id
                     ? t('Contract_Downloading') || 'Downloading...'
@@ -298,7 +298,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                   type='button'
                   onClick={() => handleSignClick(contract)}
                   disabled={signingId === contract.id}
-                  className='border-primary/30 rounded-lg border px-3 py-1 text-xs font-semibold text-primary transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50'
+                  className='rounded-xl border-2 border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-all hover:border-primary hover:bg-primary/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50'
                 >
                   {signingId === contract.id
                     ? t('Contract_Signing_In_Progress')
@@ -308,7 +308,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
               <button
                 type='button'
                 onClick={() => handleToggle(contract.id)}
-                className='rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:text-gray-900'
+                className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all hover:border-gray-300 hover:bg-gray-50 hover:shadow-md active:scale-95'
               >
                 {isExpanded
                   ? t('Contract_Hide_Terms')
@@ -318,7 +318,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
           </div>
         </div>
 
-        <div className='mt-4 grid gap-4 border-t border-gray-100 pt-4 text-sm text-gray-600 sm:grid-cols-2'>
+        <div className='mt-6 grid gap-4 border-t border-gray-200/80 pt-6 text-sm text-gray-600 sm:grid-cols-2'>
           <div className='space-y-1'>
             <p className='font-medium text-gray-800'>
               {t('Contract_Loan_Amount')}
@@ -414,52 +414,56 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
               </div>
             </div>
             {payments.length > 0 && (
-              <div className='space-y-2'>
-                <h3 className='text-sm font-semibold text-gray-900'>
+              <div className='space-y-4'>
+                <h3 className='text-base font-semibold text-gray-900'>
                   Payment History
                 </h3>
-                <div className='overflow-hidden rounded-lg border border-gray-200'>
-                  <table className='min-w-full divide-y divide-gray-200'>
-                    <thead className='bg-gray-50'>
+                {/* Desktop Table View */}
+                <div className='hidden overflow-hidden rounded-xl border border-gray-200/80 shadow-sm sm:block'>
+                  <table className='min-w-full divide-y divide-gray-200/80'>
+                    <thead className='bg-gray-50/80'>
                       <tr>
-                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        <th className='px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600'>
                           Date
                         </th>
-                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        <th className='px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600'>
                           Amount
                         </th>
-                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        <th className='px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600'>
                           Principal
                         </th>
-                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        <th className='px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600'>
                           Interest
                         </th>
-                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        <th className='px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600'>
                           Status
                         </th>
-                        <th className='px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500'>
+                        <th className='px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600'>
                           Method
                         </th>
                       </tr>
                     </thead>
-                    <tbody className='divide-y divide-gray-100 bg-white'>
+                    <tbody className='divide-y divide-gray-200/80 bg-white'>
                       {payments.map(payment => (
-                        <tr key={payment.id}>
-                          <td className='px-4 py-2 text-sm text-gray-700'>
+                        <tr
+                          key={payment.id}
+                          className='transition-colors hover:bg-gray-50/50'
+                        >
+                          <td className='whitespace-nowrap px-4 py-3 text-sm text-gray-700'>
                             {formatDate(locale, payment.payment_date)}
                           </td>
-                          <td className='px-4 py-2 text-sm text-gray-700'>
+                          <td className='whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900'>
                             {formatCurrency(locale, payment.amount)}
                           </td>
-                          <td className='px-4 py-2 text-sm text-gray-700'>
+                          <td className='whitespace-nowrap px-4 py-3 text-sm text-gray-700'>
                             {formatCurrency(locale, payment.principal, '-')}
                           </td>
-                          <td className='px-4 py-2 text-sm text-gray-700'>
+                          <td className='whitespace-nowrap px-4 py-3 text-sm text-gray-700'>
                             {formatCurrency(locale, payment.interest, '-')}
                           </td>
-                          <td className='px-4 py-2 text-sm'>
+                          <td className='whitespace-nowrap px-4 py-3 text-sm'>
                             <span
-                              className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
                                 payment.status === 'confirmed' ||
                                 payment.status === 'paid'
                                   ? 'bg-green-100 text-green-800'
@@ -473,13 +477,71 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                               {payment.status}
                             </span>
                           </td>
-                          <td className='px-4 py-2 text-sm text-gray-700'>
+                          <td className='whitespace-nowrap px-4 py-3 text-sm text-gray-700'>
                             {payment.method || '-'}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+                {/* Mobile Card View */}
+                <div className='space-y-3 sm:hidden'>
+                  {payments.map(payment => (
+                    <div
+                      key={payment.id}
+                      className='rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm'
+                    >
+                      <div className='flex items-start justify-between'>
+                        <div className='flex-1 space-y-2'>
+                          <div className='flex items-center justify-between'>
+                            <p className='text-xs font-medium text-gray-500'>
+                              {formatDate(locale, payment.payment_date)}
+                            </p>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                payment.status === 'confirmed' ||
+                                payment.status === 'paid'
+                                  ? 'bg-green-100 text-green-800'
+                                  : payment.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : payment.status === 'failed'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-800'
+                              }`}
+                            >
+                              {payment.status}
+                            </span>
+                          </div>
+                          <p className='text-lg font-bold text-gray-900'>
+                            {formatCurrency(locale, payment.amount)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className='mt-3 grid grid-cols-2 gap-3 border-t border-gray-100 pt-3 text-xs'>
+                        <div>
+                          <p className='text-gray-500'>Principal</p>
+                          <p className='mt-1 font-medium text-gray-900'>
+                            {formatCurrency(locale, payment.principal, '-')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className='text-gray-500'>Interest</p>
+                          <p className='mt-1 font-medium text-gray-900'>
+                            {formatCurrency(locale, payment.interest, '-')}
+                          </p>
+                        </div>
+                        {payment.method && (
+                          <div className='col-span-2'>
+                            <p className='text-gray-500'>Method</p>
+                            <p className='mt-1 font-medium text-gray-900'>
+                              {payment.method}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -491,20 +553,42 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
 
   return (
     <Fragment>
-      <section className='space-y-6'>
+      <section className='space-y-6 sm:space-y-8'>
         <div className='space-y-2'>
-          <h2 className='text-xl font-semibold text-gray-900'>
+          <h2 className='text-xl font-semibold text-gray-900 sm:text-2xl'>
             {t('Contracts_Title')}
           </h2>
           <p className='text-sm text-gray-600'>{t('Contracts_Subtitle')}</p>
         </div>
 
         {isLoading ? (
-          <div className='rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-sm'>
-            {t('Contracts_Loading')}
+          <div className='rounded-2xl border border-gray-200/80 bg-white p-8 text-center text-sm text-gray-600 shadow-sm ring-1 ring-gray-200/50'>
+            <div className='inline-flex items-center gap-2'>
+              <svg
+                className='h-5 w-5 animate-spin text-gray-400'
+                xmlns='http://www.w3.org/2000/svg'
+                fill='none'
+                viewBox='0 0 24 24'
+              >
+                <circle
+                  className='opacity-25'
+                  cx='12'
+                  cy='12'
+                  r='10'
+                  stroke='currentColor'
+                  strokeWidth='4'
+                />
+                <path
+                  className='opacity-75'
+                  fill='currentColor'
+                  d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                />
+              </svg>
+              <span>{t('Contracts_Loading')}</span>
+            </div>
           </div>
         ) : error ? (
-          <div className='space-y-4 rounded-2xl border border-red-300 bg-red-50 p-6 text-sm text-red-700 shadow-sm'>
+          <div className='space-y-4 rounded-2xl border-2 border-red-200 bg-red-50/50 p-6 text-sm text-red-700 shadow-sm ring-1 ring-red-100 sm:p-8'>
             <div>
               <p className='font-semibold text-red-800'>
                 {t('Contracts_Error')}
@@ -513,21 +597,21 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
             <button
               type='button'
               onClick={() => mutate()}
-              className='rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:text-red-800'
+              className='rounded-xl border-2 border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 shadow-sm transition-all hover:border-red-300 hover:bg-red-50 hover:shadow-md active:scale-95'
             >
               {t('Contracts_Retry')}
             </button>
           </div>
         ) : contracts.length === 0 ? (
-          <div className='rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm'>
-            <div className='mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-500'>
+          <div className='rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-10 text-center sm:p-12'>
+            <div className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-gray-400 shadow-sm ring-1 ring-gray-200/80'>
               <svg
                 xmlns='http://www.w3.org/2000/svg'
                 viewBox='0 0 24 24'
                 fill='none'
                 stroke='currentColor'
-                strokeWidth='1.5'
-                className='h-6 w-6'
+                strokeWidth='2'
+                className='h-7 w-7'
               >
                 <path
                   strokeLinecap='round'
@@ -536,7 +620,7 @@ export default function ContractsSection({ locale }: ContractsSectionProps) {
                 />
               </svg>
             </div>
-            <h3 className='mt-4 text-base font-semibold text-gray-900'>
+            <h3 className='mt-6 text-base font-semibold text-gray-900 sm:text-lg'>
               {t('Contracts_Empty')}
             </h3>
             <p className='mt-2 text-sm text-gray-600'>
