@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { createNotification } from '@/src/lib/supabase'
+import { sendEmail } from '@/src/lib/email/smtp'
+import { generateIbvReminderEmail } from '@/src/lib/email/templates/ibv-reminder'
+import { getAppUrl } from '@/src/lib/config'
 import type { NotificationCategory } from '@/src/types'
 
 // Force dynamic rendering - prevent caching
@@ -104,155 +107,115 @@ export async function POST(
       )
     }
 
-    const apiKey = process.env.INVERITE_API_KEY
-    const baseUrl =
-      process.env.INVERITE_API_BASE_URL || 'https://sandbox.inverite.com'
-    const createPath =
-      process.env.INVERITE_CREATE_REQUEST_PATH || '/api/v2/create'
-    const siteId = process.env.INVERITE_SITE_ID
-
-    if (!apiKey || !siteId) {
-      return NextResponse.json(
-        {
-          error: 'MISSING_CONFIGURATION',
-          message: 'INVERITE credentials are not configured'
-        },
-        { status: 500 }
-      )
-    }
-
-    const payload: Record<string, any> = {
-      siteID: siteId,
-      firstname: client.first_name,
-      lastname: client.last_name,
-      // email: client.email,
-      phone: client.phone
-    }
-
-    // Optional redirect (allows overriding locale)
-    const requestedLocale =
-      body.locale || client.preferred_language || 'en'
-    const origin =
-      request.headers.get('origin') ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      'http://localhost:3000'
-    // Include application_id in callback URL so we can fetch Inverite data
-    const callbackUrl = new URL(`${origin}/${requestedLocale}/quick-apply/inverite/callback`)
-    callbackUrl.searchParams.set('application_id', applicationId)
-    callbackUrl.searchParams.set('ts', Date.now().toString())
-    const redirectUrl = callbackUrl.toString()
-    payload.redirecturl = redirectUrl
-
-    const url = `${baseUrl}${createPath}`
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Auth: apiKey
-    }
-
-    console.log('[IBV Requests] Creating Inverite request:', {
-      url,
-      payload
-    })
-
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    })
-
-    const rawText = await resp.text().catch(() => '')
-
-    if (!resp.ok) {
-      console.error('[IBV Requests] Inverite error:', rawText)
-      return NextResponse.json(
-        {
-          error: 'INVERITE_REQUEST_FAILED',
-          details: rawText || resp.statusText
-        },
-        { status: 502 }
-      )
-    }
-
-    let data: any = {}
-    try {
-      data = rawText ? JSON.parse(rawText) : {}
-    } catch (err) {
-      console.warn('[IBV Requests] Unable to parse Inverite response:', err)
-    }
-
-    const requestGuid =
-      data.request_guid ||
-      data.requestGuid ||
-      data.request_GUID
-
-    if (!requestGuid) {
-      return NextResponse.json(
-        {
-          error: 'MALFORMED_RESPONSE',
-          message: 'Inverite response missing request GUID'
-        },
-        { status: 502 }
-      )
-    }
-
-    const iframeUrl = data.iframeurl || data.iframe_url || null
     const requestedAt = new Date().toISOString()
 
-    const customerStartBase =
-      process.env.INVERITE_CUSTOMER_START_BASE_URL ||
-      `${baseUrl.replace(/\/$/, '')}/customer/v2/web/start`
-    const sanitizedStartBase = customerStartBase.replace(/\/$/, '')
-    const startUrl = requestGuid
-      ? `${sanitizedStartBase}/${requestGuid}/0/modern`
-      : iframeUrl
-
-    const providerData = {
-      request_guid: requestGuid,
-      iframe_url: iframeUrl,
-      initiated_by: 'admin',
-      requested_at: requestedAt,
-      ...(redirectUrl ? { redirect_url: redirectUrl } : {}),
-      ...(startUrl ? { start_url: startUrl } : {})
-    }
-
-    const insertPayload = {
-      loan_application_id: applicationId,
-      client_id: client.id,
-      provider: 'inverite',
-      status: 'pending',
-      request_url: startUrl,
-      provider_data: providerData, // Contains request_guid for Inverite
-      note,
-      requested_at: requestedAt
-    }
-
-    const { data: insertedRequest, error: insertError } = await (supabase as any)
+    // Check if an existing ZumRails IBV request exists for this application
+    // Since tokens are generated on-demand, we can reuse existing requests
+    const { data: existingRequest } = await (supabase as any)
       .from('loan_application_ibv_requests')
-      .insert(insertPayload)
-      .select('id')
-      .single()
+      .select('id, status')
+      .eq('loan_application_id', applicationId)
+      .eq('provider', 'zumrails')
+      .maybeSingle()
 
-    if (insertError) {
-      console.error('[IBV Requests] Failed to insert history row:', insertError)
-      return NextResponse.json(
-        { error: 'FAILED_TO_SAVE_REQUEST' },
-        { status: 500 }
-      )
+    let ibvRequestId: string | null = null
+
+    if (existingRequest) {
+      // Reuse existing request - update it to pending if it's in a terminal state
+      const terminalStatuses = ['verified', 'cancelled', 'failed', 'expired']
+      const shouldReset = terminalStatuses.includes(existingRequest.status)
+
+      if (shouldReset) {
+        // Reset terminal request to pending for a new attempt
+        const { error: updateError } = await (supabase as any)
+          .from('loan_application_ibv_requests')
+          .update({
+            status: 'pending',
+            request_url: null,
+            provider_data: {
+              initiated_by: 'admin',
+              requested_at: requestedAt,
+              previous_status: existingRequest.status,
+              reset_at: requestedAt
+            },
+            note,
+            requested_at: requestedAt,
+            updated_at: requestedAt
+          })
+          .eq('id', existingRequest.id)
+
+        if (updateError) {
+          console.error('[IBV Requests] Failed to reset existing request:', updateError)
+          return NextResponse.json(
+            { error: 'FAILED_TO_RESET_REQUEST' },
+            { status: 500 }
+          )
+        }
+      } else {
+        // Request is already pending/processing - just update metadata
+        const { error: updateError } = await (supabase as any)
+          .from('loan_application_ibv_requests')
+          .update({
+            provider_data: {
+              initiated_by: 'admin',
+              requested_at: requestedAt,
+              last_admin_request_at: requestedAt
+            },
+            note,
+            updated_at: requestedAt
+          })
+          .eq('id', existingRequest.id)
+
+        if (updateError) {
+          console.error('[IBV Requests] Failed to update existing request:', updateError)
+          // Non-fatal - continue with existing request
+        }
+      }
+
+      ibvRequestId = existingRequest.id
+      console.log('[IBV Requests] Reusing existing ZumRails IBV request:', ibvRequestId)
+    } else {
+      // Create a new IBV request row for ZumRails.
+      // The actual ZumRails connect token will be generated on-demand when the client
+      // clicks the email link and hits /api/ibv/initialize-from-email.
+      const { data: insertedRequest, error: insertError } = await (supabase as any)
+        .from('loan_application_ibv_requests')
+        .insert({
+          loan_application_id: applicationId,
+          client_id: client.id,
+          provider: 'zumrails',
+          status: 'pending',
+          request_url: null,
+          provider_data: {
+            initiated_by: 'admin',
+            requested_at: requestedAt
+          },
+          note,
+          requested_at: requestedAt
+        })
+        .select('id')
+        .single()
+
+      if (insertError) {
+        console.error('[IBV Requests] Failed to insert history row:', insertError)
+        return NextResponse.json(
+          { error: 'FAILED_TO_SAVE_REQUEST' },
+          { status: 500 }
+        )
+      }
+
+      ibvRequestId = insertedRequest?.id
+      console.log('[IBV Requests] Created new ZumRails IBV request:', ibvRequestId)
     }
 
-    const ibvRequestId = insertedRequest?.id
-
+    // Update application to reflect that IBV via ZumRails is pending
     const { error: updateError } = await (supabase as any)
       .from('loan_applications')
       .update({
-        ibv_provider: 'inverite',
+        ibv_provider: 'zumrails',
         ibv_status: 'pending',
         ibv_provider_data: {
           ...(application.ibv_provider_data ?? {}),
-          request_guid: requestGuid,
-          iframe_url: iframeUrl,
-          ...(startUrl ? { start_url: startUrl } : {}),
-          ...(redirectUrl ? { redirect_url: redirectUrl } : {}),
           last_requested_at: requestedAt
         }
       })
@@ -266,45 +229,107 @@ export async function POST(
       )
     }
 
-    // Create notification for client when IBV request is created
+    // Send email notification to client with verification link
     try {
-      const clientFirstName = client.first_name ?? ''
-      const clientLastName = client.last_name ?? ''
-      const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim() || 'Client'
+      if (!client.email) {
+        console.warn('[IBV Requests] Client email missing, cannot send notification')
+      } else {
+        const preferredLanguage =
+          client.preferred_language === 'fr' ? 'fr' : 'en'
+        const applicantName =
+          `${client.first_name || ''} ${client.last_name || ''}`.trim() ||
+          client.email
 
-      await createNotification(
-        {
-          recipientId: client.id,
-          recipientType: 'client',
-          title: 'Bank verification requested',
-          message: `We need to verify your bank account information to process your loan application. Please complete the verification process.`,
-          category: 'ibv_request_created' as NotificationCategory,
-          metadata: {
-            type: 'ibv_event',
-            loanApplicationId: applicationId,
-            clientId: client.id,
-            provider: 'inverite',
-            status: 'pending',
-            requestGuid: requestGuid,
-            requestId: ibvRequestId,
-            createdAt: requestedAt,
-            iframeUrl: startUrl || iframeUrl || null
+        // Build verification link pointing to our verify page
+        const origin =
+          request.headers.get('origin') ||
+          process.env.NEXT_PUBLIC_SITE_URL ||
+          getAppUrl()
+        const verificationLink = `${origin}/${preferredLanguage}/ibv/verify?request_id=${ibvRequestId}`
+
+        const emailContent = generateIbvReminderEmail({
+          applicantName,
+          verificationLink,
+          preferredLanguage: preferredLanguage as 'en' | 'fr',
+          redirectUrl: null // No redirect needed for ZumRails
+        })
+
+        const emailResult = await sendEmail({
+          to: client.email,
+          subject: emailContent.subject,
+          html: emailContent.html
+        })
+
+        if (!emailResult.success) {
+          console.error('[IBV Requests] Failed to send email:', emailResult.error)
+          // Non-fatal - continue even if email fails
+        } else {
+          // Update provider_data with notification tracking
+          const { data: currentRequest } = await (supabase as any)
+            .from('loan_application_ibv_requests')
+            .select('provider_data')
+            .eq('id', ibvRequestId)
+            .single()
+
+          const currentProviderData = (currentRequest?.provider_data || {}) as Record<string, any>
+          const updatedProviderData = {
+            ...currentProviderData,
+            last_notification_at: requestedAt,
+            last_notification_channel: 'email',
+            last_notification_to: client.email
           }
-        },
-        { client: supabase }
-      )
-    } catch (notificationError) {
-      console.error('[IBV Requests] Failed to create client notification:', notificationError)
-      // Don't fail the request if notification creation fails
+
+          await (supabase as any)
+            .from('loan_application_ibv_requests')
+            .update({
+              provider_data: updatedProviderData,
+              updated_at: requestedAt
+            })
+            .eq('id', ibvRequestId)
+
+          console.log('[IBV Requests] Email sent successfully to:', client.email)
+
+          // Create notification for client when IBV request is created/reused
+          try {
+            const clientFirstName = client.first_name ?? ''
+            const clientLastName = client.last_name ?? ''
+            const clientName = [clientFirstName, clientLastName].filter(Boolean).join(' ').trim() || 'Client'
+
+            await createNotification(
+              {
+                recipientId: client.id,
+                recipientType: 'client',
+                title: 'Bank verification requested',
+                message: `We need to verify your bank account information to process your loan application. Please complete the verification process.`,
+                category: 'ibv_request_created' as NotificationCategory,
+                metadata: {
+                  type: 'ibv_event',
+                  loanApplicationId: applicationId,
+                  clientId: client.id,
+                  provider: 'zumrails',
+                  status: 'pending',
+                  requestId: ibvRequestId,
+                  createdAt: requestedAt,
+                  verificationLink: verificationLink
+                }
+              },
+              { client: supabase }
+            )
+          } catch (notificationError) {
+            console.error('[IBV Requests] Failed to create client notification:', notificationError)
+            // Don't fail the request if notification creation fails
+          }
+        }
+      }
+    } catch (emailError: any) {
+      console.error('[IBV Requests] Error sending email:', emailError)
+      // Non-fatal - continue even if email fails
     }
 
     return NextResponse.json(
       {
         success: true,
-        request_guid: requestGuid,
-        iframe_url: iframeUrl,
-        start_url: startUrl,
-        redirect_url: redirectUrl,
+        request_id: ibvRequestId,
         requested_at: requestedAt
       },
       { status: 201 }
