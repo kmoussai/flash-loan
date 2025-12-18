@@ -68,8 +68,9 @@ export async function submitQuickApplyForm(
       }
     }
 
-    // Clear form data from localStorage
+    // Clear form data and step from localStorage after successful submission
     localStorage.removeItem('microLoanFormData')
+    localStorage.removeItem('microLoanCurrentStep')
 
     const referenceNumber = (responseBody as any)?.data?.referenceNumber ?? null
     const applicationId = (responseBody as any)?.data?.applicationId ?? null
