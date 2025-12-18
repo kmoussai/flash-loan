@@ -468,6 +468,12 @@
   "Bank_Verification_Thank_You": "Thank you! Your bank verification is complete.",
   "Bank_Verification_Thank_You_Helper": "Our team now has the information they need to review your application. We’ll be in touch shortly.",
   "Bank_Verification_Fallback_Message": "It looks like the bank verification is taking longer than expected. Our team will contact you to help complete it if necessary.",
+  "Initializing_Bank_Verification": "Initializing bank verification...",
+  "Bank_Verification_Modal_Message": "Bank verification modal should open automatically. If it doesn't, please check your browser settings.",
+  "Invalid_Verification_Token": "Invalid verification token",
+  "Verification_Session_Already_Started": "Verification session already started. Please refresh the page to start a new session.",
+  "Failed_To_Initialize_Verification": "Failed to initialize verification",
+  "Error": "Error",
   "Try_Later": "I'll Try Later",
   "Retry_Now": "Retry Now",
   "Inverite_Missing_Params": "Error: Missing required verification parameters. Please try the verification process again.",
@@ -543,6 +549,9 @@
   "Password_Changed_Success_Message": "Your password has been successfully changed. Redirecting to dashboard...",
   "Password_Change_Error": "An error occurred while changing your password",
   "Changing": "Changing...",
+  "Setting": "Setting...",
+  "Set_Password": "Set Password",
+  "Set_Password_Message": "Please set a password for your account to continue.",
   "All_Fields_Required": "All fields are required",
   "New_Password_Must_Be_Different": "New password must be different from current password",
   "Current_Password_Incorrect": "Current password is incorrect",
@@ -798,6 +807,8 @@
     "Relationship": "Relationship",
     "Notes": "Notes",
     "No_Information_Provided": "No information provided",
-    "Submitted_Information": "Submitted Information"
+    "Submitted_Information": "Submitted Information",
+    "Change_Password": "Change Password",
+    "Change_Password_Description": "Update your account password for better security."
   }
 }

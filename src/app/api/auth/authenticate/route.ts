@@ -84,9 +84,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(verifyUrl)
   } catch (error: any) {
     console.error('[Auth Authenticate] Exception:', error)
+    const requestUrl = new URL(request.url)
     const locale = 'en' // fallback
     return NextResponse.redirect(
-      new URL(`/${locale}/auth/signin?error=${encodeURIComponent(error.message || 'Authentication failed')}`, request.url)
+      new URL(`/${locale}/auth/signin?error=${encodeURIComponent(error.message || 'Authentication failed')}`, requestUrl.origin)
     )
   }
 }

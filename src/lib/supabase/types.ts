@@ -1005,6 +1005,51 @@ export interface LoanContractUpdate {
 }
 
 // ===========================
+// APP CONFIGURATIONS TYPES
+// ===========================
+
+export interface AppConfiguration {
+  id: string
+  category: string
+  config_key: string
+  config_data: Record<string, any>
+  encrypted_username: string | null // bytea stored as base64 string
+  encrypted_password: string | null // bytea stored as base64 string
+  encrypted_api_key: string | null // bytea stored as base64 string
+  description: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  updated_by: string | null
+}
+
+export interface AppConfigurationInsert {
+  category: string
+  config_key: string
+  config_data?: Record<string, any>
+  encrypted_username?: string | null
+  encrypted_password?: string | null
+  encrypted_api_key?: string | null
+  description?: string | null
+  is_active?: boolean
+  created_by?: string | null
+  updated_by?: string | null
+}
+
+export interface AppConfigurationUpdate {
+  category?: string
+  config_key?: string
+  config_data?: Record<string, any>
+  encrypted_username?: string | null
+  encrypted_password?: string | null
+  encrypted_api_key?: string | null
+  description?: string | null
+  is_active?: boolean
+  updated_by?: string | null
+}
+
+// ===========================
 // COMBINED DATABASE TYPE
 // ===========================
 
@@ -1085,6 +1130,25 @@ export interface Database {
         Row: RequestFormSubmission
         Insert: RequestFormSubmissionInsert
         Update: RequestFormSubmissionUpdate
+      }
+      app_configurations: {
+        Row: AppConfiguration
+        Insert: AppConfigurationInsert
+        Update: AppConfigurationUpdate
+      }
+    }
+    Functions: {
+      decrypt_config_value: {
+        Args: {
+          encrypted_value: string
+        }
+        Returns: string | null
+      }
+      encrypt_config_value: {
+        Args: {
+          value: string
+        }
+        Returns: string
       }
     }
   }

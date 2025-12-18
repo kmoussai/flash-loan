@@ -59,6 +59,9 @@ export async function GET(request: NextRequest) {
     }
     if (status) {
       query = query.eq('status', status)
+    } else {
+      // By default, exclude cancelled transactions unless explicitly requested
+      query = query.neq('status', 'cancelled')
     }
 
     // Search filter (searches in provider_data JSONB and loan numbers)

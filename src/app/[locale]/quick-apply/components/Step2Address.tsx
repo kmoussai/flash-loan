@@ -179,7 +179,7 @@ export default function Step2Address({
           <input
             type='text'
             value={formData.postalCode}
-            onChange={e => onUpdate('postalCode', e.target.value.toUpperCase())}
+            onChange={e => onUpdate('postalCode', e.target.value.toUpperCase().replace(/\s+/g, ''))}
             className='focus:ring-primary/20 w-full rounded-lg border border-gray-300 bg-background p-3 text-primary focus:border-primary focus:outline-none focus:ring-2'
             placeholder='H2X 1Y4'
           />

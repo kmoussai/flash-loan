@@ -7,7 +7,6 @@ import { createNotification } from '@/src/lib/supabase'
 import type { NotificationCategory } from '@/src/types'
 import { buildContractTermsFromApplication } from '@/src/lib/contracts/terms'
 import type { PaymentFrequency } from '@/src/types'
-import { createAcceptPayCustomer } from '@/src/lib/supabase/accept-pay-helpers'
 import {
   generateSignedContractPDF,
   generateComplianceMetadata
@@ -376,27 +375,6 @@ export async function POST(
       console.error('[POST /api/user/contracts/:id/sign] Failed to create staff notification:', staffNotificationError)
     }
 
-    // Create Accept Pay customer when contract is signed
-    try {
-      const updatedContract = updated as any
-      const application = updatedContract.loan_applications
-      const clientId = application?.client_id
-
-      if (clientId) {
-        const customerResult = await createAcceptPayCustomer(clientId, true)
-        if (!customerResult.success) {
-          console.warn(
-            `[POST /api/user/contracts/:id/sign] Failed to create Accept Pay customer for user ${clientId}:`,
-            customerResult.error
-          )
-          // Don't fail the request if Accept Pay customer creation fails
-          // This can be retried later
-        }
-      }
-    } catch (acceptPayError) {
-      console.error('[POST /api/user/contracts/:id/sign] Error creating Accept Pay customer:', acceptPayError)
-      // Don't fail the request if Accept Pay customer creation fails
-    }
 
     return NextResponse.json({
       success: true,

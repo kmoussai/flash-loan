@@ -1,3 +1,32 @@
+/**
+ * Zum Rails Integration Helpers
+ * 
+ * To use Zum Rails Connect with token (recommended approach):
+ * 
+ * 1. Get a connect token from your backend:
+ *    const { connectToken } = await initializeZumrailsSession({ firstName, lastName, email })
+ * 
+ * 2. In your React component, create a container div and initialize the SDK:
+ * 
+ *    useEffect(() => {
+ *      if (connectToken) {
+ *        initializeZumrailsSdk(connectToken, 'zumrails-container', {
+ *          onSuccess: (data) => {
+ *            // Handle success - data contains userId, requestId, etc.
+ *          },
+ *          onError: (error) => {
+ *            // Handle error
+ *          }
+ *        })
+ *      }
+ *    }, [connectToken])
+ * 
+ * 3. In your JSX, add the container:
+ *    <div id="zumrails-container" className="h-[600px] w-full"></div>
+ * 
+ * The SDK will automatically create and manage the iframe with the token.
+ */
+
 export type ZumrailsVerificationStatus =
   | 'pending'
   | 'verified'
@@ -5,9 +34,11 @@ export type ZumrailsVerificationStatus =
   | 'cancelled'
 
 export interface ZumrailsConnection {
-  requestId: string // Primary identifier - requestid from CONNECTIONSUCCESSFULLYCOMPLETED (required)
-  cardId?: string // cardid from CONNECTIONSUCCESSFULLYCOMPLETED
   userId?: string // userid from CONNECTIONSUCCESSFULLYCOMPLETED
+  requestId: string // Primary identifier - requestid from CONNECTIONSUCCESSFULLYCOMPLETED (required)
+  clientUserId?: string // clientuserid from CONNECTIONSUCCESSFULLYCOMPLETED
+
+  cardId?: string // cardid from CONNECTIONSUCCESSFULLYCOMPLETED
   customerId?: string // Optional - legacy/compatibility (can be userId)
   token?: string // Legacy - kept for backward compatibility (maps to requestId)
   refreshToken?: string
@@ -21,6 +52,22 @@ export const ZUMRAILS_ORIGIN_REGEX = /https:\/\/.*\.zumrails\.com/
 // Base URL for Zumrails connector (sandbox)
 export const ZUMRAILS_CONNECTOR_BASE_URL =
   'https://connector-sandbox.aggregation.zumrails.com'
+
+// Zum Rails SDK URLs (Connector SDK for Data Aggregation)
+// Sandbox: https://cdn.aggregation.zumrails.com/sandbox/connector.js
+// Production: https://cdn.aggregation.zumrails.com/production/connector.js
+export const ZUMRAILS_SDK_SANDBOX_URL = 
+  process.env.NEXT_PUBLIC_ZUMRAILS_SDK_URL || 
+  'https://sandbox-cdn.zumrails.com/sandbox/zumsdk.js'
+export const ZUMRAILS_SDK_PRODUCTION_URL = 
+  process.env.NEXT_PUBLIC_ZUMRAILS_SDK_URL || 
+  'https://cdn.zumrails.com/production/zumsdk.js'
+
+// Get the appropriate SDK URL based on environment
+export function getZumrailsSdkUrl(): string {
+  const isProduction = process.env.NEXT_PUBLIC_ZUMRAILS_ENV === 'production'
+  return isProduction ? ZUMRAILS_SDK_PRODUCTION_URL : ZUMRAILS_SDK_SANDBOX_URL
+}
 
 // Get iframe config with customer ID
 export function getZumrailsIframeConfig(
@@ -57,6 +104,10 @@ export async function initializeZumrailsSession(userData?: {
   lastName?: string
   email?: string
   phone?: string
+  addressCity?: string
+  addressLine1?: string
+  addressProvince?: string
+  addressPostalCode?: string
 }): Promise<{ connectToken: string; customerId: string; iframeUrl?: string }> {
   try {
     console.log('[Zumrails] Initializing session with user data:', userData)
@@ -321,9 +372,219 @@ export function addZumrailsListener(
   }
 }
 
-// Helper function to extract customer ID from URL
-function extractCustomerIdFromUrl(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-  const urlParams = new URLSearchParams(window.location.search)
-  return urlParams.get('customerid') || undefined
+/**
+ * Load Zum Rails SDK script dynamically
+ */
+export function loadZumrailsSdk(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('SDK can only be loaded in browser'))
+      return
+    }
+
+    // Check if SDK is already loaded
+    // The SDK exposes itself as ZumRailsSDK (per documentation)
+    if ((window as any).ZumRailsSDK) {
+      resolve()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = getZumrailsSdkUrl()
+    script.id = 'ZumRailsSDK' // Match the ID from the documentation
+    script.async = true
+    script.type = 'text/javascript'
+    script.onload = () => {
+      // Check for ZumRailsSDK (per documentation)
+      if ((window as any).ZumRailsSDK) {
+        resolve()
+      } else {
+        reject(new Error('Zum Rails SDK failed to load - ZumRailsSDK global object not found'))
+      }
+    }
+    script.onerror = () => {
+      reject(new Error('Failed to load Zum Rails SDK'))
+    }
+    document.head.appendChild(script)
+  })
+}
+
+/**
+ * Initialize Zum Rails Connector SDK with token
+ * This will create and manage the iframe automatically
+ * @param connectToken - The token received from /api/aggregationconnector/createtoken
+ * @param containerId - Optional: The ID of the container element where the iframe should be rendered.
+ *                      If not provided, the SDK will create its own container.
+ * @param callbacks - Event callbacks for SDK events
+ * @param options - Optional configuration options for the connector
+ */
+export async function initializeZumrailsSdk(
+  connectToken: string,
+  containerId?: string,
+  callbacks?: {
+    onLoad?: () => void
+    onSuccess?: (connection: ZumrailsConnection) => void
+    onError?: (error: string) => void
+    onConnectorClosed?: () => void
+    onStepChanged?: (data: { step: string; data: any }) => void
+  },
+  options?: {
+    accountselector?: boolean
+    testinstitution?: boolean
+    backbutton?: boolean
+    closebutton?: boolean
+    extrafield1?: string
+    extrafield2?: string
+    cardidforreconnect?: string
+  }
+): Promise<void> {
+  if (typeof window === 'undefined') {
+    throw new Error('SDK can only be initialized in browser')
+  }
+
+  // Load SDK if not already loaded
+  await loadZumrailsSdk()
+
+  // Check for SDK global variable (ZumRailsSDK per documentation)
+  const ZumRailsSDK = (window as any).ZumRailsSDK
+  if (!ZumRailsSDK) {
+    throw new Error('Zum Rails SDK not available - ZumRailsSDK global object not found')
+  }
+
+  // Validate token before initializing
+  if (!connectToken || typeof connectToken !== 'string' || connectToken.trim().length === 0) {
+    throw new Error('Invalid connectToken: token must be a non-empty string')
+  }
+
+  // Build initialization config according to documentation
+  // Documentation: https://docs.zumrails.com/data-aggregation/how-it-works
+  const trimmedToken = connectToken.trim()
+  
+  // Log token details for debugging (but don't log full token in production)
+  console.log('[Zumrails SDK] Initializing with token:', {
+    tokenLength: trimmedToken.length,
+    tokenPreview: trimmedToken.substring(0, 50) + '...',
+    tokenEnd: '...' + trimmedToken.substring(trimmedToken.length - 20),
+    tokenStartsWith: trimmedToken.substring(0, 10),
+    timestamp: new Date().toISOString()
+  })
+  
+  // Verify token looks like a JWT (3 parts separated by dots) or similar format
+  // This helps catch obvious formatting issues early
+  if (trimmedToken.split('.').length !== 3 && !trimmedToken.includes('.')) {
+    console.warn('[Zumrails SDK] Token format looks unusual - expected JWT-like format with dots')
+  }
+  
+  const config: any = {
+    token: trimmedToken,
+    options: {
+      accountselector: options?.accountselector ?? true,
+      testinstitution: options?.testinstitution ?? true,
+      backbutton: options?.backbutton ?? true,
+      closebutton: options?.closebutton ?? true,
+      ...(options?.extrafield1 && { extrafield1: options.extrafield1 }),
+      ...(options?.extrafield2 && { extrafield2: options.extrafield2 }),
+      ...(options?.cardidforreconnect && { cardidforreconnect: options.cardidforreconnect })
+    },
+    onLoad: () => {
+      console.log('[Zumrails SDK] Iframe loaded')
+      callbacks?.onLoad?.()
+    },
+    onSuccess: (
+      requestid: string,
+      cardid: string,
+      extrafield1: string,
+      extrafield2: string,
+      userid: string,
+      clientuserid: string
+    ) => {
+      console.log('[Zumrails SDK] Success callback called with:', {
+        requestid,
+        cardid,
+        extrafield1,
+        extrafield2,
+        userid,
+        clientuserid
+      })
+      
+      // Map SDK parameters to ZumrailsConnection object
+      const connection: ZumrailsConnection = {
+        requestId: requestid, // Primary identifier for webhook matching
+        verificationStatus: 'verified',
+        ...(cardid && { cardId: cardid }),
+        ...(userid && { userId: userid }),
+        // Legacy fields for backward compatibility
+        ...(userid && { customerId: userid }),
+        token: requestid, // token maps to requestId for compatibility
+        ...(cardid && { connectToken: cardid })
+      }
+      
+      console.log('[Zumrails SDK] Mapped connection object:', connection)
+      
+      // Pass connection object to callback
+      callbacks?.onSuccess?.(connection)
+    },
+    onError: (error: string) => {
+      console.error('[Zumrails SDK] Error:', {error, trimmedToken})
+      callbacks?.onError?.(error)
+    },
+    onConnectorClosed: () => {
+      console.log('[Zumrails SDK] Connector closed by user')
+      callbacks?.onConnectorClosed?.()
+    },
+    onStepChanged: (data: { step: string; data: any }) => {
+      console.log('[Zumrails SDK] Step changed:', data)
+      
+      // Handle CONNECTIONSUCCESSFULLYCOMPLETED step event
+      // The SDK might use onStepChanged instead of onSuccess in some cases
+      if (data.step === 'CONNECTIONSUCCESSFULLYCOMPLETED' || data.step === 'Success') {
+        const stepData = data.data || {}
+        const requestid = stepData.requestid || stepData.requestId
+        const cardid = stepData.cardid || stepData.cardId
+        const userid = stepData.userid || stepData.userId
+        const clientuserid = stepData.clientuserid || stepData.clientUserId
+        
+        if (requestid) {
+          console.log('[Zumrails SDK] Connection completed via onStepChanged:', {
+            requestid,
+            cardid,
+            userid,
+            clientuserid
+          })
+          
+          // Map to ZumrailsConnection object
+          const connection: ZumrailsConnection = {
+            requestId: requestid,
+            verificationStatus: 'verified',
+            ...(cardid && { cardId: cardid }),
+            ...(userid && { userId: userid }),
+            ...(userid && { customerId: userid }),
+            token: requestid,
+            ...(cardid && { connectToken: cardid })
+          }
+          
+          // Call onSuccess callback if available
+          callbacks?.onSuccess?.(connection)
+        }
+      }
+      
+      callbacks?.onStepChanged?.(data)
+    }
+  }
+
+  // Add containerId if provided - this makes the SDK render inline instead of as a modal
+  // The containerId should be the ID of the DOM element where the SDK should render
+  if (containerId) {
+    // Try both top-level and in options (SDK might accept it in either place)
+    config.containerId = containerId
+    // Also try adding it to options as some SDKs require it there
+    if (!config.options.containerId) {
+      config.options.containerId = containerId
+    }
+  }
+
+  // Initialize the SDK with the token
+  // If containerId is provided, SDK will render inline in that container
+  // If not provided, SDK will render as a modal
+  ZumRailsSDK.init(config)
 }

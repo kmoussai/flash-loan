@@ -12,15 +12,15 @@ function AdminDashboardContent({
   const { isSidebarOpen } = useAdminSidebar()
 
   return (
-    <div className='flex min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/20'>
+    <div className='flex h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/20 overflow-hidden'>
       <AdminSidebar />
       <div
-        className={`flex-1 transition-all duration-300 ${
+        className={`flex-1 flex flex-col transition-all duration-300 ${
           isSidebarOpen ? 'ml-64' : 'ml-16'
         }`}
       >
         <AdminTopBar />
-        <main className='mt-16 p-4 lg:p-6'>{children}</main>
+        <main className='flex-1 overflow-auto mt-16 p-4 lg:p-6'>{children}</main>
       </div>
     </div>
   )

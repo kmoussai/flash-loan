@@ -164,6 +164,21 @@ export async function POST(
           { status: 400 }
         )
       }
+
+      // Validate that start_date is at least tomorrow
+      const startDate = parseLocalDate(start_date)
+      startDate.setHours(0, 0, 0, 0)
+      
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      tomorrow.setHours(0, 0, 0, 0)
+
+      if (startDate < tomorrow) {
+        return NextResponse.json(
+          { error: 'Start date must be at least tomorrow' },
+          { status: 400 }
+        )
+      }
     }
 
     // Calculate failed payment fees and interest
@@ -229,6 +244,25 @@ export async function POST(
     let finalBreakdown: PaymentBreakdown[] = recalculatedBreakdown
     
     if (payment_schedule && Array.isArray(payment_schedule) && payment_schedule.length > 0) {
+      // Validate all dates in the payment schedule are at least tomorrow
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      tomorrow.setHours(0, 0, 0, 0)
+
+      for (const item of payment_schedule) {
+        if (item.due_date) {
+          const itemDate = parseLocalDate(item.due_date)
+          itemDate.setHours(0, 0, 0, 0)
+          
+          if (itemDate < tomorrow) {
+            return NextResponse.json(
+              { error: `Payment date ${item.due_date} must be at least tomorrow. All payment dates must be in the future.` },
+              { status: 400 }
+            )
+          }
+        }
+      }
+
       // Merge user-provided schedule with calculated breakdown
       finalBreakdown = payment_schedule.map((item: any, index: number): PaymentBreakdown => {
         const calculatedItem = recalculatedBreakdown[index]

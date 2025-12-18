@@ -67,12 +67,14 @@ export async function GET(request: NextRequest) {
       .filter((id: string | null | undefined): id is string => Boolean(id))
 
     // Fetch payments for all loans in parallel
+    // By default, exclude cancelled payments
     let paymentsMap: Record<string, any[]> = {}
     if (loanIds.length > 0) {
       const { data: paymentsData, error: paymentsError } = await supabase
         .from('loan_payments')
         .select('*')
         .in('loan_id', loanIds)
+        .neq('status', 'cancelled')
         .order('payment_date', { ascending: true })
 
       if (!paymentsError && paymentsData) {

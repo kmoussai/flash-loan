@@ -467,6 +467,12 @@
   "Bank_Verification_Thank_You": "Merci ! Votre vérification bancaire est terminée.",
   "Bank_Verification_Thank_You_Helper": "Notre équipe dispose maintenant des informations nécessaires pour finaliser l’examen de votre demande. Nous vous contacterons sous peu.",
   "Bank_Verification_Fallback_Message": "La vérification bancaire semble prendre plus de temps que prévu. Notre équipe vous contactera pour vous aider à la compléter si nécessaire.",
+  "Initializing_Bank_Verification": "Initialisation de la vérification bancaire...",
+  "Bank_Verification_Modal_Message": "La fenêtre modale de vérification bancaire devrait s'ouvrir automatiquement. Si ce n'est pas le cas, veuillez vérifier les paramètres de votre navigateur.",
+  "Invalid_Verification_Token": "Jeton de vérification invalide",
+  "Verification_Session_Already_Started": "La session de vérification a déjà été démarrée. Veuillez actualiser la page pour démarrer une nouvelle session.",
+  "Failed_To_Initialize_Verification": "Échec de l'initialisation de la vérification",
+  "Error": "Erreur",
   "Try_Later": "Je réessaierai plus tard",
   "Retry_Now": "Réessayer maintenant",
   "Inverite_Missing_Params": "Erreur : Paramètres de vérification requis manquants. Veuillez réessayer le processus de vérification.",
@@ -541,6 +547,9 @@
   "Password_Changed_Success_Message": "Votre mot de passe a été changé avec succès. Redirection vers le tableau de bord...",
   "Password_Change_Error": "Une erreur s'est produite lors du changement de votre mot de passe",
   "Changing": "Changement...",
+  "Setting": "Définition...",
+  "Set_Password": "Définir le mot de passe",
+  "Set_Password_Message": "Veuillez définir un mot de passe pour votre compte pour continuer.",
   "All_Fields_Required": "Tous les champs sont requis",
   "New_Password_Must_Be_Different": "Le nouveau mot de passe doit être différent du mot de passe actuel",
   "Current_Password_Incorrect": "Le mot de passe actuel est incorrect",
@@ -796,6 +805,8 @@
     "Relationship": "Relation",
     "Notes": "Notes",
     "No_Information_Provided": "Aucune information fournie",
-    "Submitted_Information": "Informations soumises"
+    "Submitted_Information": "Informations soumises",
+    "Change_Password": "Changer le mot de passe",
+    "Change_Password_Description": "Mettez à jour le mot de passe de votre compte pour une meilleure sécurité."
   }
 }

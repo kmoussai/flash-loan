@@ -69,7 +69,6 @@ const publicApiRoutes = [
   '/api/loan-application',
   '/api/public',
   '/api/auth',
-  '/api/zumrails/update-request-id',
   '/api/webhook'
 ]
 
@@ -112,6 +111,11 @@ export default async function middleware(req: NextRequest) {
 
     // Allow zumrails routes without auth (bank verification callbacks, webhooks, and updates)
     if (pathname.startsWith('/api/zumrails/')) {
+      return NextResponse.next()
+    }
+
+    // Allow ibv routes without auth (bank verification initialization from email links)
+    if (pathname.startsWith('/api/ibv/')) {
       return NextResponse.next()
     }
 

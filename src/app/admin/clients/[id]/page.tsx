@@ -3,6 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import AdminDashboardLayout from '../../components/AdminDashboardLayout'
+import DetailPageHeader from '../../components/DetailPageHeader'
+import StatusBadge from '../../components/StatusBadge'
+import RefreshButton from '../../components/RefreshButton'
+import BackButton from '../../components/BackButton'
+import Tabs from '../../components/Tabs'
 import DocumentsSection from '../../components/DocumentsSection'
 import ClientDocumentsSection from '../../components/ClientDocumentsSection'
 import AddBankAccountModal from '../../components/AddBankAccountModal'
@@ -65,7 +70,7 @@ export default function ClientDetailsPage() {
 	const [data, setData] = useState<ClientDetails | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
-	const [activeTab, setActiveTab] = useState<'addresses' | 'documents' | 'bank_account'>('addresses')
+	const [activeTab, setActiveTab] = useState<string>('addresses')
 	const [showBankAccountModal, setShowBankAccountModal] = useState(false)
 	const [showEditInfoModal, setShowEditInfoModal] = useState(false)
 
@@ -107,19 +112,6 @@ export default function ClientDetailsPage() {
 
 	const formatCurrency = (amount: number) => {
 		return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(amount)
-	}
-
-	const getKycBadgeColor = (status: string) => {
-		switch (status) {
-			case 'verified':
-				return 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
-			case 'pending':
-				return 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
-			case 'rejected':
-				return 'bg-gradient-to-r from-red-500 to-rose-500 text-white'
-			default:
-				return 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
-		}
 	}
 
 	const getStatusBadgeColor = (status: string) => {
@@ -178,46 +170,23 @@ export default function ClientDetailsPage() {
 		<AdminDashboardLayout>
 			<div className='space-y-6'>
 				{/* Header */}
-				<div className='flex items-center justify-between'>
-					<div className='flex items-center gap-4'>
-						<button
-							onClick={() => router.push('/admin/clients')}
-							className='flex h-10 w-10 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-600 shadow-sm transition-all hover:bg-gray-50 hover:shadow-md'
-						>
-							<svg className='h-5 w-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-								<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 19l-7-7 7-7' />
-							</svg>
-						</button>
-						<div>
-							<h1 className='text-3xl font-bold text-gray-900'>
-								{user.first_name && user.last_name 
-									? `${user.first_name} ${user.last_name}`
-									: user.first_name || user.last_name || 'Client Details'}
-							</h1>
-							<p className='text-sm text-gray-500 mt-1 font-mono'>ID: {user.id.slice(0, 8)}…</p>
-						</div>
-					</div>
-					<div className='flex items-center gap-3'>
-						<button
-							onClick={fetchDetails}
-							disabled={loading}
-							className='flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:shadow-md disabled:opacity-50'
-						>
-							<svg 
-								className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} 
-								fill='none' 
-								viewBox='0 0 24 24' 
-								stroke='currentColor'
-							>
-								<path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-							</svg>
-							Refresh
-						</button>
-						<span className={`inline-flex items-center rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide shadow-md ${getKycBadgeColor(user.kyc_status)}`}>
-						{user.kyc_status}
-					</span>
-					</div>
-				</div>
+				<DetailPageHeader
+					backHref='/admin/clients'
+					backTitle='Back to Clients'
+					title={
+						user.first_name && user.last_name 
+							? `${user.first_name} ${user.last_name}`
+							: user.first_name || user.last_name || 'Client Details'
+					}
+					subtitle={user.id.slice(0, 8)}
+					subtitlePrefix='ID:'
+					onRefresh={fetchDetails}
+					refreshLoading={loading}
+					status={user.kyc_status}
+					statusVariant='large'
+					statusType='kyc'
+					size='lg'
+				/>
 
 				{/* Profile Card */}
 				<div className='group relative overflow-hidden rounded-2xl bg-white p-6 shadow-md transition-all duration-300 hover:shadow-xl'>
@@ -343,37 +312,18 @@ export default function ClientDetailsPage() {
 							</div>
 							<h3 className='text-xl font-bold text-gray-900'>Addresses, Bank Account & Documents</h3>
 						</div>
-						<div className='mb-6 flex items-center gap-2 border-b border-gray-200'>
-							<button
-								onClick={() => setActiveTab('addresses')}
-								className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all ${
-									activeTab === 'addresses'
-										? 'border-b-2 border-purple-500 bg-purple-50/50 text-purple-700'
-										: 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-								}`}
-							>
-								Addresses
-							</button>
-							<button
-								onClick={() => setActiveTab('bank_account')}
-								className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all ${
-									activeTab === 'bank_account'
-										? 'border-b-2 border-purple-500 bg-purple-50/50 text-purple-700'
-										: 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-								}`}
-							>
-								Bank Account
-							</button>
-							<button
-								onClick={() => setActiveTab('documents')}
-								className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all ${
-									activeTab === 'documents'
-										? 'border-b-2 border-purple-500 bg-purple-50/50 text-purple-700'
-										: 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-								}`}
-							>
-								Documents
-							</button>
+						<div className='mb-6'>
+							<Tabs
+								tabs={[
+									{ id: 'addresses', label: 'Addresses' },
+									{ id: 'bank_account', label: 'Bank Account' },
+									{ id: 'documents', label: 'Documents' }
+								]}
+								activeTab={activeTab}
+								onTabChange={setActiveTab}
+								variant='classic'
+								activeColor='purple'
+							/>
 						</div>
 						<div>
 						{activeTab === 'addresses' && (

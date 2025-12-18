@@ -14,8 +14,19 @@ export {
   createCollectionTransaction,
   createDisbursementTransaction,
   cancelZumRailsTransaction,
+  // Batch transaction functions (Canada - EFT/Interac only)
+  validateBatchFile,
+  processBatchFile,
+  csvToBase64,
+  createBatchTransactionsWithValidation,
+  transactionsToCSV,
   type ZumRailsFilterTransactionsRequest,
-  type ZumRailsFilterTransactionsResponse
+  type ZumRailsFilterTransactionsResponse,
+  type ZumRailsValidateBatchRequest,
+  type ZumRailsValidateBatchResponse,
+  type ZumRailsProcessBatchRequest,
+  type ZumRailsProcessBatchResponse,
+  type BatchTransactionInput
 } from './transactions'
 
 // Export loan payment sync helper

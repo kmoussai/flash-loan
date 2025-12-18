@@ -41,5 +41,5 @@ export type {
 export type { PaymentProvider } from './interfaces'
 
 // Export provider implementations
-export { AcceptPayProvider, getAcceptPayProvider } from './accept-pay'
+// Accept Pay provider removed
 

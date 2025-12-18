@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseLocalDate } from '@/src/lib/utils/date'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
-import { LoanPaymentInsert } from '@/src/lib/supabase/types'
+import { LoanPaymentInsert, PaymentFrequency } from '@/src/lib/supabase/types'
 import {
   validatePaymentAmount,
   calculateNewBalance,
-  roundCurrency
+  roundCurrency,
+  recalculatePaymentSchedule
 } from '@/src/lib/loan'
+import { getContractByApplicationId } from '@/src/lib/supabase/contract-helpers'
+import { updateLoanPaymentsFromBreakdown } from '@/src/lib/supabase/payment-schedule-helpers'
+import { handleScheduleRecalculationForZumRails } from '@/src/lib/payment-providers/zumrails'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,12 +60,20 @@ export async function POST(
       )
     }
 
+    // Format date as YYYY-MM-DD in local timezone (avoids timezone issues)
+    const formatDateLocal = (date: Date): string => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
     const supabase = await createServerSupabaseAdminClient()
 
-    // Get the loan to check remaining balance, status, and get payment number
+    // Get the loan to check remaining balance, status, interest rate, and application ID
     const { data: loan, error: loanError } = await supabase
       .from('loans')
-      .select('id, remaining_balance, status')
+      .select('id, remaining_balance, status, interest_rate, application_id')
       .eq('id', loanId)
       .single()
 
@@ -72,8 +84,24 @@ export async function POST(
       )
     }
 
-    const typedLoan = loan as { id: string; remaining_balance: number | null; status: string }
+    const typedLoan = loan as { 
+      id: string
+      remaining_balance: number | null
+      status: string
+      interest_rate: number | null
+      application_id: string | null
+    }
     const currentRemainingBalance = roundCurrency(Number(typedLoan.remaining_balance || 0))
+    const interestRate = typedLoan.interest_rate ?? 29 // Default to 29% if not set
+
+    // Get contract to determine payment frequency
+    let paymentFrequency: PaymentFrequency = 'monthly' // Default
+    if (typedLoan.application_id) {
+      const contractResult = await getContractByApplicationId(typedLoan.application_id, true)
+      if (contractResult.success && contractResult.data?.contract_terms?.payment_frequency) {
+        paymentFrequency = contractResult.data.contract_terms.payment_frequency as PaymentFrequency
+      }
+    }
 
     // Validate rebate amount using loan library
     const validationError = validatePaymentAmount(rebateAmount, currentRemainingBalance)
@@ -110,7 +138,7 @@ export async function POST(
     const paymentInsert: LoanPaymentInsert = {
       loan_id: loanId,
       amount: rebateAmount,
-      payment_date: paymentDate.toISOString(),
+      payment_date: formatDateLocal(paymentDate),
       status: 'rebate',
       method: 'rebate',
       payment_number: maxPaymentNumber + 1,
@@ -164,6 +192,98 @@ export async function POST(
         { error: 'Failed to create rebate payment' },
         { status: 500 }
       )
+    }
+
+    // Recalculate future scheduled payments based on new remaining balance
+    // Only recalculate if there are future payments and we have contract info
+    if (typedLoan.application_id && newRemainingBalance > 0) {
+      // Get contract to retrieve payment amount and frequency
+      const contractResult = await getContractByApplicationId(typedLoan.application_id, true)
+      
+      if (contractResult.success && contractResult.data?.contract_terms) {
+        const contractTerms = contractResult.data.contract_terms
+        const scheduledPaymentAmount = Number(contractTerms.payment_amount || 0)
+        const contractPaymentFrequency = (contractTerms.payment_frequency || paymentFrequency) as PaymentFrequency
+
+        if (scheduledPaymentAmount > 0) {
+          // Calculate the next day after rebate payment for start date
+          // Use parseLocalDate to avoid timezone shifts
+          const nextDay = new Date(paymentDate)
+          nextDay.setDate(nextDay.getDate() + 1)
+          const nextDayStr = formatDateLocal(nextDay)
+
+          // Get first future payment date to use as starting point for recalculation
+          const { data: firstFuturePayment } = await supabase
+            .from('loan_payments')
+            .select('payment_date')
+            .eq('loan_id', loanId)
+            .gte('payment_date', nextDayStr)
+            .in('status', ['pending', 'cancelled'])
+            .order('payment_date', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+          // Use first future payment date if available, otherwise use next day
+          // Use parseLocalDate and formatDateLocal to avoid timezone shifts
+          const firstPaymentDateStr = firstFuturePayment
+            ? formatDateLocal(parseLocalDate((firstFuturePayment as { payment_date: string }).payment_date))
+            : nextDayStr
+
+          // Recalculate payment schedule with new remaining balance
+          const recalculationResult = recalculatePaymentSchedule({
+            newRemainingBalance: newRemainingBalance,
+            paymentAmount: scheduledPaymentAmount,
+            paymentFrequency: contractPaymentFrequency,
+            interestRate: interestRate,
+            firstPaymentDate: firstPaymentDateStr,
+            maxPeriods: 1000
+          })
+
+          const recalculatedBreakdown = recalculationResult.recalculatedBreakdown
+
+          if (recalculatedBreakdown.length > 0) {
+            // Use the helper function to update future payments
+            const updateResult = await updateLoanPaymentsFromBreakdown(
+              loanId,
+              recalculatedBreakdown,
+              nextDayStr // Only update payments on or after the day after rebate payment
+            )
+
+            if (!updateResult.success && updateResult.errors.length > 0) {
+              console.error('Error updating payments from breakdown:', updateResult.errors)
+              // Don't fail the request, but log the errors
+            }
+
+            // Handle ZumRails transactions - cancel old ones and create new ones (non-blocking)
+            // Run in background without blocking the response
+            handleScheduleRecalculationForZumRails({
+              loanId: loanId,
+              reason: `Payment schedule recalculated after rebate payment. Rebate amount: ${rebateAmount.toFixed(2)}`
+            })
+              .then((zumRailsResult) => {
+                if (!zumRailsResult.success) {
+                  console.warn('[Rebate Payment] ZumRails transaction handling completed with warnings:', {
+                    cancelled: zumRailsResult.cancelled.count,
+                    created: zumRailsResult.created.created,
+                    errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
+                  })
+                } else {
+                  console.log('[Rebate Payment] ZumRails transactions handled:', {
+                    cancelled: zumRailsResult.cancelled.count,
+                    created: zumRailsResult.created.created
+                  })
+                }
+              })
+              .catch((zumRailsError: any) => {
+                console.error('[Rebate Payment] Error handling ZumRails transactions:', zumRailsError)
+              })
+          }
+        } else {
+          console.warn('Could not determine scheduled payment amount for recalculation')
+        }
+      } else {
+        console.warn('Could not get contract terms for recalculation')
+      }
     }
 
     const successMessage = shouldMarkAsCompleted

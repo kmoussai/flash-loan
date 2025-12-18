@@ -567,7 +567,7 @@ export async function POST(request: NextRequest) {
         p_street_name: body.streetName || null,
         p_apartment_number: body.apartmentNumber || null,
         p_city: body.city || null,
-        p_postal_code: body.postalCode || null,
+        p_postal_code: body.postalCode?.replace(/\s+/g, '') || null,
         p_moving_date: body.movingDate || null,
         p_residence_status: body.residenceStatus || null,
         p_gross_salary: body.grossSalary ? parseFloat(body.grossSalary) : null,
@@ -914,17 +914,97 @@ export async function POST(request: NextRequest) {
             { applicationId: txResult.application_id }
           )
 
-          // Use server helper to get token from cache or authenticate
-          const { connectToken, customerId, iframeUrl, expiresAt } =
-            await initializeZumrailsSession({
-              firstName: clientData.first_name,
-              lastName: clientData.last_name,
-              phone: clientData.phone,
-              email: clientData.email
-            })
+          // Build address line 1 from street components from request body
+          // Zum Rails requires addressLine1 to be non-empty if User object is included
+          let addressLine1: string | undefined = undefined
+          if (body.streetNumber || body.streetName) {
+            const streetParts = [
+              body.streetNumber,
+              body.streetName
+            ].filter(Boolean)
+            if (streetParts.length > 0) {
+              addressLine1 = streetParts.join(' ')
+              if (body.apartmentNumber) {
+                addressLine1 += `, Apt ${body.apartmentNumber}`
+              }
+            }
+          }
 
           const requestedAt = new Date().toISOString()
 
+          // Step 1: Create or get IBV request FIRST to get the ID
+          // Check if IBV request already exists for this application and provider
+          const { data: existingRequest } = await (supabaseForIbv as any)
+            .from('loan_application_ibv_requests')
+            .select('id')
+            .eq('loan_application_id', txResult.application_id)
+            .eq('provider', 'zumrails')
+            .maybeSingle()
+
+          let ibvRequestId: string | null = null
+
+          if (!existingRequest) {
+            // Create IBV request first (with minimal data, will update after token creation)
+            const { data: newIbvRequest, error: ibvInsertError } = await (supabaseForIbv as any)
+              .from('loan_application_ibv_requests')
+              .insert({
+                loan_application_id: txResult.application_id,
+                client_id: txResult.client_id,
+                provider: 'zumrails',
+                status: 'pending',
+                requested_at: requestedAt
+              })
+              .select('id')
+              .single()
+
+            if (ibvInsertError) {
+              console.error(
+                '[Loan Application] Failed to create Zumrails IBV request:',
+                ibvInsertError
+              )
+              // Continue anyway - we'll try to create token without ibvRequestId
+            } else {
+              ibvRequestId = newIbvRequest.id
+              console.log(
+                '[Loan Application] Created Zumrails IBV request:',
+                ibvRequestId
+              )
+            }
+          } else {
+            ibvRequestId = existingRequest.id
+            console.log(
+              '[Loan Application] Using existing Zumrails IBV request:',
+              ibvRequestId
+            )
+          }
+
+          // Step 2: Create token with application_id (ExtraField1) and ibv_request_id (ExtraField2)
+          // Use server helper to get token from cache or authenticate
+          // Use address data from request body instead of querying DB
+          // Pass application ID as clientUserId to track the connection in Zumrails
+          const { connectToken, customerId, iframeUrl, expiresAt } =
+            await initializeZumrailsSession(
+              {
+                firstName: clientData.first_name,
+                lastName: clientData.last_name,
+                phone: clientData.phone,
+                email: clientData.email,
+                
+                // Include address fields from request body (required by Zum Rails when User object is provided)
+                ...(body.city && body.streetNumber && body.province && body.postalCode && {
+                  addressCity: body.city,
+                  addressLine1: addressLine1,
+                  addressProvince: body.province,
+                  addressPostalCode: body.postalCode.replace(/\s+/g, '')
+                }),
+                clientUserId: txResult.application_id.toString(), // Pass application ID as clientUserId
+                language: clientData.preferred_language || 'en' // Pass preferred language
+              },
+              txResult.application_id.toString(), // ExtraField1: application_id
+              ibvRequestId || undefined // ExtraField2: loan_application_ibv_request id
+            )
+
+          // Step 3: Update IBV request with token data
           const providerData = createIbvProviderData('zumrails', {
             customerId,
             connectToken,
@@ -941,43 +1021,8 @@ export async function POST(request: NextRequest) {
             iframe_url: iframeUrl
           })
 
-          // Check if IBV request already exists for this application and provider
-          // The unique constraint is now on (loan_application_id, provider)
-          const { data: existingRequest } = await (supabaseForIbv as any)
-            .from('loan_application_ibv_requests')
-            .select('id')
-            .eq('loan_application_id', txResult.application_id)
-            .eq('provider', 'zumrails')
-            .maybeSingle()
-
-          if (!existingRequest) {
-            // Save IBV request to loan_application_ibv_requests only if it doesn't exist
-            const { error: ibvInsertError } = await (supabaseForIbv as any)
-              .from('loan_application_ibv_requests')
-              .insert({
-                loan_application_id: txResult.application_id,
-                client_id: txResult.client_id,
-                provider: 'zumrails',
-                status: 'pending',
-                request_url: iframeUrl,
-                provider_data: providerData, // Contains customerId for Zumrails
-                requested_at: requestedAt
-              })
-
-            if (ibvInsertError) {
-              console.error(
-                '[Loan Application] Failed to save Zumrails IBV request:',
-                ibvInsertError
-              )
-              // Continue anyway - try to update loan application
-            } else {
-              console.log(
-                '[Loan Application] Successfully saved Zumrails IBV request:',
-                customerId
-              )
-            }
-          } else {
-            // Update existing record
+          if (ibvRequestId) {
+            // Update IBV request with token data
             const { error: ibvUpdateError } = await (supabaseForIbv as any)
               .from('loan_application_ibv_requests')
               .update({
@@ -986,8 +1031,7 @@ export async function POST(request: NextRequest) {
                 status: 'pending',
                 updated_at: requestedAt
               })
-              .eq('loan_application_id', txResult.application_id)
-              .eq('provider', 'zumrails')
+              .eq('id', ibvRequestId)
 
             if (ibvUpdateError) {
               console.error(
@@ -996,8 +1040,8 @@ export async function POST(request: NextRequest) {
               )
             } else {
               console.log(
-                '[Loan Application] Updated existing Zumrails IBV request:',
-                customerId
+                '[Loan Application] Updated Zumrails IBV request with token data:',
+                ibvRequestId
               )
             }
           }
@@ -1014,7 +1058,8 @@ export async function POST(request: NextRequest) {
 
           ibvInitiationData = {
             customerId,
-            iframeUrl,
+            connectToken, // Include token for SDK approach
+            iframeUrl, // Keep for backward compatibility
           }
 
           console.log(

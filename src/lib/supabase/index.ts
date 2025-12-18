@@ -191,27 +191,3 @@ export type {
   NotificationRecipient
 } from '@/src/types'
 
-// ===========================
-// ACCEPT PAY HELPERS
-// ===========================
-// ⚠️ SERVER-ONLY: These helpers should ONLY be called from API routes or server-side code.
-// NEVER import these functions in client components.
-
-export {
-  mapUserToAcceptPayCustomer,
-  createAcceptPayCustomer,
-  getAcceptPayCustomerId,
-  updateAcceptPayCustomerStatus,
-  initiateDisbursement,
-  authorizeDisbursement,
-  updateDisbursementStatus,
-  getDisbursementStatus,
-  createPaymentSchedule,
-  initiatePaymentCollection,
-  authorizePayment,
-  updatePaymentStatus,
-  voidPayment,
-  syncTransactionUpdates,
-  logSync,
-  getLastSyncTime
-} from './accept-pay-helpers'

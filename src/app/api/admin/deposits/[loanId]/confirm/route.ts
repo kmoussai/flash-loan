@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { updateLoan } from '@/src/lib/supabase/loan-helpers'
-import { 
-  createCollectionTransactionsForSchedule,
-  getAcceptPayCustomerId,
-  createAcceptPayCustomer
-} from '@/src/lib/supabase/accept-pay-helpers'
+import { syncLoanPaymentsToZumRails } from '@/src/lib/payment-providers/zumrails'
 import { Loan } from '@/src/types'
 
 export const dynamic = 'force-dynamic'
@@ -60,53 +56,36 @@ export async function POST(
       )
     }
 
-    // Ensure Accept Pay customer exists before creating collection transactions
-    try {
-      const customerId = await getAcceptPayCustomerId(loan.user_id, true)
-      
-      if (!customerId) {
-        console.log('Accept Pay customer not found, creating customer for user:', loan.user_id)
-        const customerResult = await createAcceptPayCustomer(loan.user_id, true)
-        
-        if (!customerResult.success || !customerResult.customerId) {
-          console.error(
-            'Failed to create Accept Pay customer before deposit confirmation:',
-            customerResult.error
+    // Create ZumRails collection transactions for all pending loan payments
+    // This runs in the background and doesn't block the response
+    syncLoanPaymentsToZumRails({ loanId })
+      .then((syncResult) => {
+        if (syncResult.success) {
+          console.log(
+            `[Confirm Deposit] Created ${syncResult.created} ZumRails transaction(s) for loan ${loanId}`
           )
-          return NextResponse.json(
-            { 
-              error: 'Failed to create Accept Pay customer', 
-              details: customerResult.error || 'Customer creation failed'
-            },
-            { status: 500 }
+        } else {
+          console.warn(
+            `[Confirm Deposit] ZumRails transaction creation completed with warnings for loan ${loanId}:`,
+            {
+              created: syncResult.created,
+              failed: syncResult.failed,
+              errors: syncResult.errors
+            }
           )
         }
-        
-        console.log('Created Accept Pay customer:', customerResult.customerId, 'for user:', loan.user_id)
-      }
-    } catch (customerError: any) {
-      console.error('Error checking/creating Accept Pay customer:', customerError)
-      return NextResponse.json(
-        { 
-          error: 'Failed to ensure Accept Pay customer exists', 
-          details: customerError.message 
-        },
-        { status: 500 }
-      )
-    }
-
-    // Create Accept Pay collection transactions for all payment schedules
-    try {
-      await createCollectionTransactionsForSchedule(loanId, true)
-    } catch (collectionError: any) {
-      console.error('Error creating collection transactions:', collectionError)
-      // Don't fail the whole operation, but log the error
-      // The admin can manually create collections later if needed
-    }
+      })
+      .catch((syncError: any) => {
+        console.error(
+          `[Confirm Deposit] Error creating ZumRails transactions for loan ${loanId}:`,
+          syncError
+        )
+        // Don't fail the request - transactions can be created manually later
+      })
 
     return NextResponse.json({
       success: true,
-      message: 'Deposit confirmed successfully. Loan is now active and collection transactions have been created.',
+      message: 'Deposit confirmed successfully. Loan is now active. ZumRails transactions are being created in the background.',
       loan: {
         id: loan.id,
         status: 'active'

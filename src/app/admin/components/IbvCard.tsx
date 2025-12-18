@@ -14,15 +14,17 @@ import IbvCardDocument from './ibv-card/IbvCardDocument'
 import IbvCardHistory from './ibv-card/IbvCardHistory'
 
 const PENDING_MESSAGE =
-  'Inverite is still processing this bank verification request. Try again in a few minutes.'
+  'The bank verification provider is still processing this request. Try again in a few minutes.'
 
 interface IbvCardProps {
   applicationId: string
+  clientId?: string
   onViewTransactions?: (accountIndex?: number) => void
 }
 
 export default function IbvCard({
   applicationId,
+  clientId,
   onViewTransactions
 }: IbvCardProps) {
   const [data, setData] = useState<IbvApiResponse | null>(null)
@@ -188,6 +190,7 @@ export default function IbvCard({
               /> */}
               <IbvCardAccounts
                 accounts={summary.accounts}
+                clientId={clientId}
                 onViewTransactions={onViewTransactions}
               />
             </div>

@@ -10,6 +10,10 @@ type InitBody = {
   lastName?: string
   email?: string
   phone?: string
+  addressCity?: string
+  addressLine1?: string
+  addressProvince?: string
+  addressPostalCode?: string
   redirectParams?: Record<string, string>
 }
 
@@ -23,7 +27,11 @@ export async function POST(request: Request) {
       firstName: body.firstName,
       lastName: body.lastName,
       phone: body.phone,
-      email: body.email
+      email: body.email,
+      addressCity: body.addressCity,
+      addressLine1: body.addressLine1,
+      addressProvince: body.addressProvince,
+      addressPostalCode: body.addressPostalCode?.replace(/\s+/g, '')
     })
 
     // Create normalized provider data

@@ -27,6 +27,8 @@ interface ZumrailsConnectTokenResponse {
   result: {
     Token: string
     ExpirationUTC: string
+    CustomerId?: string // May be included in response
+    CompanyName?: string
   }
 }
 
@@ -57,14 +59,17 @@ export async function getZumrailsAuthToken(): Promise<{
     }
   }
 
-  const username = process.env.ZUMRAILS_USERNAME
-  const password = process.env.ZUMRAILS_PASSWORD
-  const baseUrl =
-    process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
+  // Get configuration from database (with env var fallback)
+  const { getZumRailsConfig } = await import('@/src/lib/supabase/config-helpers')
+  const config = await getZumRailsConfig()
+
+  const username = config.username
+  const password = config.password
+  const baseUrl = config.apiBaseUrl
 
   if (!username || !password) {
     throw new Error(
-      'ZUMRAILS_USERNAME and ZUMRAILS_PASSWORD must be configured'
+      'ZumRails username and password must be configured. Please set them in the admin configurations page or via ZUMRAILS_USERNAME and ZUMRAILS_PASSWORD environment variables.'
     )
   }
 
@@ -144,25 +149,76 @@ export async function getZumrailsAuthToken(): Promise<{
 
 /**
  * Create a connect token for bank verification
+ * @param authToken - Zumrails authentication token
+ * @param userInfo - Optional user information to pre-fill the form
+ * @param clientUserId - Optional client/user ID from our system to associate with the token
+ * @param extraField1 - Optional extra field 1 (typically application_id)
+ * @param extraField2 - Optional extra field 2 (typically loan_application_ibv_request id)
  */
 export async function createZumrailsConnectToken(
-  authToken: string
+  authToken: string,
+  userInfo?: {
+    firstName?: string
+    lastName?: string
+    email?: string
+    addressCity?: string
+    addressLine1?: string
+    addressProvince?: string
+    addressPostalCode?: string
+    clientUserId?: string
+    language?: string
+  },
+  extraField1?: string,
+  extraField2?: string
 ): Promise<{ connectToken: string; expiresAt: string; customerId: string }> {
-  const baseUrl =
-    process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
+  // Get base URL from config (with env var fallback)
+  const { getZumRailsConfig } = await import('@/src/lib/supabase/config-helpers')
+  const config = await getZumRailsConfig()
+  const baseUrl = config.apiBaseUrl
   const createTokenUrl = `${baseUrl}/api/connect/createtoken`
+  // api/connect/createToken
 
-  const payload = {
+  const payload: any = {
     ConnectTokenType: 'AddPaymentProfile',
     Configuration: {
       allowEft: true,
-      allowInterac: true,
-      allowVisaDirect: true,
-      allowCreditCard: true
+      allowInterac: false,
+      allowVisaDirect: false,
+      allowCreditCard: false,
+      ...(userInfo?.clientUserId && { clientUserId: userInfo.clientUserId }), // Add our system ID to track the connection
+      ...(userInfo?.firstName && { firstName: userInfo.firstName }),
+      ...(userInfo?.lastName && { lastName: userInfo.lastName }),
+      ...(userInfo?.email && { email: userInfo.email }),
+      ...(userInfo?.language && { language: userInfo.language }), // Add preferred language
+      // Add extra fields for webhook matching
+      ...(extraField1 && { ExtraField1: extraField1 }), // Typically application_id
+      ...(extraField2 && { ExtraField2: extraField2 }), // Typically loan_application_ibv_request id
+      ...(userInfo && {
+        User: {
+          ...(userInfo.firstName && { firstName: userInfo.firstName }),
+          ...(userInfo.lastName && { lastName: userInfo.lastName }),
+          ...(userInfo.email && { email: userInfo.email }),
+          ...(userInfo.addressCity && { addressCity: userInfo.addressCity }),
+          ...(userInfo.addressLine1 && { addressLine1: userInfo.addressLine1 }),
+          ...(userInfo.addressProvince && {
+            addressProvince: userInfo.addressProvince
+          }),
+          ...(userInfo.addressPostalCode && {
+            addressPostalCode: userInfo.addressPostalCode
+          })
+        }
+      })
     }
   }
 
-  console.log('[Zumrails] Creating connect token...', { url: createTokenUrl })
+  console.log('[Zumrails] Creating connect token...', {
+    url: createTokenUrl,
+    hasClientUserId: !!userInfo?.clientUserId,
+    clientUserId: userInfo?.clientUserId || undefined,
+    language: userInfo?.language || undefined,
+    extraField1: extraField1 || undefined,
+    extraField2: extraField2 || undefined
+  })
 
   const response = await fetch(createTokenUrl, {
     method: 'POST',
@@ -191,6 +247,12 @@ export async function createZumrailsConnectToken(
   } catch (error) {
     throw new Error('Failed to parse Zumrails connect token response')
   }
+  console.log('[Zumrails] Create token successful', {
+    body: tokenData,
+    token: tokenData.result?.Token?.substring(0, 50) + '...', // Log first 50 chars of token
+    hasCustomerId: !!tokenData.result?.CustomerId,
+    customerId: tokenData.result?.CustomerId
+  })
 
   if (tokenData.isError || !tokenData.result?.Token) {
     throw new Error(
@@ -199,26 +261,59 @@ export async function createZumrailsConnectToken(
   }
 
   console.log('[Zumrails] Connect token created successfully', {
-    expiresAt: tokenData.result.ExpirationUTC
+    expiresAt: tokenData.result.ExpirationUTC,
+    hasCustomerId: !!tokenData.result.CustomerId
   })
-  const customerId = tokenData.result.Token.split('|')[2]
+
+  // Try to get customerId from token response first (if included)
+  // Otherwise, get from auth token cache
+  let customerId =
+    tokenData.result.CustomerId || authTokenCache?.customerId || ''
+
+  if (!customerId) {
+    console.warn(
+      '[Zumrails] customerId not found in token response or cache, attempting to get from auth token'
+    )
+    // Fallback: get from auth token if not in cache or response
+    const { customerId: authCustomerId } = await getZumrailsAuthToken()
+    customerId = authCustomerId
+  }
+
+  if (!customerId) {
+    console.error(
+      '[Zumrails] Failed to get customerId - this may cause SDK issues'
+    )
+  }
 
   return {
     connectToken: tokenData.result.Token,
     expiresAt: tokenData.result.ExpirationUTC,
-    customerId
+    customerId: customerId || '' // Ensure we always return a string
   }
 }
 
 /**
  * Initialize Zumrails session - gets auth token and creates connect token
+ * @param userData - Optional user information to pre-fill the form
+ * @param applicationId - Optional application ID to pass as ExtraField1
+ * @param ibvRequestId - Optional IBV request ID to pass as ExtraField2
  */
-export async function initializeZumrailsSession(userData?: {
-  firstName?: string
-  lastName?: string
-  email?: string
-  phone?: string
-}): Promise<{
+export async function initializeZumrailsSession(
+  userData?: {
+    firstName?: string
+    lastName?: string
+    email?: string
+    phone?: string
+    addressCity?: string
+    addressLine1?: string
+    addressProvince?: string
+    addressPostalCode?: string
+    clientUserId?: string
+    language?: string
+  },
+  applicationId?: string,
+  ibvRequestId?: string
+): Promise<{
   connectToken: string
   customerId: string
   iframeUrl: string
@@ -227,8 +322,9 @@ export async function initializeZumrailsSession(userData?: {
   // Step 1: Get authentication token (from cache or authenticate)
   const { token } = await getZumrailsAuthToken()
 
-  // Step 2: Create connect token
-  const { connectToken, expiresAt, customerId } = await createZumrailsConnectToken(token)
+  // Step 2: Create connect token with user information, client user ID, and extra fields
+  const { connectToken, expiresAt, customerId } =
+    await createZumrailsConnectToken(token, userData, applicationId, ibvRequestId)
 
   // Step 3: Build iframe URL
   const connectorBaseUrl =
@@ -260,9 +356,10 @@ export async function fetchZumrailsDataByRequestId(
   // Authenticate with Zumrails
   const { token } = await getZumrailsAuthToken()
 
-  // Call Zumrails API to fetch information by request ID
-  const baseUrl =
-    process.env.ZUMRAILS_API_BASE_URL || 'https://api-sandbox.zumrails.com'
+  // Get base URL from config (with env var fallback)
+  const { getZumRailsConfig } = await import('@/src/lib/supabase/config-helpers')
+  const config = await getZumRailsConfig()
+  const baseUrl = config.apiBaseUrl
   const fetchUrl = `${baseUrl}/api/aggregation/GetInformationByRequestId/${requestId}`
 
   console.log('[Zumrails] Fetching data by request ID', {

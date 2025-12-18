@@ -144,7 +144,7 @@ export function formatFormDataForAPI(formData: any): SubmitLoanApplicationData {
     apartmentNumber: formData.apartmentNumber,
     city: formData.city,
     province: formData.province,
-    postalCode: formData.postalCode,
+    postalCode: formData.postalCode?.replace(/\s+/g, '') || '',
     movingDate: formData.movingDate,
     
     // Financial Obligations (Quebec only)
