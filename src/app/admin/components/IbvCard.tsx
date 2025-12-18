@@ -14,7 +14,7 @@ import IbvCardDocument from './ibv-card/IbvCardDocument'
 import IbvCardHistory from './ibv-card/IbvCardHistory'
 
 const PENDING_MESSAGE =
-  'Inverite is still processing this bank verification request. Try again in a few minutes.'
+  'The bank verification provider is still processing this request. Try again in a few minutes.'
 
 interface IbvCardProps {
   applicationId: string

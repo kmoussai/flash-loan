@@ -79,44 +79,22 @@ export async function POST(
       )
     }
 
-    const providerData = (ibvRequest as any)?.provider_data as Record<string, any> | null
-    const provider = (ibvRequest as any)?.provider
-    // Extract provider-specific identifier from provider_data JSONB
-    const requestGuid = providerData?.request_guid ||
-      providerData?.request_GUID ||
-      providerData?.requestGuid ||
-      (provider === 'zumrails' ? providerData?.customerId : null) ||
-      providerData?.request_GUID ||
-      null
+    const providerData = (ibvRequest as any)
+      ?.provider_data as Record<string, any> | null
 
-    const baseApiUrl =
-      process.env.INVERITE_API_BASE_URL || 'https://sandbox.inverite.com'
-    const customerStartBase =
-      process.env.INVERITE_CUSTOMER_START_BASE_URL ||
-      `${baseApiUrl.replace(/\/$/, '')}/customer/v2/web/start`
-    const sanitizedStartBase = customerStartBase.replace(/\/$/, '')
-    const computedStartUrl = requestGuid
-      ? `${sanitizedStartBase}/${requestGuid}/0/modern`
-      : null
-
-    const verificationLink =
-      (ibvRequest as any)?.request_url ||
-      providerData?.start_url ||
-      providerData?.iframe_url ||
-      computedStartUrl
-
-    if (!verificationLink) {
-      return NextResponse.json(
-        {
-          error:
-            'This IBV request does not have an accessible verification link yet.'
-        },
-        { status: 409 }
-      )
-    }
-
+    // Build verification link to our own IBV page, which will generate the ZumRails
+    // connect token on-demand when the client opens the link.
     const preferredLanguage =
       client.preferred_language === 'fr' ? 'fr' : 'en'
+    const origin =
+      request.headers.get('origin') ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      'http://localhost:3000'
+
+    const verificationLink = `${origin}/${preferredLanguage}/ibv/verify?request_id=${encodeURIComponent(
+      ibvRequestId
+    )}`
+
     const applicantName =
       `${client.first_name || ''} ${client.last_name || ''}`.trim() ||
       client.email
@@ -180,9 +158,8 @@ export async function POST(
             type: 'ibv_event',
             loanApplicationId: applicationId,
             clientId: client.id,
-            provider: 'inverite',
+            provider: 'zumrails',
             status: (ibvRequest as any)?.status || 'pending',
-            requestGuid: requestGuid,
             requestId: ibvRequestId,
             notificationSentAt: nowIso,
             iframeUrl: verificationLink || null

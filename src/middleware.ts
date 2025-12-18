@@ -114,6 +114,11 @@ export default async function middleware(req: NextRequest) {
       return NextResponse.next()
     }
 
+    // Allow ibv routes without auth (bank verification initialization from email links)
+    if (pathname.startsWith('/api/ibv/')) {
+      return NextResponse.next()
+    }
+
     // Allow webhook routes without auth (called by external services)
     if (pathname.includes('/webhook')) {
       return NextResponse.next()

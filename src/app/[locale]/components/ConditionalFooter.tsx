@@ -17,6 +17,7 @@ export default function ConditionalFooter({ locale }: ConditionalFooterProps) {
     'signin',
     'forgot-password',
     'reset-password'
+    // Note: /ibv/verify should show footer (not in this list)
   ]
   
   // Check if current route should hide footer
