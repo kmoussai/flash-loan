@@ -101,6 +101,11 @@ export function useQuickApplyForm(initialLocale: string) {
   const resetForm = useCallback(() => {
     setFormData(getDefaultFormData(initialLocale))
     setCurrentStep(1)
+    // Clear localStorage to ensure fresh start
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(STEP_STORAGE_KEY)
+    }
   }, [initialLocale])
 
   const nextStep = useCallback(() => {
