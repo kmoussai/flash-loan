@@ -68,7 +68,13 @@ export default function MicroLoanApplicationPage() {
     isSubmitted,
     verifiedFetchInFlight: ibvState.verifiedFetchInFlight,
     setLastVerifiedSubmissionRequestId: ibvState.setLastVerifiedSubmissionRequestId,
-    setIsSubmitted
+    setIsSubmitted: (submitted) => {
+      setIsSubmitted(submitted)
+      // Reset form when submission is complete (after IBV verification)
+      if (submitted) {
+        resetFormState()
+      }
+    }
   })
 
   // Create IBV verification callbacks
@@ -138,12 +144,14 @@ export default function MicroLoanApplicationPage() {
           setCurrentStep(5)
         } else {
           console.error('[Quick Apply] Invalid connectToken received:', connectToken)
-          // IBV required but no token available, mark as submitted
+          // IBV required but no token available, mark as submitted and reset form
           setIsSubmitted(true)
+          resetFormState()
         }
       } else {
-        // No IBV required, mark as submitted
+        // No IBV required, mark as submitted and reset form
         setIsSubmitted(true)
+        resetFormState()
       }
     } catch (error) {
       console.error('Error submitting application:', error)
