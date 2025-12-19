@@ -50,6 +50,9 @@ interface ZumrailsCard {
   }
 }
 
+// Import the typed result from zumrails-server
+import type { ZumrailsAggregationResult } from '@/src/lib/ibv/zumrails-server'
+
 interface ZumrailsResponse {
   RequestId?: string
   CustomerId?: string
@@ -60,6 +63,9 @@ interface ZumrailsResponse {
     Card?: ZumrailsCard
   }
 }
+
+// Union type to accept both the full response wrapper or just the result
+type ZumrailsDataInput = ZumrailsResponse | ZumrailsAggregationResult
 
 /**
  * Calculate NSF (Non-Sufficient Funds) counts from transactions
@@ -189,10 +195,16 @@ function calculateIncomeByCategory(transactions: ZumrailsTransaction[]): Array<{
  * Simplified to use ZumRails transaction categories directly
  */
 export function transformZumrailsToIBVSummary(
-  zumrailsData: ZumrailsResponse,
+  zumrailsData: ZumrailsDataInput,
   requestId: string
 ): IBVSummary {
-  const card = zumrailsData.Card || zumrailsData.result?.Card
+  // Handle both ZumrailsResponse (with optional Card/result) and ZumrailsAggregationResult (with required Card)
+  const card = 
+    'Card' in zumrailsData && zumrailsData.Card 
+      ? zumrailsData.Card 
+      : 'result' in zumrailsData && zumrailsData.result?.Card 
+        ? zumrailsData.result.Card 
+        : null
   if (!card || !card.Accounts || !Array.isArray(card.Accounts)) {
     return {
       request_guid: requestId,
