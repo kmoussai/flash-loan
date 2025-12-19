@@ -12,6 +12,7 @@ import IbvCardStatusCards from './ibv-card/IbvCardStatusCards'
 import IbvCardAccounts from './ibv-card/IbvCardAccounts'
 import IbvCardDocument from './ibv-card/IbvCardDocument'
 import IbvCardHistory from './ibv-card/IbvCardHistory'
+import IbvCardHolder from './ibv-card/IbvCardHolder'
 
 const PENDING_MESSAGE =
   'The bank verification provider is still processing this request. Try again in a few minutes.'
@@ -32,6 +33,7 @@ export default function IbvCard({
   const [error, setError] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [reRequesting, setReRequesting] = useState(false)
+  const [fetchingAggregation, setFetchingAggregation] = useState(false)
   const [history, setHistory] = useState<IbvRequestHistory[]>([])
   const [notifyingId, setNotifyingId] = useState<string | null>(null)
 
@@ -161,15 +163,54 @@ export default function IbvCard({
     }
   }
 
+  const fetchAggregation = async () => {
+    try {
+      setFetchingAggregation(true)
+      setError(null)
+      setInfoMessage(null)
+
+      const res = await fetch(
+        `/api/admin/applications/${applicationId}/ibv/fetch-aggregation`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(
+          json.message || json.error || 'Failed to fetch ZumRails aggregation data'
+        )
+      }
+
+      // Reload IBV data to show the updated results
+      await load()
+      setInfoMessage('Successfully fetched ZumRails aggregation data.')
+    } catch (e: any) {
+      console.error('[IbvCard] Error fetching aggregation:', e)
+      setError(e.message || 'Failed to fetch aggregation data')
+    } finally {
+      setFetchingAggregation(false)
+    }
+  }
+
 
   return (
     <div className='flex h-full flex-col rounded-lg border border-gray-200 bg-white shadow-sm'>
       <IbvCardHeader
         reRequesting={reRequesting}
+        fetchingAggregation={fetchingAggregation}
         ibvStatus={data?.ibv_status || null}
+        ibvProvider={data?.ibv_provider || null}
         onReRequest={async () => {
           if (reRequesting) return
           await initiateNewRequest()
+        }}
+        onFetchAggregation={async () => {
+          if (fetchingAggregation) return
+          await fetchAggregation()
         }}
       />
 
@@ -183,6 +224,12 @@ export default function IbvCard({
         ) : summary && summary.accounts && summary.accounts.length > 0 ? (
           <div className='p-3'>
             <div className='space-y-2.5'>
+              {data?.holder_info && (
+                <IbvCardHolder
+                  holder={data.holder_info}
+                  userInfo={data.user_info}
+                />
+              )}
               <IbvCardStatistics accounts={summary.accounts} />
               {/* <IbvCardStatusCards
                 ibvProvider={data?.ibv_provider || null}

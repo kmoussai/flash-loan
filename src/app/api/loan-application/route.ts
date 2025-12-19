@@ -20,6 +20,9 @@ import { sendInvitationEmail } from '@/src/lib/utils/temp-password'
 import { validateMinimumAge } from '@/src/lib/utils/age'
 import { initializeZumrailsSession } from '@/src/lib/ibv/zumrails-server'
 import { createIbvProviderData } from '@/src/lib/supabase/ibv-helpers'
+import { sendEmail } from '@/src/lib/email/smtp'
+import { generateNewApplicationAdminEmail } from '@/src/lib/email/templates/new-application-admin'
+import { getAppUrl } from '@/src/lib/config'
 
 const IBV_PROVIDER: IbvProvider = 'zumrails'
 
@@ -317,6 +320,166 @@ function buildIncomeFields(
 
 // Note: Database operations are now handled by the submit_loan_application PostgreSQL function
 // This ensures atomic transactions - if any step fails, everything rolls back
+
+// ===========================
+// BACKGROUND NOTIFICATION HELPER
+// ===========================
+
+/**
+ * Send admin notifications in the background (non-blocking)
+ * This function runs asynchronously after the response is sent to the client
+ */
+async function sendAdminNotifications(params: {
+  applicationId: string
+  clientId: string
+  loanAmount: number
+  preferredLanguage: 'en' | 'fr'
+  origin: string
+}) {
+  const { applicationId, clientId, loanAmount, preferredLanguage, origin } = params
+  
+  try {
+    const adminClient = createServerSupabaseAdminClient()
+
+    const { data: applicationDetails } = await adminClient
+      .from('loan_applications' as any)
+      .select(
+        `
+          id,
+          client_id,
+          application_status,
+          assigned_to,
+          loan_amount,
+          users:client_id (
+            first_name,
+            last_name,
+            email
+          )
+        `
+      )
+      .eq('id', applicationId)
+      .maybeSingle()
+
+    if (!applicationDetails) {
+      console.warn('[Loan Application] Application not found for notifications:', applicationId)
+      return
+    }
+
+    const staffRecipients = new Set<string>()
+
+    if ((applicationDetails as any).assigned_to) {
+      staffRecipients.add((applicationDetails as any).assigned_to)
+    }
+
+    // Get admin staff members
+    const { data: adminStaff } = await adminClient
+      .from('staff' as any)
+      .select('id, role')
+      .eq('role', 'admin')
+
+    adminStaff?.forEach((staff: { id: string } | null) => {
+      if (staff?.id) {
+        staffRecipients.add(staff.id)
+      }
+    })
+
+    const clientFirstName =
+      (applicationDetails as any)?.users?.first_name ?? ''
+    const clientLastName =
+      (applicationDetails as any)?.users?.last_name ?? ''
+    const clientEmail = (applicationDetails as any)?.users?.email ?? ''
+    const clientName = [clientFirstName, clientLastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || 'Client'
+
+    // Create in-app notifications
+    if (staffRecipients.size > 0) {
+      await Promise.all(
+        Array.from(staffRecipients).map(staffId =>
+          createNotification(
+            {
+              recipientId: staffId,
+              recipientType: 'staff',
+              title: 'New loan application submitted',
+              message: clientName
+                ? `${clientName} just submitted a new loan application.`
+                : 'A client just submitted a new loan application.',
+              category: 'application_submitted' as NotificationCategory,
+              metadata: {
+                type: 'application_event' as const,
+                loanApplicationId: (applicationDetails as any).id,
+                clientId: (applicationDetails as any).client_id,
+                status: (applicationDetails as any).application_status,
+                submittedAt: new Date().toISOString()
+              }
+            },
+            { client: adminClient }
+          )
+        )
+      )
+    }
+
+    // Send email notifications to admin users
+    if (adminStaff && adminStaff.length > 0) {
+      try {
+        // Get admin emails from auth.users
+        const adminIds = adminStaff.map((s: { id: string }) => s.id)
+        
+        // Fetch admin user emails from auth.users
+        const adminEmails: string[] = []
+        for (const adminId of adminIds) {
+          try {
+            const { data: authUser } = await adminClient.auth.admin.getUserById(adminId)
+            if (authUser?.user?.email) {
+              adminEmails.push(authUser.user.email)
+            }
+          } catch (err) {
+            console.warn(`[Loan Application] Failed to get email for admin ${adminId}:`, err)
+          }
+        }
+
+        if (adminEmails && adminEmails.length > 0) {
+          const applicationUrl = `${origin}/admin/applications/${applicationId}`
+          const finalLoanAmount = (applicationDetails as any).loan_amount || loanAmount
+
+          const emailContent = generateNewApplicationAdminEmail({
+            applicationId: applicationId,
+            clientName: clientName,
+            clientEmail: clientEmail,
+            loanAmount: finalLoanAmount,
+            applicationUrl: applicationUrl,
+            preferredLanguage: preferredLanguage
+          })
+
+          // Send email to all admin users
+          await sendEmail({
+            to: adminEmails,
+            subject: emailContent.subject,
+            html: emailContent.html,
+            text: emailContent.text
+          })
+
+          console.log('[Loan Application] Admin notification emails sent:', {
+            applicationId: applicationId,
+            recipientCount: adminEmails.length
+          })
+        }
+      } catch (emailError: any) {
+        console.error(
+          '[Loan Application] Failed to send admin notification emails:',
+          emailError
+        )
+        // Non-fatal - continue even if email fails
+      }
+    }
+  } catch (error: any) {
+    console.error(
+      '[Loan Application] Background notification error:',
+      error
+    )
+  }
+}
 
 // ===========================
 // MAIN POST HANDLER
@@ -806,89 +969,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Notify staff about the new application (non-blocking)
-    try {
-      if (txResult?.application_id) {
-        const adminClient = createServerSupabaseAdminClient()
-
-        const { data: applicationDetails } = await adminClient
-          .from('loan_applications' as any)
-          .select(
-            `
-              id,
-              client_id,
-              application_status,
-              assigned_to,
-              users:client_id (
-                first_name,
-                last_name
-              )
-            `
-          )
-          .eq('id', txResult.application_id)
-          .maybeSingle()
-
-        if (applicationDetails) {
-          const staffRecipients = new Set<string>()
-
-          if ((applicationDetails as any).assigned_to) {
-            staffRecipients.add((applicationDetails as any).assigned_to)
-          }
-
-          const { data: adminStaff } = await adminClient
-            .from('staff' as any)
-            .select('id, role')
-            .in('role', ['admin', 'support'])
-
-          adminStaff?.forEach((staff: { id: string } | null) => {
-            if (staff?.id) {
-              staffRecipients.add(staff.id)
-            }
-          })
-
-          if (staffRecipients.size > 0) {
-            const clientFirstName =
-              (applicationDetails as any)?.users?.first_name ?? ''
-            const clientLastName =
-              (applicationDetails as any)?.users?.last_name ?? ''
-            const clientName = [clientFirstName, clientLastName]
-              .filter(Boolean)
-              .join(' ')
-              .trim()
-
-            await Promise.all(
-              Array.from(staffRecipients).map(staffId =>
-                createNotification(
-                  {
-                    recipientId: staffId,
-                    recipientType: 'staff',
-                    title: 'New loan application submitted',
-                    message: clientName
-                      ? `${clientName} just submitted a new loan application.`
-                      : 'A client just submitted a new loan application.',
-                    category: 'application_submitted' as NotificationCategory,
-                    metadata: {
-                      type: 'application_event' as const,
-                      loanApplicationId: (applicationDetails as any).id,
-                      clientId: (applicationDetails as any).client_id,
-                      status: (applicationDetails as any).application_status,
-                      submittedAt: new Date().toISOString()
-                    }
-                  },
-                  { client: adminClient }
-                )
-              )
-            )
-          }
-        }
-      }
-    } catch (notificationError) {
-      console.error(
-        '[Loan Application] Failed to create staff notification:',
-        notificationError
-      )
-    }
-
     // If IBV is required but not yet completed, initiate IBV request server-side
     let ibvInitiationData: any = null
 
@@ -1239,27 +1319,50 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Return success response
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Loan application submitted successfully',
-        data: {
-          applicationId: txResult.application_id,
-          isPreviousBorrower: txResult.is_previous_borrower,
-          referenceNumber: `FL-${txResult.application_id.toString().slice(-8)}`,
-          // Include IBV initiation data if available
-          ...(ibvInitiationData && {
-            ibv: {
-              provider: IBV_PROVIDER,
-              required: true,
-              ...ibvInitiationData
-            }
+    // Prepare response data (after all IBV initiation is complete)
+    const responseData = {
+      success: true,
+      message: 'Loan application submitted successfully',
+      data: {
+        applicationId: txResult.application_id,
+        isPreviousBorrower: txResult.is_previous_borrower,
+        referenceNumber: `FL-${txResult.application_id.toString().slice(-8)}`,
+        // Include IBV initiation data if available
+        ...(ibvInitiationData && {
+          ibv: {
+            provider: IBV_PROVIDER,
+            required: true,
+            ...ibvInitiationData
+          }
+        })
+      }
+    }
+
+    // Send notifications in background (fire-and-forget, non-blocking)
+    // This runs after the response is sent to the client
+    if (txResult?.application_id) {
+      // Use setImmediate to defer execution to next event loop tick
+      // This ensures the response is sent first
+      setImmediate(async () => {
+        try {
+          await sendAdminNotifications({
+            applicationId: txResult.application_id,
+            clientId: txResult.client_id,
+            loanAmount: parseFloat(body.loanAmount),
+            preferredLanguage: (body.preferredLanguage as 'en' | 'fr') || 'en',
+            origin: request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || getAppUrl()
           })
+        } catch (error: any) {
+          console.error(
+            '[Loan Application] Background notification error:',
+            error
+          )
         }
-      },
-      { status: 201 }
-    )
+      })
+    }
+
+    // Return success response immediately (notifications run in background)
+    return NextResponse.json(responseData, { status: 201 })
   } catch (error: any) {
     console.error('Loan application submission error:', error)
 

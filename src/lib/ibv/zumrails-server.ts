@@ -32,6 +32,85 @@ interface ZumrailsConnectTokenResponse {
   }
 }
 
+/**
+ * ZumRails Aggregation API Response Types
+ * Based on /api/aggregation/GetInformationByRequestId/{requestId} endpoint
+ */
+export interface ZumrailsCategoryGroup {
+  Id: string
+  Name: string
+}
+
+export interface ZumrailsCategory {
+  Id: string
+  Name: string
+  CategoryGroupId: string
+  CategoryGroup: ZumrailsCategoryGroup
+  InsightsType: string
+}
+
+export interface ZumrailsTransaction {
+  Id: string
+  UpdatedAt: string
+  Date: string
+  Description: string
+  Credit?: number
+  Debit?: number
+  Balance: number
+  Category: ZumrailsCategory
+}
+
+export interface ZumrailsAccount {
+  Id: string
+  InstitutionNumber: string
+  TransitNumber: string
+  AccountNumber: string
+  Title: string
+  Balance: number
+  Currency: string
+  AccountCategory: string
+  AccountSubCategory: string
+  Transactions: ZumrailsTransaction[]
+}
+
+export interface ZumrailsHolder {
+  FirstName: string
+  LastName: string
+  FullName: string
+  Email: string
+  PhoneNumber: string
+  AddressCivic: string
+  AddressCity: string
+  AddressProvince: string
+  AddressCountry: string
+  AddressPostalCode: string
+}
+
+export interface ZumrailsCard {
+  Id: string
+  UpdatedAt: string
+  CreatedAt: string
+  Accounts: ZumrailsAccount[]
+  InstitutionId: string
+  InstitutionName: string
+  HolderId: string
+  Holder: ZumrailsHolder
+  SelectedAccountId: string
+}
+
+export interface ZumrailsAggregationResult {
+  RequestId: string
+  CustomerId: string
+  Card: ZumrailsCard
+}
+
+export interface ZumrailsAggregationResponse {
+  statusCode: number
+  message: string
+  isError: boolean
+  result: ZumrailsAggregationResult
+}
+
 // Cache for authentication token (in-memory, expires based on JWT)
 let authTokenCache: {
   token: string
@@ -349,10 +428,13 @@ export async function initializeZumrailsSession(
 /**
  * Fetch bank account information from Zumrails API by request ID
  * Calls: /api/aggregation/GetInformationByRequestId/{requestId}
+ * 
+ * @param requestId - The ZumRails aggregation request ID
+ * @returns The aggregation result containing Card, Accounts, and Transactions
  */
 export async function fetchZumrailsDataByRequestId(
   requestId: string
-): Promise<any> {
+): Promise<ZumrailsAggregationResult> {
   // Authenticate with Zumrails
   const { token } = await getZumrailsAuthToken()
 
@@ -383,12 +465,26 @@ export async function fetchZumrailsDataByRequestId(
       statusText: response.statusText,
       body: rawText
     })
+    
+    // Try to parse error response for better error messages
+    let errorMessage = rawText || response.statusText
+    try {
+      const errorData = rawText ? JSON.parse(rawText) : {}
+      if (errorData.responseException?.exceptionMessage) {
+        errorMessage = errorData.responseException.exceptionMessage
+      } else if (errorData.message) {
+        errorMessage = errorData.message
+      }
+    } catch {
+      // Use raw text if parsing fails
+    }
+    
     throw new Error(
-      `Zumrails API returned ${response.status}: ${rawText || response.statusText}`
+      `Zumrails API returned ${response.status}: ${errorMessage}`
     )
   }
 
-  let apiData: any
+  let apiData: ZumrailsAggregationResponse | any
   try {
     apiData = rawText ? JSON.parse(rawText) : {}
   } catch (error) {
@@ -402,10 +498,24 @@ export async function fetchZumrailsDataByRequestId(
     throw new Error(apiData.message || 'Zumrails API returned an error')
   }
 
+  // Validate response structure
+  if (!apiData.result) {
+    throw new Error('Invalid Zumrails API response: missing result field')
+  }
+
+  const result = apiData.result as ZumrailsAggregationResult
+
+  // Validate required fields
+  if (!result.RequestId || !result.CustomerId || !result.Card) {
+    throw new Error('Invalid Zumrails API response: missing required fields in result')
+  }
+
   console.log('[Zumrails] Successfully fetched data by request ID', {
     requestId,
-    hasData: !!apiData.result || !!apiData.data
+    customerId: result.CustomerId,
+    hasCard: !!result.Card,
+    accountCount: result.Card?.Accounts?.length || 0
   })
 
-  return apiData.result || apiData.data || apiData
+  return result
 }

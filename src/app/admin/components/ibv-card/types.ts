@@ -18,6 +18,24 @@ export interface IbvRequestHistory {
   updated_at: string
 }
 
+export interface ZumrailsHolder {
+  FirstName: string
+  LastName: string
+  FullName: string
+  Email: string
+  PhoneNumber: string
+  AddressCivic: string
+  AddressCity: string
+  AddressProvince: string
+  AddressCountry: string
+  AddressPostalCode: string
+}
+
+export interface UserInfo {
+  first_name: string | null
+  last_name: string | null
+}
+
 export interface IbvApiResponse {
   application_id: string
   ibv_provider: string | null
@@ -25,6 +43,8 @@ export interface IbvApiResponse {
   ibv_verified_at: string | null
   request_guid: string | null
   ibv_results: IBVSummary
+  holder_info?: ZumrailsHolder | null
+  user_info?: UserInfo | null
 }
 
 export const getStatusColor = (status: string | null) => {
