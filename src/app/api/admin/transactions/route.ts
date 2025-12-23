@@ -20,7 +20,60 @@ export async function GET(request: NextRequest) {
     const provider = searchParams.get('provider') // 'zumrails', 'accept_pay', etc.
     const transactionType = searchParams.get('transaction_type') // 'disbursement', 'collection'
     const status = searchParams.get('status') // Normalized status
-    const search = searchParams.get('search') // Search in transaction IDs, loan numbers, etc.
+    const search = searchParams.get('search')?.trim() // Search in user name only
+
+    // If search is provided, find matching user IDs first
+    let matchingLoanIds: string[] | null = null
+    if (search) {
+      // Search for users by first_name or last_name (case-insensitive)
+      const searchPattern = `%${search}%`
+      const { data: matchingUsers, error: userSearchError } = await supabase
+        .from('users')
+        .select('id')
+        .or(`first_name.ilike.${searchPattern},last_name.ilike.${searchPattern}`)
+
+      if (userSearchError) {
+        console.error('Error searching users:', userSearchError)
+        return NextResponse.json(
+          {
+            error: 'Failed to search users',
+            details: userSearchError.message
+          },
+          { status: 500 }
+        )
+      }
+
+      if (matchingUsers && matchingUsers.length > 0) {
+        const userIds = matchingUsers.map((u: any) => u.id)
+        
+        // Get loan IDs for these users
+        const { data: matchingLoans, error: loanSearchError } = await supabase
+          .from('loans')
+          .select('id')
+          .in('user_id', userIds)
+
+        if (loanSearchError) {
+          console.error('Error searching loans:', loanSearchError)
+          return NextResponse.json(
+            {
+              error: 'Failed to search loans',
+              details: loanSearchError.message
+            },
+            { status: 500 }
+          )
+        }
+
+        if (matchingLoans && matchingLoans.length > 0) {
+          matchingLoanIds = matchingLoans.map((l: any) => l.id)
+        } else {
+          // No matching loans found, return empty result
+          matchingLoanIds = []
+        }
+      } else {
+        // No matching users found, return empty result
+        matchingLoanIds = []
+      }
+    }
 
     // Build query
     let query = supabase.from('payment_transactions').select(
@@ -50,6 +103,40 @@ export async function GET(request: NextRequest) {
       { count: 'exact' }
     )
 
+    // Apply search filter at database level
+    if (matchingLoanIds !== null) {
+      if (matchingLoanIds.length === 0) {
+        // No matching loans, return empty result early
+        return NextResponse.json({
+          success: true,
+          transactions: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0
+          },
+          counts: {
+            status: {
+              initiated: 0,
+              pending: 0,
+              processing: 0,
+              completed: 0,
+              failed: 0,
+              cancelled: 0,
+              reversed: 0
+            },
+            provider: {},
+            type: {
+              disbursement: 0,
+              collection: 0
+            }
+          }
+        })
+      }
+      query = query.in('loan_id', matchingLoanIds)
+    }
+
     // Apply filters
     if (provider) {
       query = query.eq('provider', provider)
@@ -64,21 +151,11 @@ export async function GET(request: NextRequest) {
       query = query.neq('status', 'cancelled')
     }
 
-    // Search filter (searches in provider_data JSONB and loan numbers)
-    if (search) {
-      // Note: JSONB text search requires different syntax
-      // We'll filter after fetching or use a more complex query
-      // For now, we'll do client-side filtering for search
-    }
-
-    // Pagination
-    const from = (page - 1) * limit
-    const to = from + limit - 1
-    query = query.range(from, to)
-
-    // Order by created_at descending (newest first)
+    // Order by created_at descending (newest first) for initial query
+    // We'll re-sort by payment_date after processing
     query = query.order('created_at', { ascending: false })
 
+    // Fetch all matching transactions (we'll sort and paginate after)
     const { data: transactions, error, count } = await query
 
     if (error) {
@@ -131,13 +208,9 @@ export async function GET(request: NextRequest) {
         typeCounts.collection++
       }
 
-      // Extract provider-specific data from JSONB
+      // Extract ZumRails transaction ID from provider_data
       const providerData = tx.provider_data || {}
-      const zumRailsStatus =
-        providerData.transaction_status || providerData.provider_status
-      const transactionId =
-        providerData.transaction_id || providerData.provider_transaction_id
-      const clientTransactionId = providerData.client_transaction_id
+      const zumrailsTransactionId = providerData.transaction_id || null
 
       // Format borrower info
       const borrower = tx.loans?.users
@@ -147,11 +220,14 @@ export async function GET(request: NextRequest) {
         : 'N/A'
 
       return {
-        ...tx,
-        // Provider-specific extracted fields
-        provider_transaction_id: transactionId,
-        provider_client_transaction_id: clientTransactionId,
-        provider_status: zumRailsStatus || tx.status,
+        // Core transaction fields
+        amount: tx.amount,
+        status: tx.status,
+        transaction_type: tx.transaction_type,
+        created_at: tx.created_at,
+        updated_at: tx.updated_at,
+        // Provider info
+        zumrails_transaction_id: zumrailsTransactionId,
         // Borrower info
         borrower_name: borrowerName,
         borrower_email: borrower?.email || null,
@@ -166,26 +242,22 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Apply search filter if provided (client-side filtering)
-    if (search) {
-      const searchLower = search.toLowerCase()
-      processedTransactions = processedTransactions.filter((tx: any) => {
-        return (
-          tx.provider_transaction_id?.toLowerCase().includes(searchLower) ||
-          tx.provider_client_transaction_id
-            ?.toLowerCase()
-            .includes(searchLower) ||
-          tx.loan_number?.toString().includes(searchLower) ||
-          tx.borrower_name?.toLowerCase().includes(searchLower) ||
-          tx.borrower_email?.toLowerCase().includes(searchLower) ||
-          tx.id?.toLowerCase().includes(searchLower)
-        )
-      })
-    }
+    // Sort by payment_date ascending (upcoming dates first)
+    // Transactions without payment_date go to the end
+    processedTransactions.sort((a: any, b: any) => {
+      const dateA = a.payment_date ? new Date(a.payment_date).getTime() : Number.MAX_SAFE_INTEGER
+      const dateB = b.payment_date ? new Date(b.payment_date).getTime() : Number.MAX_SAFE_INTEGER
+      return dateA - dateB
+    })
+
+    // Apply pagination after sorting
+    const from = (page - 1) * limit
+    const to = from + limit
+    const paginatedTransactions = processedTransactions.slice(from, to)
 
     return NextResponse.json({
       success: true,
-      transactions: processedTransactions,
+      transactions: paginatedTransactions,
       pagination: {
         page,
         limit,

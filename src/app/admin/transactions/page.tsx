@@ -4,22 +4,15 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminDashboardLayout from '../components/AdminDashboardLayout'
 import Select from '@/src/app/[locale]/components/Select'
+import ZumRailsTransactionModal from './components/ZumRailsTransactionModal'
 
 interface PaymentTransaction {
-  id: string
-  provider: 'zumrails' | 'accept_pay' | string
-  transaction_type: 'disbursement' | 'collection'
-  loan_id: string | null
-  loan_payment_id: string | null
   amount: number
   status: 'initiated' | 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'reversed'
+  transaction_type: 'disbursement' | 'collection'
   created_at: string
   updated_at: string | null
-  provider_data: any
-  // Extracted fields
-  provider_transaction_id?: string | null
-  provider_client_transaction_id?: string | null
-  provider_status?: string | null
+  zumrails_transaction_id?: string | null
   borrower_name?: string | null
   borrower_email?: string | null
   borrower_phone?: string | null
@@ -40,10 +33,6 @@ interface StatusCounts {
   reversed: number
 }
 
-interface ProviderCounts {
-  [key: string]: number
-}
-
 interface TypeCounts {
   disbursement: number
   collection: number
@@ -56,7 +45,6 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [providerFilter, setProviderFilter] = useState<string>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -72,7 +60,6 @@ export default function TransactionsPage() {
     cancelled: 0,
     reversed: 0
   })
-  const [providerCounts, setProviderCounts] = useState<ProviderCounts>({})
   const [typeCounts, setTypeCounts] = useState<TypeCounts>({
     disbursement: 0,
     collection: 0
@@ -83,6 +70,8 @@ export default function TransactionsPage() {
     message: string
     result?: any
   } | null>(null)
+  const [zumrailsModalOpen, setZumrailsModalOpen] = useState(false)
+  const [zumrailsTransactionId, setZumrailsTransactionId] = useState<string | null>(null)
 
   const fetchTransactions = async (page: number = currentPage) => {
     try {
@@ -94,9 +83,6 @@ export default function TransactionsPage() {
 
       if (statusFilter !== 'all') {
         params.append('status', statusFilter)
-      }
-      if (providerFilter !== 'all') {
-        params.append('provider', providerFilter)
       }
       if (typeFilter !== 'all') {
         params.append('transaction_type', typeFilter)
@@ -116,7 +102,6 @@ export default function TransactionsPage() {
       setTransactions(data.transactions || [])
       setFilteredTransactions(data.transactions || [])
       setStatusCounts(data.counts?.status || statusCounts)
-      setProviderCounts(data.counts?.provider || {})
       setTypeCounts(data.counts?.type || typeCounts)
       setCurrentPage(data.pagination?.page || page)
       setTotalPages(data.pagination?.totalPages || 1)
@@ -132,7 +117,7 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     fetchTransactions(1)
-  }, [statusFilter, providerFilter, typeFilter])
+  }, [statusFilter, typeFilter])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -169,15 +154,19 @@ export default function TransactionsPage() {
       : 'bg-indigo-100 text-indigo-800'
   }
 
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string | null, includeTime: boolean = true) => {
     if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const date = new Date(dateString)
+    const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
       month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+      day: 'numeric'
+    }
+    if (includeTime) {
+      options.hour = '2-digit'
+      options.minute = '2-digit'
+    }
+    return date.toLocaleDateString('en-US', options)
   }
 
   const formatCurrency = (amount: number) => {
@@ -188,10 +177,22 @@ export default function TransactionsPage() {
   }
 
   const handleViewDetails = (transaction: PaymentTransaction) => {
-    // Navigate to transaction details or open modal
-    if (transaction.loan_id) {
-      router.push(`/admin/loan/${transaction.loan_id}`)
+    // Navigate to loan details if loan number is available
+    if (transaction.loan_number) {
+      // We'll need to fetch the loan ID from the loan number
+      // For now, we can navigate using a search or keep it disabled
+      // This would require an additional API call to get loan by number
     }
+  }
+
+  const handleViewZumrailsDetails = (transactionId: string) => {
+    setZumrailsTransactionId(transactionId)
+    setZumrailsModalOpen(true)
+  }
+
+  const handleCloseZumrailsModal = () => {
+    setZumrailsModalOpen(false)
+    setZumrailsTransactionId(null)
   }
 
   const handleSyncLoanPayments = async () => {
@@ -376,31 +377,16 @@ export default function TransactionsPage() {
           ))}
         </div>
 
-        {/* Provider & Type Stats */}
-        <div className='grid gap-3 md:grid-cols-2'>
-          <div className='rounded-lg bg-white p-3 shadow-sm'>
-            <h3 className='mb-2 text-xs font-medium text-gray-700'>By Provider</h3>
-            <div className='flex flex-wrap gap-2'>
-              {Object.entries(providerCounts).map(([provider, count]) => (
-                <span
-                  key={provider}
-                  className='inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800'
-                >
-                  {provider}: {count}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className='rounded-lg bg-white p-3 shadow-sm'>
-            <h3 className='mb-2 text-xs font-medium text-gray-700'>By Type</h3>
-            <div className='flex gap-2'>
-              <span className='inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800'>
-                Disbursement: {typeCounts.disbursement}
-              </span>
-              <span className='inline-flex items-center rounded-full bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-800'>
-                Collection: {typeCounts.collection}
-              </span>
-            </div>
+        {/* Type Stats */}
+        <div className='rounded-lg bg-white p-3 shadow-sm'>
+          <h3 className='mb-2 text-xs font-medium text-gray-700'>By Type</h3>
+          <div className='flex gap-2'>
+            <span className='inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800'>
+              Disbursement: {typeCounts.disbursement}
+            </span>
+            <span className='inline-flex items-center rounded-full bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-800'>
+              Collection: {typeCounts.collection}
+            </span>
           </div>
         </div>
 
@@ -427,20 +413,6 @@ export default function TransactionsPage() {
                 />
               </div>
 
-              <label className='text-xs font-medium text-gray-700'>Provider:</label>
-              <div className='w-40'>
-                <Select
-                  value={providerFilter}
-                  onValueChange={setProviderFilter}
-                  options={[
-                    { value: 'all', label: 'All Providers' },
-                    { value: 'zumrails', label: 'Zum Rails' },
-                    { value: 'accept_pay', label: 'Accept Pay' }
-                  ]}
-                  placeholder='Select provider'
-                />
-              </div>
-
               <label className='text-xs font-medium text-gray-700'>Type:</label>
               <div className='w-40'>
                 <Select
@@ -459,7 +431,7 @@ export default function TransactionsPage() {
             <div className='flex items-center gap-2'>
               <input
                 type='text'
-                placeholder='Search by transaction ID, loan number, borrower...'
+                placeholder='Search by borrower name...'
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm md:w-64 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
@@ -481,7 +453,7 @@ export default function TransactionsPage() {
           <div className='border-b border-gray-200 px-4 py-3'>
             <div className='flex items-center justify-between'>
               <h2 className='text-sm font-semibold text-gray-900'>
-                {statusFilter === 'all' && providerFilter === 'all' && typeFilter === 'all'
+                {statusFilter === 'all' && typeFilter === 'all'
                   ? 'All Transactions'
                   : 'Filtered Transactions'}
               </h2>
@@ -507,7 +479,7 @@ export default function TransactionsPage() {
                 <span className='mb-2 block text-2xl'>💳</span>
                 <p className='text-sm text-gray-600'>No transactions found</p>
                 <p className='mt-1 text-xs text-gray-400'>
-                  {searchTerm || statusFilter !== 'all' || providerFilter !== 'all' || typeFilter !== 'all'
+                  {searchTerm || statusFilter !== 'all' || typeFilter !== 'all'
                     ? 'Try adjusting your filters' 
                     : 'Transactions will appear here once payment operations are performed'}
                 </p>
@@ -518,19 +490,16 @@ export default function TransactionsPage() {
                   <thead className='bg-gray-50'>
                     <tr>
                       <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                        Transaction ID
-                      </th>
-                      <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                        Provider
-                      </th>
-                      <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
-                        Type
-                      </th>
-                      <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                         Borrower
                       </th>
                       <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                         Loan #
+                      </th>
+                      <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                        Payment #
+                      </th>
+                      <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
+                        Payment Date
                       </th>
                       <th className='px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500'>
                         Amount
@@ -547,33 +516,11 @@ export default function TransactionsPage() {
                     </tr>
                   </thead>
                   <tbody className='divide-y divide-gray-200 bg-white'>
-                    {filteredTransactions.map(transaction => (
+                    {filteredTransactions.map((transaction, index) => (
                       <tr
-                        key={transaction.id}
+                        key={`${transaction.loan_number}-${transaction.payment_number}-${index}`}
                         className='transition-colors hover:bg-gray-50'
                       >
-                        <td className='whitespace-nowrap px-4 py-3'>
-                          <div className='text-sm font-mono text-gray-900'>
-                            {transaction.provider_transaction_id || transaction.id.slice(0, 8)}
-                          </div>
-                          {transaction.provider_client_transaction_id && (
-                            <div className='text-xs text-gray-500'>
-                              Client: {transaction.provider_client_transaction_id.slice(0, 8)}
-                            </div>
-                          )}
-                        </td>
-                        <td className='whitespace-nowrap px-4 py-3'>
-                          <span className='inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-800 capitalize'>
-                            {transaction.provider}
-                          </span>
-                        </td>
-                        <td className='whitespace-nowrap px-4 py-3'>
-                          <span
-                            className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getTypeBadgeColor(transaction.transaction_type)}`}
-                          >
-                            {transaction.transaction_type}
-                          </span>
-                        </td>
                         <td className='px-4 py-3'>
                           <div className='flex items-center'>
                             <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-medium text-purple-600'>
@@ -601,6 +548,22 @@ export default function TransactionsPage() {
                           )}
                         </td>
                         <td className='whitespace-nowrap px-4 py-3'>
+                          {transaction.payment_number ? (
+                            <div className='text-sm text-gray-900'>
+                              #{transaction.payment_number}
+                            </div>
+                          ) : (
+                            <span className='text-sm text-gray-400'>N/A</span>
+                          )}
+                        </td>
+                        <td className='whitespace-nowrap px-4 py-3 text-sm text-gray-500'>
+                          {transaction.payment_date ? (
+                            formatDate(transaction.payment_date, false)
+                          ) : (
+                            <span className='text-gray-400'>N/A</span>
+                          )}
+                        </td>
+                        <td className='whitespace-nowrap px-4 py-3'>
                           <div className='text-sm font-semibold text-gray-900'>
                             {formatCurrency(transaction.amount)}
                           </div>
@@ -611,23 +574,67 @@ export default function TransactionsPage() {
                           >
                             {transaction.status}
                           </span>
-                          {transaction.provider_status && transaction.provider_status !== transaction.status && (
-                            <div className='mt-1 text-xs text-gray-500'>
-                              Provider: {transaction.provider_status}
-                            </div>
-                          )}
                         </td>
                         <td className='whitespace-nowrap px-4 py-3 text-sm text-gray-500'>
                           {formatDate(transaction.created_at)}
                         </td>
-                        <td className='whitespace-nowrap px-4 py-3 text-sm' onClick={(e) => e.stopPropagation()}>
-                          {transaction.loan_id && (
-                            <button
-                              onClick={() => handleViewDetails(transaction)}
-                              className='text-blue-600 hover:text-blue-800 text-xs'
-                            >
-                              View Loan
-                            </button>
+                        <td className='whitespace-nowrap px-4 py-3 text-sm'>
+                          {transaction.zumrails_transaction_id ? (
+                            <div className='flex items-center gap-1'>
+                              <button
+                                onClick={() => handleViewZumrailsDetails(transaction.zumrails_transaction_id!)}
+                                className='inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100'
+                                title='View ZumRails transaction details'
+                              >
+                                <svg
+                                  className='h-3 w-3'
+                                  fill='none'
+                                  viewBox='0 0 24 24'
+                                  stroke='currentColor'
+                                >
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M15 12a3 3 0 11-6 0 3 3 0 016 0z'
+                                  />
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'
+                                  />
+                                </svg>
+                                View
+                              </button>
+                              <button
+                                onClick={() => {
+                                  window.open(
+                                    `https://app.zumrails.com/#/transactions/${transaction.zumrails_transaction_id}`,
+                                    '_blank',
+                                    'noopener,noreferrer'
+                                  )
+                                }}
+                                className='inline-flex items-center gap-1 rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100'
+                                title='Open ZumRails in new tab'
+                              >
+                                <svg
+                                  className='h-3 w-3'
+                                  fill='none'
+                                  viewBox='0 0 24 24'
+                                  stroke='currentColor'
+                                >
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14'
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className='text-xs text-gray-400'>-</span>
                           )}
                         </td>
                       </tr>
@@ -665,6 +672,13 @@ export default function TransactionsPage() {
             )}
           </div>
         </div>
+
+        {/* ZumRails Transaction Details Modal */}
+        <ZumRailsTransactionModal
+          transactionId={zumrailsTransactionId}
+          isOpen={zumrailsModalOpen}
+          onClose={handleCloseZumrailsModal}
+        />
       </div>
     </AdminDashboardLayout>
   )
