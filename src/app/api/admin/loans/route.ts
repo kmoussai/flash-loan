@@ -81,6 +81,13 @@ export async function GET(request: NextRequest) {
           sent_method,
           client_signed_at,
           contract_terms
+        ),
+        loan_payments (
+          id,
+          payment_date,
+          status,
+          amount,
+          created_at
         )
 
       `, { count: 'exact' })
@@ -160,7 +167,33 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const loansList = loans || []
+    const loansList = (loans || []).map((loan: any) => {
+      // For completed/paid loans, set balance to 0
+      const adjustedBalance = loan.status === 'completed' ? 0 : Number(loan.remaining_balance || 0)
+      
+      // Find next payment date from loan_payments (earliest pending payment)
+      let nextPaymentDate: string | null = loan.due_date || null
+      if (loan.loan_payments && Array.isArray(loan.loan_payments) && loan.loan_payments.length > 0) {
+        // Filter for pending payments and get the earliest one
+        const pendingPayments = loan.loan_payments
+          .filter((p: any) => p.status === 'pending')
+          .sort((a: any, b: any) => {
+            const dateA = new Date(a.payment_date || a.created_at).getTime()
+            const dateB = new Date(b.payment_date || b.created_at).getTime()
+            return dateA - dateB // Earliest first
+          })
+        
+        if (pendingPayments.length > 0) {
+          nextPaymentDate = pendingPayments[0].payment_date || pendingPayments[0].created_at
+        }
+      }
+
+      return {
+        ...loan,
+        remaining_balance: adjustedBalance,
+        next_payment_date: nextPaymentDate
+      }
+    })
 
     return NextResponse.json({
       loans: loansList,
