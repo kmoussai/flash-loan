@@ -207,6 +207,7 @@ export default function LoanSummary({
         failedPaymentCount={failedPaymentCount}
         nsfCount={nsfCount}
         onLoanDelete={onLoanUpdate}
+        onSyncLoan={revalidateAll}
       />
       <PaymentTable
         payments={data ?? []}

@@ -65,6 +65,11 @@ interface Loan {
   province: string
 }
 
+// Extended API loan interface
+interface LoanFromAPIWithPayments extends LoanFromAPI {
+  next_payment_date?: string | null
+}
+
 interface StatusCounts {
   active: number
   paid: number
@@ -99,10 +104,16 @@ const mapStatusToDB = (status: LoanStatusUI | 'all'): LoanStatusDB | 'all' => {
 }
 
 // Transform API loan to UI loan
-const transformLoan = (apiLoan: LoanFromAPI, index: number): Loan => {
+const transformLoan = (apiLoan: LoanFromAPIWithPayments, index: number): Loan => {
   const firstName = apiLoan.users?.first_name || ''
   const lastName = apiLoan.users?.last_name || ''
   const borrowerName = `${firstName} ${lastName}`.trim() || 'N/A'
+
+  // For paid loans, balance should always be 0
+  const balance = apiLoan.status === 'completed' ? 0 : Number(apiLoan.remaining_balance || 0)
+
+  // Use next_payment_date from API (calculated from pending payments) for "Next Payment" column
+  const displayPaymentDate = apiLoan.next_payment_date || apiLoan.due_date
 
   return {
     id: apiLoan.id,
@@ -114,13 +125,13 @@ const transformLoan = (apiLoan: LoanFromAPI, index: number): Loan => {
     borrower_email: apiLoan.users?.email || 'N/A',
     borrower_phone: apiLoan.users?.phone || 'N/A',
     loan_amount: Number(apiLoan.principal_amount),
-    remaining_balance: Number(apiLoan.remaining_balance),
+    remaining_balance: balance,
     interest_rate: Number(apiLoan.interest_rate),
     term_months: apiLoan.term_months,
     status: mapStatusToUI(apiLoan.status),
     origination_date: apiLoan.disbursement_date || apiLoan.created_at,
-    next_payment_date: apiLoan.due_date,
-    last_payment_date: null, // Will be calculated from payments if needed
+    next_payment_date: displayPaymentDate,
+    last_payment_date: null, // Not needed for display, but kept for interface compatibility
     total_payments: 0, // Will be calculated from payments if needed
     province: 'N/A' // Not in loan table, could be fetched from address if needed
   }

@@ -314,29 +314,30 @@ export async function POST(
       // Don't fail the request, but log the errors
     }
 
-    // Step 4: Handle ZumRails transactions - cancel old ones and create new ones (non-blocking)
-    // Run in background without blocking the response
-    handleScheduleRecalculationForZumRails({
-      loanId: loanId,
-      reason: `Payment schedule recalculated after deferral. Deferred payment: ${paymentId}, original amount: ${Number(paymentData.amount).toFixed(2)}${feeAmount > 0 ? `, deferral fee: ${feeAmount.toFixed(2)}` : ''}`
-    })
-      .then((zumRailsResult) => {
-        if (!zumRailsResult.success) {
-          console.warn('[Defer Payment] ZumRails transaction handling completed with warnings:', {
-            cancelled: zumRailsResult.cancelled.count,
-            created: zumRailsResult.created.created,
-            errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
-          })
-        } else {
-          console.log('[Defer Payment] ZumRails transactions handled:', {
-            cancelled: zumRailsResult.cancelled.count,
-            created: zumRailsResult.created.created
-          })
-        }
+    // Step 4: Handle ZumRails transactions - cancel old ones and create new ones
+    // Wait for completion to ensure it runs in Vercel functions
+    try {
+      const zumRailsResult = await handleScheduleRecalculationForZumRails({
+        loanId: loanId,
+        reason: `Payment schedule recalculated after deferral. Deferred payment: ${paymentId}, original amount: ${Number(paymentData.amount).toFixed(2)}${feeAmount > 0 ? `, deferral fee: ${feeAmount.toFixed(2)}` : ''}`
       })
-      .catch((zumRailsError: any) => {
-        console.error('[Defer Payment] Error handling ZumRails transactions:', zumRailsError)
-      })
+
+      if (!zumRailsResult.success) {
+        console.warn('[Defer Payment] ZumRails transaction handling completed with warnings:', {
+          cancelled: zumRailsResult.cancelled.count,
+          created: zumRailsResult.created.created,
+          errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
+        })
+      } else {
+        console.log('[Defer Payment] ZumRails transactions handled:', {
+          cancelled: zumRailsResult.cancelled.count,
+          created: zumRailsResult.created.created
+        })
+      }
+    } catch (zumRailsError: any) {
+      console.error('[Defer Payment] Error handling ZumRails transactions:', zumRailsError)
+      // Don't fail the request, but log the error
+    }
 
     // Get updated payment schedule to return
     const { data: updatedPayments } = await supabase

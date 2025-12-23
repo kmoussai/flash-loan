@@ -302,29 +302,33 @@ export async function POST(
       // Don't fail the request, but log the errors
     }
 
-    // Handle ZumRails transactions - cancel old ones and create new ones (non-blocking)
-    // Run in background without blocking the response
-    handleScheduleRecalculationForZumRails({
-      loanId: loanId,
-      reason: `Payment schedule recalculated after loan modification. Payment amount: ${paymentAmount.toFixed(2)}, frequency: ${payment_frequency}, start date: ${start_date}`
-    })
-      .then((zumRailsResult) => {
-        if (!zumRailsResult.success) {
-          console.warn('[Modify Loan] ZumRails transaction handling completed with warnings:', {
-            cancelled: zumRailsResult.cancelled.count,
-            created: zumRailsResult.created.created,
-            errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
-          })
-        } else {
-          console.log('[Modify Loan] ZumRails transactions handled:', {
-            cancelled: zumRailsResult.cancelled.count,
-            created: zumRailsResult.created.created
-          })
-        }
+    // Handle ZumRails transactions - cancel old ones and create new ones
+    // Wait for completion to ensure it runs in Vercel functions
+    let zumRailsResult = null
+    let zumRailsError = null
+    try {
+      zumRailsResult = await handleScheduleRecalculationForZumRails({
+        loanId: loanId,
+        reason: `Payment schedule recalculated after loan modification. Payment amount: ${paymentAmount.toFixed(2)}, frequency: ${payment_frequency}, start date: ${start_date}`
       })
-      .catch((zumRailsError: any) => {
-        console.error('[Modify Loan] Error handling ZumRails transactions:', zumRailsError)
-      })
+
+      if (!zumRailsResult.success) {
+        console.warn('[Modify Loan] ZumRails transaction handling completed with warnings:', {
+          cancelled: zumRailsResult.cancelled.count,
+          created: zumRailsResult.created.created,
+          errors: [...zumRailsResult.cancelled.errors, ...zumRailsResult.created.errors.map(e => e.error)]
+        })
+      } else {
+        console.log('[Modify Loan] ZumRails transactions handled:', {
+          cancelled: zumRailsResult.cancelled.count,
+          created: zumRailsResult.created.created
+        })
+      }
+    } catch (error: any) {
+      console.error('[Modify Loan] Error handling ZumRails transactions:', error)
+      zumRailsError = error.message || 'Unknown error'
+      // Don't fail the entire request, but log the error
+    }
 
     // Update loan's remaining balance to the new total balance
     // This reflects the balance that will be amortized over the new payment schedule
@@ -374,7 +378,20 @@ export async function POST(
       payment_amount: Number(payment_amount),
       payment_frequency: payment_frequency,
       number_of_payments: number_of_payments,
-      recalculated_breakdown: finalBreakdown
+      recalculated_breakdown: finalBreakdown,
+      zumrails_sync: zumRailsResult ? {
+        success: zumRailsResult.success,
+        cancelled: zumRailsResult.cancelled.count,
+        created: zumRailsResult.created.created,
+        failed: zumRailsResult.created.failed,
+        errors: zumRailsError ? [zumRailsError] : [
+          ...zumRailsResult.cancelled.errors,
+          ...zumRailsResult.created.errors.map(e => e.error)
+        ]
+      } : {
+        success: false,
+        error: zumRailsError || 'ZumRails sync not completed'
+      }
     })
   } catch (error: any) {
     console.error('Error modifying loan:', error)

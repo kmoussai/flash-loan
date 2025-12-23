@@ -80,15 +80,29 @@ export async function POST(request: NextRequest) {
     })
 
     // Process webhook using generic helper
-    // Process in background - don't block response
-    processZumrailsWebhook(body).catch((error) => {
+    // Wait for completion to ensure it runs in Vercel functions
+    let processResult = null
+    try {
+      processResult = await processZumrailsWebhook(body)
+      console.log('[Zumrails Webhook] Processing completed', {
+        processed: processResult.processed,
+        updated: processResult.updated,
+        message: processResult.message
+      })
+    } catch (error: any) {
       console.error('[Zumrails Webhook] Error processing webhook:', error)
-    })
+      // Don't fail the request - return 200 to acknowledge receipt
+      // Log error but don't trigger retries from Zumrails
+    }
 
-    // Return 200 immediately to acknowledge receipt
+    // Return 200 to acknowledge receipt
     // Per documentation: https://docs.zumrails.com/api-reference/webhooks#retry-in-case-of-failure
     // 200 response indicates successful receipt - Zumrails won't retry
-    return NextResponse.json({ received: true }, { status: 200 })
+    return NextResponse.json({ 
+      received: true,
+      processed: processResult?.processed || false,
+      updated: processResult?.updated || false
+    }, { status: 200 })
   } catch (error: any) {
     console.error('[Zumrails Webhook] Error processing webhook:', error)
 
