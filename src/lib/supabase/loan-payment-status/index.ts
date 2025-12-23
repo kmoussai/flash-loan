@@ -30,8 +30,7 @@ export interface UpdateLoanPaymentStatusResult {
  * - When status becomes 'confirmed' or 'paid':
  *   - Update loan.remaining_balance using the payment row (remaining_balance if present, else amount).
  * - When status becomes 'failed':
- *   - Recalculate schedule with fees and update future payments, using the same rules
- *     as the simulate-failed endpoint.
+ *   - Recalculate schedule with fees and update future payments.
  */
 export async function updateLoanPaymentStatusAndEffects(
   params: UpdateLoanPaymentStatusParams

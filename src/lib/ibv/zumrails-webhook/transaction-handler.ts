@@ -52,53 +52,66 @@ export async function handleTransactionWebhook(
 ): Promise<ProcessWebhookResult> {
   const data = webhook.Data
   const event = webhook.Event
-
+  console.log('webhook', webhook)
   const transactionId: string | null = data.Id || null
+  const clientTransactionId: string | null = data.ClientTransactionId || null
 
-  if (!transactionId) {
+  // Use ClientTransactionId (loan_payment_id) to find the transaction
+  // Fallback to transactionId if ClientTransactionId is not available
+  if (!clientTransactionId && !transactionId) {
     console.warn(
-      '[Zumrails Webhook] Transaction webhook without TransactionId',
+      '[Zumrails Webhook] Transaction webhook without ClientTransactionId or TransactionId',
       { event, data }
     )
     return {
       processed: false,
       applicationId: null,
       updated: false,
-      message: 'No TransactionId found in transaction webhook payload'
+      message: 'No ClientTransactionId or TransactionId found in transaction webhook payload'
     }
   }
 
   const supabase = createServerSupabaseAdminClient()
 
-  const { data: transactions, error } = await (supabase as any)
+  // Build query - prefer ClientTransactionId (loan_payment_id) over transactionId
+  let query = (supabase as any)
     .from('payment_transactions')
     .select('id, loan_id, loan_payment_id, status, provider_data')
     .eq('provider', 'zumrails')
-    .eq('provider_data->>transaction_id', transactionId)
+
+  if (clientTransactionId) {
+    // Match by loan_payment_id (ClientTransactionId)
+    query = query.eq('loan_payment_id', clientTransactionId)
+  } else if (transactionId) {
+    // Fallback to matching by ZumRails transaction_id
+    query = query.eq('provider_data->>transaction_id', transactionId)
+  }
+
+  const { data: transactions, error } = await query
 
   if (error) {
     console.error(
-      '[Zumrails Webhook] Error fetching payment transactions for TransactionId',
-      { transactionId, error }
+      '[Zumrails Webhook] Error fetching payment transactions',
+      { clientTransactionId, transactionId, error }
     )
     return {
       processed: false,
       applicationId: null,
       updated: false,
-      message: `Error fetching payment transactions for TransactionId ${transactionId}: ${error.message}`
+      message: `Error fetching payment transactions: ${error.message}`
     }
   }
 
   if (!transactions || transactions.length === 0) {
     console.warn(
-      '[Zumrails Webhook] No matching payment_transactions found for TransactionId',
-      { transactionId, event }
+      '[Zumrails Webhook] No matching payment_transactions found',
+      { clientTransactionId, transactionId, event }
     )
     return {
       processed: true,
       applicationId: null,
       updated: false,
-      message: `No matching payment_transactions found for TransactionId ${transactionId}`
+      message: `No matching payment_transactions found${clientTransactionId ? ` for ClientTransactionId ${clientTransactionId}` : transactionId ? ` for TransactionId ${transactionId}` : ''}`
     }
   }
 
@@ -162,11 +175,16 @@ export async function handleTransactionWebhook(
 
       // If this transaction is linked to a loan payment, update the loan payment status
       if (tx.loan_id && tx.loan_payment_id && internalStatus) {
-        let newPaymentStatus: 'confirmed' | 'paid' | 'failed' | 'cancelled' | undefined
+        let newPaymentStatus:
+          | 'confirmed'
+          | 'paid'
+          | 'failed'
+          | 'cancelled'
+          | undefined
 
         if (internalStatus === 'completed') {
           // Treat successful collection as a confirmed payment
-          newPaymentStatus = 'confirmed'
+          newPaymentStatus = 'paid'
         } else if (internalStatus === 'failed') {
           newPaymentStatus = 'failed'
         } else if (internalStatus === 'cancelled') {
