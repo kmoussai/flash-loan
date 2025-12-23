@@ -66,6 +66,7 @@ interface LoanPaymentWithClientData {
 
 interface PaymentProviderData {
   userId?: string
+  Id?: string
   walletId?: string
   fundingSourceId?: string
   [key: string]: any
@@ -138,6 +139,7 @@ async function getLoanPaymentsWithoutTransactions(
         id,
         user_id,
         status,
+        crm_original_data,
         loan_contracts!loan_contracts_loan_id_fkey (
           id,
           bank_account,
@@ -221,6 +223,7 @@ function generateComment(loanId: string, loanPaymentId: string): string {
 
 /**
  * Get client data from loan contract including bank account information
+ * Falls back to crm_original_data if contract doesn't have bank account info
  */
 function getClientDataFromContract(loan: any): {
   firstName: string
@@ -246,33 +249,67 @@ function getClientDataFromContract(loan: any): {
       return dateB - dateA
     })[0]
 
-  if (!contract || !contract.bank_account) {
-    return null
+  // Try to get data from contract first
+  if (contract && contract.bank_account) {
+    const bankAccount = contract.bank_account as any
+    const contractTerms = contract.contract_terms as any
+
+    // Get client name from contract terms (borrower information)
+    const firstName =
+      contractTerms?.borrower?.firstName ||
+      contractTerms?.borrower?.first_name ||
+      contractTerms?.borrowerName?.split(' ')[0] ||
+      ''
+    const lastName =
+      contractTerms?.borrower?.lastName ||
+      contractTerms?.borrower?.last_name ||
+      contractTerms?.borrowerName?.split(' ').slice(1).join(' ') ||
+      ''
+
+    return {
+      firstName: firstName || '',
+      lastName: lastName || '',
+      email: contractTerms?.borrower?.email || undefined,
+      institutionNumber: bankAccount.institution_number || undefined,
+      branchNumber: bankAccount.transit_number || undefined,
+      accountNumber: bankAccount.account_number || undefined
+    }
   }
 
-  const bankAccount = contract.bank_account as any
-  const contractTerms = contract.contract_terms as any
+  // Fallback: Try to get bank account from crm_original_data
+  if (loan.crm_original_data) {
+    const crmData = loan.crm_original_data as any
+    const bankDetails = crmData?.clientProfile?.bankDetails
 
-  // Get client name from contract terms (borrower information)
-  const firstName =
-    contractTerms?.borrower?.firstName ||
-    contractTerms?.borrower?.first_name ||
-    contractTerms?.borrowerName?.split(' ')[0] ||
-    ''
-  const lastName =
-    contractTerms?.borrower?.lastName ||
-    contractTerms?.borrower?.last_name ||
-    contractTerms?.borrowerName?.split(' ').slice(1).join(' ') ||
-    ''
+    if (bankDetails) {
+      const institutionNumber = bankDetails.institution
+      const branchNumber = bankDetails.transit
+      const accountNumber = bankDetails.account
 
-  return {
-    firstName: firstName || '',
-    lastName: lastName || '',
-    email: contractTerms?.borrower?.email || undefined,
-    institutionNumber: bankAccount.institution_number || undefined,
-    branchNumber: bankAccount.transit_number || undefined,
-    accountNumber: bankAccount.account_number || undefined
+      // Validate that we have all required bank account fields
+      if (institutionNumber && branchNumber && accountNumber) {
+        const firstName =
+          crmData?.clientProfile?.firstName ||
+          crmData?.clientProfileFirstName ||
+          ''
+        const lastName =
+          crmData?.clientProfile?.lastName ||
+          crmData?.clientProfileLastName ||
+          ''
+
+        return {
+          firstName: firstName || '',
+          lastName: lastName || '',
+          email: crmData?.clientProfile?.email || undefined,
+          institutionNumber: institutionNumber,
+          branchNumber: branchNumber,
+          accountNumber: accountNumber
+        }
+      }
+    }
   }
+
+  return null
 }
 
 /**
@@ -431,7 +468,8 @@ export async function syncLoanPaymentsToZumRails(
 
         // Get payment provider data
         const providerData = await getPaymentProviderData(supabase, clientId)
-        if (!providerData?.userId) {
+        const userId = providerData?.userId ?? providerData?.Id
+        if (!providerData || !userId) {
           result.failed++
           result.errors.push({
             loanPaymentId: loanPayment.id,
@@ -491,7 +529,7 @@ export async function syncLoanPaymentsToZumRails(
           amount: loanPayment.amount,
           paymentDate,
           clientId,
-          userId: providerData.userId,
+          userId: userId,
           fundingSourceId: fundingSourceId || undefined,
           firstName: clientData.firstName,
           lastName: clientData.lastName,
@@ -565,8 +603,9 @@ export async function syncLoanPaymentsToZumRails(
           reservation: true // Flag to indicate this is a reservation, not a completed transaction
         }
 
-        const { data: insertedRecord, error: insertError } = await (supabase
-          .from('payment_transactions') as any)
+        const { data: insertedRecord, error: insertError } = await (
+          supabase.from('payment_transactions') as any
+        )
           .insert({
             provider: 'zumrails',
             transaction_type: 'collection',
@@ -582,14 +621,18 @@ export async function syncLoanPaymentsToZumRails(
         // If insert fails due to duplicate (unique constraint violation), skip this payment
         if (insertError) {
           // Check if it's a duplicate key error (PostgreSQL error code 23505)
-          if (insertError.code === '23505' || insertError.message?.includes('duplicate') || insertError.message?.includes('unique')) {
+          if (
+            insertError.code === '23505' ||
+            insertError.message?.includes('duplicate') ||
+            insertError.message?.includes('unique')
+          ) {
             console.warn(
               `[LoanPaymentSync] Payment ${tx.loanPaymentId} already has a transaction (duplicate detected), skipping...`
             )
             // This is not a failure - another process already created the transaction
             continue
           }
-          
+
           // Other errors are actual failures
           console.error(
             `[LoanPaymentSync] Error creating payment transaction reservation for ${tx.loanPaymentId}:`,
@@ -622,20 +665,42 @@ export async function syncLoanPaymentsToZumRails(
         } catch (zumRailsError: any) {
           // If ZumRails creation fails, delete the reservation record
           if (insertedRecord?.id) {
-            await (supabase
-              .from('payment_transactions') as any)
+            await (supabase.from('payment_transactions') as any)
               .delete()
               .eq('id', insertedRecord.id)
           }
-          
+
+          // Extract detailed error information
+          const errorMessage = zumRailsError.message || String(zumRailsError)
+          const errorDetails = zumRailsError.response?.data
+            ? JSON.stringify(zumRailsError.response.data)
+            : zumRailsError.response?.statusText || ''
+          const errorStatus = zumRailsError.response?.status || ''
+
+          const fullError = errorDetails
+            ? `${errorMessage}${errorStatus ? ` (Status: ${errorStatus})` : ''} - ${errorDetails}`
+            : errorMessage
+
           result.failed++
           result.errors.push({
             loanPaymentId: tx.loanPaymentId,
-            error: `Failed to create ZumRails transaction: ${zumRailsError.message || String(zumRailsError)}`
+            error: `Failed to create ZumRails transaction: ${fullError}`
           })
           console.error(
             `[LoanPaymentSync] Error creating ZumRails transaction for payment ${tx.loanPaymentId}:`,
-            zumRailsError
+            {
+              error: zumRailsError,
+              message: errorMessage,
+              status: errorStatus,
+              details: errorDetails,
+              paymentData: {
+                loanPaymentId: tx.loanPaymentId,
+                amount: tx.amount,
+                paymentDate: tx.paymentDate,
+                userId: tx.userId,
+                fundingSourceId: fundingSourceId
+              }
+            }
           )
           continue
         }
@@ -667,8 +732,9 @@ export async function syncLoanPaymentsToZumRails(
           raw_response: transactionResponse.result as any
         }
 
-        const { error: updateError } = await (supabase
-          .from('payment_transactions') as any)
+        const { error: updateError } = await (
+          supabase.from('payment_transactions') as any
+        )
           .update({
             provider_data: providerData as any
           })

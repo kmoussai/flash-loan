@@ -57,39 +57,46 @@ export async function POST(
     }
 
     // Create ZumRails collection transactions for all pending loan payments
-    // This runs in the background and doesn't block the response
-    syncLoanPaymentsToZumRails({ loanId })
-      .then((syncResult) => {
-        if (syncResult.success) {
-          console.log(
-            `[Confirm Deposit] Created ${syncResult.created} ZumRails transaction(s) for loan ${loanId}`
-          )
-        } else {
-          console.warn(
-            `[Confirm Deposit] ZumRails transaction creation completed with warnings for loan ${loanId}:`,
-            {
-              created: syncResult.created,
-              failed: syncResult.failed,
-              errors: syncResult.errors
-            }
-          )
-        }
-      })
-      .catch((syncError: any) => {
-        console.error(
-          `[Confirm Deposit] Error creating ZumRails transactions for loan ${loanId}:`,
-          syncError
+    // Wait for completion to ensure it runs in Vercel functions
+    let syncResult = null
+    try {
+      syncResult = await syncLoanPaymentsToZumRails({ loanId })
+      if (syncResult.success) {
+        console.log(
+          `[Confirm Deposit] Created ${syncResult.created} ZumRails transaction(s) for loan ${loanId}`
         )
-        // Don't fail the request - transactions can be created manually later
-      })
+      } else {
+        console.warn(
+          `[Confirm Deposit] ZumRails transaction creation completed with warnings for loan ${loanId}:`,
+          {
+            created: syncResult.created,
+            failed: syncResult.failed,
+            errors: syncResult.errors
+          }
+        )
+      }
+    } catch (syncError: any) {
+      console.error(
+        `[Confirm Deposit] Error creating ZumRails transactions for loan ${loanId}:`,
+        syncError
+      )
+      // Don't fail the request - transactions can be created manually later
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Deposit confirmed successfully. Loan is now active. ZumRails transactions are being created in the background.',
+      message: 'Deposit confirmed successfully. Loan is now active.',
       loan: {
         id: loan.id,
         status: 'active'
-      }
+      },
+      zumrails_sync: syncResult
+        ? {
+            created: syncResult.created,
+            failed: syncResult.failed,
+            processed: syncResult.processed
+          }
+        : null
     })
   } catch (error: any) {
     console.error('Error confirming deposit:', error)
