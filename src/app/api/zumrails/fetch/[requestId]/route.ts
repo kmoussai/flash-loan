@@ -7,6 +7,7 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { createIbvProviderData } from '@/src/lib/supabase/ibv-helpers'
 import { getZumrailsAuthToken } from '@/src/lib/ibv/zumrails-server'
 import { transformZumrailsToIBVSummary } from '@/src/lib/ibv/zumrails-transform'
+import { recategorizeTransactionsForApplication } from '@/src/lib/ibv/zumrails-categorize-helper'
 
 export async function GET(
   request: NextRequest,
@@ -162,6 +163,18 @@ export async function GET(
 
     // Update application if provided
     if (matchingApplication) {
+      // Re-categorize transactions with new transform logic
+      // Must await in serverless environment (Vercel) - can't run in background
+      try {
+        await recategorizeTransactionsForApplication(matchingApplication.id, rawData)
+      } catch (error) {
+        console.error(
+          '[Zumrails Fetch] Error recategorizing transactions:',
+          error
+        )
+        // Don't fail the request if categorization fails
+      }
+      
       const currentProviderData = (matchingApplication.ibv_provider_data as any) || {}
       
       // Update provider_data with fetched information
