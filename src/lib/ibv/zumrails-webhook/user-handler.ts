@@ -7,6 +7,7 @@ import { createServerSupabaseAdminClient } from '@/src/lib/supabase/server'
 import { createIbvProviderData } from '@/src/lib/supabase/ibv-helpers'
 import { fetchZumrailsDataByRequestId } from '@/src/lib/ibv/zumrails-server'
 import { transformZumrailsToIBVSummary } from '@/src/lib/ibv/zumrails-transform'
+import { recategorizeTransactionsForApplication } from '@/src/lib/ibv/zumrails-categorize-helper'
 import type { ZumrailsUserWebhook, ProcessWebhookResult } from './types'
 import { updateLoanApplicationIBVStatus } from './helpers'
 
@@ -176,6 +177,18 @@ export async function handleUserWebhook(
       fetchedData,
       aggregationRequestId
     )
+
+    // Re-categorize transactions with new transform logic
+    // Must await in serverless environment (Vercel) - can't run in background
+    try {
+      await recategorizeTransactionsForApplication(applicationId, fetchedData)
+    } catch (error) {
+      console.error(
+        '[Zumrails Webhook] Error recategorizing transactions:',
+        error
+      )
+      // Don't fail the webhook if categorization fails
+    }
 
     const currentProviderData = (appData.ibv_provider_data as any) || {}
 
