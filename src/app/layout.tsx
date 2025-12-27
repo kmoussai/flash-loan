@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Analytics } from "@vercel/analytics/next"
 
 // Get the base URL for metadata
 const getMetadataBase = (): string => {
@@ -46,6 +47,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <Analytics />
       </body>
     </html>
   )

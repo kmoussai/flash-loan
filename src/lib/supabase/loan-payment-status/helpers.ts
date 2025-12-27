@@ -8,6 +8,8 @@ import { recalculatePaymentSchedule, roundCurrency } from '@/src/lib/loan'
 import { updateLoanPaymentsFromBreakdown } from '../payment-schedule-helpers'
 import { handleScheduleRecalculationForZumRails } from '@/src/lib/payment-providers/zumrails'
 import { Loan } from '@/src/types/loan'
+import { generatePaymentFailedEmail } from '@/src/lib/email/templates/payment-failed'
+import { getEmailProvider } from '@/src/notifications/providers'
 
 interface FailedPaymentRecalculationParams {
   supabase: any
@@ -175,6 +177,126 @@ export async function applyFailedPaymentRecalculation({
       err
     )
   })
+
+  // 5. Send payment failed email notification (non-blocking)
+  sendPaymentFailedEmail({
+    supabase,
+    loanId,
+    paymentAmount: Number(payment.amount || 0)
+  }).catch((err: any) => {
+    console.error(
+      '[LoanPayments] Error sending payment failed email:',
+      err
+    )
+  })
+}
+
+/**
+ * Send payment failed email notification to client
+ */
+async function sendPaymentFailedEmail({
+  supabase,
+  loanId,
+  paymentAmount
+}: {
+  supabase: any
+  loanId: string
+  paymentAmount: number
+}): Promise<void> {
+  try {
+    // Fetch loan with user information
+    const { data: loanData, error: loanError } = await supabase
+      .from('loans')
+      .select(`
+        id,
+        user_id,
+        users!loans_user_id_fkey (
+          id,
+          first_name,
+          last_name,
+          email,
+          preferred_language
+        )
+      `)
+      .eq('id', loanId)
+      .single()
+
+    if (loanError || !loanData) {
+      console.error('[PaymentFailedEmail] Error fetching loan/user data:', loanError)
+      return
+    }
+
+    const loan = loanData as any
+    const user = loan.users
+
+    if (!user || !user.email) {
+      console.warn('[PaymentFailedEmail] No user email found for loan:', loanId)
+      return
+    }
+
+    // Count failed payments for this loan
+    const { data: failedPayments, error: paymentsError } = await supabase
+      .from('loan_payments')
+      .select('id')
+      .eq('loan_id', loanId)
+      .eq('status', 'failed')
+
+    if (paymentsError) {
+      console.error('[PaymentFailedEmail] Error counting failed payments:', paymentsError)
+      return
+    }
+
+    const failureCount = failedPayments?.length || 0
+
+    // Generate email content
+    const emailContent = generatePaymentFailedEmail({
+      firstName: user.first_name || 'Valued Client',
+      lastName: user.last_name || '',
+      paymentAmount: paymentAmount,
+      failureCount: failureCount,
+      preferredLanguage: (user.preferred_language as 'en' | 'fr') || 'en',
+      paymentEmail: 'contact@flash-loan.ca'
+    })
+
+    // Get email provider and send email
+    try {
+      const emailProvider = await getEmailProvider()
+      const sendResult = await emailProvider.sendEmail({
+        to: {
+          email: user.email,
+          name: user.first_name && user.last_name
+            ? `${user.first_name} ${user.last_name}`
+            : user.first_name || undefined
+        },
+        subject: emailContent.subject,
+        html: emailContent.html,
+        text: emailContent.text,
+        tags: ['payment-failed', 'payment-notice', 'loan-payment'],
+        metadata: {
+          loanId: loanId,
+          failureCount: failureCount.toString(),
+          paymentAmount: paymentAmount.toString()
+        }
+      })
+
+      if (!sendResult.success) {
+        console.error('[PaymentFailedEmail] Failed to send email:', sendResult.error)
+      } else {
+        console.log(
+          `[PaymentFailedEmail] Payment failed email sent to ${user.email} (failure count: ${failureCount})`
+        )
+      }
+    } catch (emailError: any) {
+      // Email provider not configured or other email error - log but don't fail
+      console.warn(
+        '[PaymentFailedEmail] Email provider error (email not sent):',
+        emailError?.message || emailError
+      )
+    }
+  } catch (error: any) {
+    // Don't throw - email sending failure shouldn't break payment processing
+    console.error('[PaymentFailedEmail] Unexpected error:', error)
+  }
 }
 
 export async function applySuccessfulPaymentEffects(
