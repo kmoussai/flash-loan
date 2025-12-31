@@ -653,7 +653,7 @@ export async function syncLoanPaymentsToZumRails(
         try {
           transactionResponse = await createCollectionTransaction({
             userId: tx.userId,
-            fundingSourceId: fundingSourceId,
+            ...(walletId ? { walletId } : { fundingSourceId }),
             amount: tx.amount,
             memo: 'FLASH LOAN INC',
             comment: generateComment(tx.loanId, tx.loanPaymentId),
